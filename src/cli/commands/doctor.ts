@@ -35,7 +35,9 @@ export function registerDoctorCommand(program: Command): void {
           process.exitCode = 1;
         } else {
           const configured = results.filter((r) => r.configured).length;
-          console.log(`\x1b[32m  All ${configured} configured provider(s) responded with content.\x1b[0m`);
+          console.log(
+            `\x1b[32m  All ${configured} configured provider(s) responded with content.\x1b[0m`,
+          );
         }
         return;
       }

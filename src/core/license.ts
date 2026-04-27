@@ -331,10 +331,7 @@ export function formatLicenseStatus(): string {
  * startup banner in src/index.ts, and any `requirePro()` path that
  * wants to surface "your license is gone, here's how to fix it".
  */
-export function formatLicenseFailureGuide(
-  reason: string,
-  opts: { color?: boolean } = {},
-): string {
+export function formatLicenseFailureGuide(reason: string, opts: { color?: boolean } = {}): string {
   const color = opts.color !== false;
   const red = color ? "\x1b[31m" : "";
   const cyan = color ? "\x1b[36m" : "";

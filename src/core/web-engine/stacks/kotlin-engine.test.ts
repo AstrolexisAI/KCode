@@ -1,13 +1,17 @@
-import { describe, test, expect } from "bun:test";
-import { createKotlinProject } from "./kotlin-engine";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createKotlinProject } from "./kotlin-engine";
 
 describe("kotlin-engine", () => {
   function withTmp(fn: (dir: string) => void) {
     const dir = mkdtempSync(join(tmpdir(), "kcode-kt-"));
-    try { fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
+    try {
+      fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
 
   test("creates Ktor API project", () => {
@@ -46,7 +50,7 @@ describe("kotlin-engine", () => {
   test("adds Exposed for database keyword", () => {
     withTmp((dir) => {
       const r = createKotlinProject("API with database", dir);
-      expect(r.config.deps.some(d => d.includes("exposed"))).toBe(true);
+      expect(r.config.deps.some((d) => d.includes("exposed"))).toBe(true);
     });
   });
 });

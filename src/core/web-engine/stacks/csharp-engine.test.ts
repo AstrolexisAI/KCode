@@ -1,13 +1,17 @@
-import { describe, test, expect } from "bun:test";
-import { createCSharpProject } from "./csharp-engine";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createCSharpProject } from "./csharp-engine";
 
 describe("csharp-engine", () => {
   function withTmp(fn: (dir: string) => void) {
     const dir = mkdtempSync(join(tmpdir(), "kcode-cs-"));
-    try { fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
+    try {
+      fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
 
   test("creates API project with controllers", () => {

@@ -103,8 +103,7 @@ describe("verifier respects AbortSignal", () => {
     ];
     let progressFires = 0;
     const result = verifyAllCandidates(candidates, {
-      llmCallback: async () =>
-        JSON.stringify({ verdict: "confirmed", reasoning: "ok" }),
+      llmCallback: async () => JSON.stringify({ verdict: "confirmed", reasoning: "ok" }),
       // onProgress fires at the top of each iteration BEFORE the LLM call.
       // Aborting inside i=1's onProgress means iteration i=2's pre-loop
       // signal check is the very next thing to run — that's where the
@@ -129,8 +128,7 @@ describe("verifier respects AbortSignal", () => {
     // What matters for the cancellation test is that the loop runs to
     // completion when the signal stays unaborted.
     const results = await verifyAllCandidates(candidates, {
-      llmCallback: async () =>
-        JSON.stringify({ verdict: "confirmed", reasoning: "test" }),
+      llmCallback: async () => JSON.stringify({ verdict: "confirmed", reasoning: "test" }),
       signal: controller.signal,
     });
     expect(results.length).toBe(2);
@@ -141,8 +139,7 @@ describe("verifier respects AbortSignal", () => {
   test("verifier works without a signal (backward compat)", async () => {
     const candidates = [dummyCandidate("a.js", 1)];
     const results = await verifyAllCandidates(candidates, {
-      llmCallback: async () =>
-        JSON.stringify({ verdict: "confirmed", reasoning: "test" }),
+      llmCallback: async () => JSON.stringify({ verdict: "confirmed", reasoning: "test" }),
     });
     expect(results.length).toBe(1);
   });

@@ -315,15 +315,8 @@ export function collectObservations(signals: SessionSignals): KodiObservation[] 
   if (signals.sessionMs > 2 * 3600_000 && canFire("long_session")) {
     record("long_session", `${Math.round(signals.sessionMs / 3600_000)}h at the keyboard`);
   }
-  if (
-    signals.toolUses > 20 &&
-    signals.msSinceCommit > 45 * 60_000 &&
-    canFire("no_recent_commit")
-  ) {
-    record(
-      "no_recent_commit",
-      `${signals.toolUses} tools since last commit — time to save?`,
-    );
+  if (signals.toolUses > 20 && signals.msSinceCommit > 45 * 60_000 && canFire("no_recent_commit")) {
+    record("no_recent_commit", `${signals.toolUses} tools since last commit — time to save?`);
   }
 
   return out;
@@ -369,7 +362,9 @@ export async function renderObservation(obs: KodiObservation): Promise<string> {
     /\b(consider|maybe|should|recommended?|ensure|might want to|try to)\b/i.test(advice) ||
     // Meta-chatter: assistant-persona leak ("please provide more
     // context", "let me know if you'd like me to help", etc.)
-    /\b(please (?:provide|clarify|specify|share)|i don'?t have (?:enough|any|sufficient)|could you (?:clarify|specify|provide)|i (?:can|would) (?:help|assist|be happy)|more (?:context|information|details) (?:or|please|would)|specific question|feel free to|let me know)\b/i.test(advice)
+    /\b(please (?:provide|clarify|specify|share)|i don'?t have (?:enough|any|sufficient)|could you (?:clarify|specify|provide)|i (?:can|would) (?:help|assist|be happy)|more (?:context|information|details) (?:or|please|would)|specific question|feel free to|let me know)\b/i.test(
+      advice,
+    )
   ) {
     return obs.detail;
   }
@@ -424,9 +419,7 @@ PROHIBITED: "consider", "maybe", "should", "you", "I can help", "let me know", m
  * this fires on a slow timer so Kodi periodically "thinks" out loud.
  * Returns null if unreachable or filtered out.
  */
-export async function askForMusing(
-  personality: KodiPersonality,
-): Promise<string | null> {
+export async function askForMusing(personality: KodiPersonality): Promise<string | null> {
   const raw = await callKodi(
     MUSING_SYSTEM,
     `Personality: ${personality}. Have a passing thought.`,

@@ -123,9 +123,7 @@ describe("detectPhantomTypoClaim — true negatives", () => {
 
   test("ignores unrelated English 'instead' phrasing", () => {
     expect(
-      detectPhantomTypoClaim(
-        "I checked the file instead of guessing, and the bug is on line 12",
-      ),
+      detectPhantomTypoClaim("I checked the file instead of guessing, and the bug is on line 12"),
     ).toBeNull();
   });
 });

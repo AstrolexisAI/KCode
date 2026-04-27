@@ -10,11 +10,15 @@ export const JAVA_PATTERNS: BugPattern[] = [
     title: "SQL query with string concatenation",
     severity: "critical",
     languages: ["java"],
-    regex: /\b(?:executeQuery|executeUpdate|execute|prepareStatement)\s*\(\s*(?:".*"\s*\+|.*\+\s*")/g,
-    explanation: "SQL queries built with string concatenation are vulnerable to injection. Use PreparedStatement with parameterized queries.",
-    verify_prompt: "Is user input concatenated into the SQL string? If using PreparedStatement with ?, respond FALSE_POSITIVE.",
+    regex:
+      /\b(?:executeQuery|executeUpdate|execute|prepareStatement)\s*\(\s*(?:".*"\s*\+|.*\+\s*")/g,
+    explanation:
+      "SQL queries built with string concatenation are vulnerable to injection. Use PreparedStatement with parameterized queries.",
+    verify_prompt:
+      "Is user input concatenated into the SQL string? If using PreparedStatement with ?, respond FALSE_POSITIVE.",
     cwe: "CWE-89",
-    fix_template: 'Use PreparedStatement: ps = conn.prepareStatement("SELECT * FROM t WHERE id = ?"); ps.setString(1, id);',
+    fix_template:
+      'Use PreparedStatement: ps = conn.prepareStatement("SELECT * FROM t WHERE id = ?"); ps.setString(1, id);',
   },
   {
     id: "java-002-deserialization",
@@ -22,8 +26,10 @@ export const JAVA_PATTERNS: BugPattern[] = [
     severity: "critical",
     languages: ["java"],
     regex: /\bObjectInputStream\s*\(/g,
-    explanation: "Java ObjectInputStream deserializes arbitrary objects. Attackers can craft payloads that execute code on deserialization (Commons Collections gadget chain, etc.).",
-    verify_prompt: "Is the input stream from a trusted source (local file, internal service) or untrusted (network, user upload)? CONFIRMED if untrusted." +
+    explanation:
+      "Java ObjectInputStream deserializes arbitrary objects. Attackers can craft payloads that execute code on deserialization (Commons Collections gadget chain, etc.).",
+    verify_prompt:
+      "Is the input stream from a trusted source (local file, internal service) or untrusted (network, user upload)? CONFIRMED if untrusted." +
       "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
       "1. The data comes from a trusted internal source (local file written by the same app, internal service)\n" +
       "2. An ObjectInputFilter or class whitelist is configured before deserialization\n" +
@@ -39,10 +45,13 @@ export const JAVA_PATTERNS: BugPattern[] = [
     severity: "high",
     languages: ["java"],
     regex: /\b(?:DocumentBuilderFactory|SAXParserFactory|XMLInputFactory)\.newInstance\s*\(/g,
-    explanation: "Default XML parsers in Java are vulnerable to XXE (XML External Entity) attacks. Disable external entities.",
-    verify_prompt: "Is setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true) or disallow-doctype-decl set? If protected, respond FALSE_POSITIVE.",
+    explanation:
+      "Default XML parsers in Java are vulnerable to XXE (XML External Entity) attacks. Disable external entities.",
+    verify_prompt:
+      "Is setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true) or disallow-doctype-decl set? If protected, respond FALSE_POSITIVE.",
     cwe: "CWE-611",
-    fix_template: 'factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);',
+    fix_template:
+      'factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);',
   },
   {
     id: "java-004-path-traversal",
@@ -51,9 +60,11 @@ export const JAVA_PATTERNS: BugPattern[] = [
     languages: ["java"],
     regex: /new\s+File\s*\(\s*(?:request\.|param|input|arg)/g,
     explanation: "Creating File objects from user input allows path traversal (../../etc/passwd).",
-    verify_prompt: "Is the file path derived from user/external input? If from internal config, respond FALSE_POSITIVE.",
+    verify_prompt:
+      "Is the file path derived from user/external input? If from internal config, respond FALSE_POSITIVE.",
     cwe: "CWE-22",
-    fix_template: "Validate path: canonical = new File(base, input).getCanonicalPath(); if (!canonical.startsWith(base)) throw;",
+    fix_template:
+      "Validate path: canonical = new File(base, input).getCanonicalPath(); if (!canonical.startsWith(base)) throw;",
   },
 
   // ── NullPointerException risk ──────────────────────────────────
@@ -73,7 +84,8 @@ export const JAVA_PATTERNS: BugPattern[] = [
       "4. Does the method contract guarantee non-null (e.g., getOrDefault, computeIfAbsent)? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if the method can return null AND no check exists.",
     cwe: "CWE-476",
-    fix_template: "Add null check: Object result = getX(); if (result != null) { result.method(); }",
+    fix_template:
+      "Add null check: Object result = getX(); if (result != null) { result.method(); }",
   },
 
   // ── Resource leak ──────────────────────────────────────────────
@@ -82,7 +94,8 @@ export const JAVA_PATTERNS: BugPattern[] = [
     title: "InputStream/Connection not in try-with-resources",
     severity: "medium",
     languages: ["java"],
-    regex: /\b(?:InputStream|OutputStream|FileReader|FileWriter|BufferedReader|BufferedWriter|Connection|Statement|ResultSet|Socket|RandomAccessFile)\s+\w+\s*=\s*(?:new\s|.*\.(?:open|get|create))\s*[^;]*;(?![\s\S]{0,50}?\btry\b)/g,
+    regex:
+      /\b(?:InputStream|OutputStream|FileReader|FileWriter|BufferedReader|BufferedWriter|Connection|Statement|ResultSet|Socket|RandomAccessFile)\s+\w+\s*=\s*(?:new\s|.*\.(?:open|get|create))\s*[^;]*;(?![\s\S]{0,50}?\btry\b)/g,
     explanation:
       "A closeable resource is assigned but not wrapped in try-with-resources. If an exception is thrown before close(), the resource leaks.",
     verify_prompt:
@@ -109,7 +122,8 @@ export const JAVA_PATTERNS: BugPattern[] = [
       "If only constants (table names, column names) are concatenated, respond FALSE_POSITIVE. " +
       "If user-controlled values are concatenated, respond CONFIRMED.",
     cwe: "CWE-89",
-    fix_template: "Use ? placeholders for ALL user values: prepareStatement(\"SELECT * FROM t WHERE id = ?\");",
+    fix_template:
+      'Use ? placeholders for ALL user values: prepareStatement("SELECT * FROM t WHERE id = ?");',
   },
 
   // ── ConcurrentModificationException ────────────────────────────
@@ -118,7 +132,8 @@ export const JAVA_PATTERNS: BugPattern[] = [
     title: "Modifying collection while iterating",
     severity: "high",
     languages: ["java"],
-    regex: /for\s*\(\s*\w+(?:\s*<[^>]*>)?\s+\w+\s*:\s*(\w+)\s*\)[\s\S]{0,300}?\1\s*\.(?:add|remove|clear)\s*\(/g,
+    regex:
+      /for\s*\(\s*\w+(?:\s*<[^>]*>)?\s+\w+\s*:\s*(\w+)\s*\)[\s\S]{0,300}?\1\s*\.(?:add|remove|clear)\s*\(/g,
     explanation:
       "Modifying a collection (add/remove/clear) while iterating over it with a for-each loop throws ConcurrentModificationException at runtime.",
     verify_prompt:
@@ -126,7 +141,8 @@ export const JAVA_PATTERNS: BugPattern[] = [
       "If they are different collections (e.g., iterating copy, modifying original), respond FALSE_POSITIVE. " +
       "If same collection, respond CONFIRMED.",
     cwe: "CWE-362",
-    fix_template: "Use Iterator.remove(), or collect items to remove and process after the loop, or use ConcurrentHashMap/CopyOnWriteArrayList.",
+    fix_template:
+      "Use Iterator.remove(), or collect items to remove and process after the loop, or use ConcurrentHashMap/CopyOnWriteArrayList.",
   },
 
   // ── Thread-unsafe singleton ────────────────────────────────────
@@ -142,7 +158,8 @@ export const JAVA_PATTERNS: BugPattern[] = [
       "Is this null-check + assignment inside a synchronized block, or is the field declared volatile with double-checked locking? " +
       "If properly synchronized, respond FALSE_POSITIVE. If unprotected, respond CONFIRMED.",
     cwe: "CWE-362",
-    fix_template: "Use double-checked locking with volatile, or an enum singleton, or holder class pattern.",
+    fix_template:
+      "Use double-checked locking with volatile, or an enum singleton, or holder class pattern.",
   },
 
   // ── Hardcoded credentials ──────────────────────────────────────
@@ -155,10 +172,10 @@ export const JAVA_PATTERNS: BugPattern[] = [
     explanation:
       "Hardcoded credentials in Java source code are exposed to anyone with access to the compiled class files (strings are stored in plaintext in .class files).",
     verify_prompt:
-      "Is this a REAL secret (not a placeholder like \"changeme\", not a test fixture, not an empty/example value)? " +
+      'Is this a REAL secret (not a placeholder like "changeme", not a test fixture, not an empty/example value)? ' +
       "If it looks like a real credential, respond CONFIRMED. If test/placeholder, respond FALSE_POSITIVE.",
     cwe: "CWE-798",
-    fix_template: "Load from environment: System.getenv(\"API_KEY\") or use a secrets vault.",
+    fix_template: 'Load from environment: System.getenv("API_KEY") or use a secrets vault.',
   },
 
   // ── Insecure deserialization ───────────────────────────────────
@@ -175,7 +192,8 @@ export const JAVA_PATTERNS: BugPattern[] = [
       "If from a trusted local file written by the same application, respond FALSE_POSITIVE. " +
       "If from any network/untrusted source, respond CONFIRMED.",
     cwe: "CWE-502",
-    fix_template: "Use JSON/Protobuf for network data, or add ObjectInputFilter to whitelist allowed classes.",
+    fix_template:
+      "Use JSON/Protobuf for network data, or add ObjectInputFilter to whitelist allowed classes.",
   },
 
   // ── Path traversal ─────────────────────────────────────────────
@@ -192,7 +210,8 @@ export const JAVA_PATTERNS: BugPattern[] = [
       "Check for: canonical path comparison, regex filtering of ../, whitelist validation. " +
       "If validated, respond FALSE_POSITIVE. If raw user input, respond CONFIRMED.",
     cwe: "CWE-22",
-    fix_template: "Validate: String safe = new File(base, input).getCanonicalPath(); if (!safe.startsWith(baseDir)) throw new SecurityException();",
+    fix_template:
+      "Validate: String safe = new File(base, input).getCanonicalPath(); if (!safe.startsWith(baseDir)) throw new SecurityException();",
   },
 
   // ── XXE injection ──────────────────────────────────────────────
@@ -205,10 +224,11 @@ export const JAVA_PATTERNS: BugPattern[] = [
     explanation:
       "Default TransformerFactory configuration allows XML external entities, enabling XXE attacks that can read local files or perform SSRF.",
     verify_prompt:
-      "Is the TransformerFactory configured with setAttribute to disable external entities (ACCESS_EXTERNAL_DTD, ACCESS_EXTERNAL_STYLESHEET set to \"\")? " +
+      'Is the TransformerFactory configured with setAttribute to disable external entities (ACCESS_EXTERNAL_DTD, ACCESS_EXTERNAL_STYLESHEET set to "")? ' +
       "If protected, respond FALSE_POSITIVE. If default configuration, respond CONFIRMED.",
     cwe: "CWE-611",
-    fix_template: "factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, \"\"); factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, \"\");",
+    fix_template:
+      'factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, ""); factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");',
   },
 
   // ── Log injection ──────────────────────────────────────────────
@@ -217,15 +237,16 @@ export const JAVA_PATTERNS: BugPattern[] = [
     title: "Unsanitized user input in log message",
     severity: "medium",
     languages: ["java"],
-    regex: /\b(?:log|logger|LOG)\s*\.\s*(?:info|warn|error|debug|trace)\s*\(\s*(?:"[^"]*"\s*\+\s*(?:request|param|input|user|req\.))/gi,
+    regex:
+      /\b(?:log|logger|LOG)\s*\.\s*(?:info|warn|error|debug|trace)\s*\(\s*(?:"[^"]*"\s*\+\s*(?:request|param|input|user|req\.))/gi,
     explanation:
       "Logging unsanitized user input allows log injection/forging. Attackers can inject newlines to create fake log entries or exploit log parsing tools.",
     verify_prompt:
       "Is user input being concatenated into the log message? " +
-      "If using parameterized logging (logger.info(\"msg {}\", param)), respond FALSE_POSITIVE. " +
+      'If using parameterized logging (logger.info("msg {}", param)), respond FALSE_POSITIVE. ' +
       "If string concatenation with user input, respond CONFIRMED.",
     cwe: "CWE-117",
-    fix_template: "Use parameterized logging: logger.info(\"User login: {}\", sanitize(username));",
+    fix_template: 'Use parameterized logging: logger.info("User login: {}", sanitize(username));',
   },
 
   // ── Infinite loop ──────────────────────────────────────────────
@@ -234,7 +255,8 @@ export const JAVA_PATTERNS: BugPattern[] = [
     title: "while(true) or for(;;) without break/return condition",
     severity: "medium",
     languages: ["java"],
-    regex: /(?:while\s*\(\s*true\s*\)|for\s*\(\s*;\s*;\s*\))\s*\{(?:(?!\b(?:break|return|throw)\b)[\s\S]){0,500}?\}/g,
+    regex:
+      /(?:while\s*\(\s*true\s*\)|for\s*\(\s*;\s*;\s*\))\s*\{(?:(?!\b(?:break|return|throw)\b)[\s\S]){0,500}?\}/g,
     explanation:
       "An infinite loop without a break, return, or throw will hang the thread indefinitely. This can cause DoS or resource exhaustion.",
     verify_prompt:
@@ -242,7 +264,8 @@ export const JAVA_PATTERNS: BugPattern[] = [
       "If an exit condition exists but the regex didn't capture it (long body), respond FALSE_POSITIVE. " +
       "If genuinely no exit condition, respond CONFIRMED.",
     cwe: "CWE-835",
-    fix_template: "Add an explicit break/return condition, or use a bounded loop with a max iteration count.",
+    fix_template:
+      "Add an explicit break/return condition, or use a bounded loop with a max iteration count.",
   },
 
   // ── equals without hashCode ────────────────────────────────────
@@ -251,7 +274,8 @@ export const JAVA_PATTERNS: BugPattern[] = [
     title: "equals() overridden without hashCode()",
     severity: "medium",
     languages: ["java"],
-    regex: /public\s+boolean\s+equals\s*\(\s*Object\b(?![\s\S]{0,500}?public\s+int\s+hashCode\s*\(\s*\))/g,
+    regex:
+      /public\s+boolean\s+equals\s*\(\s*Object\b(?![\s\S]{0,500}?public\s+int\s+hashCode\s*\(\s*\))/g,
     explanation:
       "Overriding equals() without hashCode() violates the Object contract. Objects that are equals() will have different hash codes, causing failures in HashMap, HashSet, and other hash-based collections.",
     verify_prompt:
@@ -259,7 +283,8 @@ export const JAVA_PATTERNS: BugPattern[] = [
       "If hashCode() is overridden (possibly further down in the file), respond FALSE_POSITIVE. " +
       "If only equals() is overridden, respond CONFIRMED.",
     cwe: "CWE-697",
-    fix_template: "Add @Override public int hashCode() { return Objects.hash(field1, field2); } consistent with equals().",
+    fix_template:
+      "Add @Override public int hashCode() { return Objects.hash(field1, field2); } consistent with equals().",
   },
 
   // ── Mutable static field ───────────────────────────────────────
@@ -268,14 +293,16 @@ export const JAVA_PATTERNS: BugPattern[] = [
     title: "Mutable static field (thread-safety risk)",
     severity: "medium",
     languages: ["java"],
-    regex: /static\s+(?!final\b)(?:(?:private|public|protected)\s+)?(?:List|Map|Set|Collection|ArrayList|HashMap|HashSet|TreeMap|LinkedList|Queue|Deque)\s*<[^>]*>\s+\w+\s*=/g,
+    regex:
+      /static\s+(?!final\b)(?:(?:private|public|protected)\s+)?(?:List|Map|Set|Collection|ArrayList|HashMap|HashSet|TreeMap|LinkedList|Queue|Deque)\s*<[^>]*>\s+\w+\s*=/g,
     explanation:
       "A non-final static collection field can be modified by any thread without synchronization, causing race conditions, ConcurrentModificationExceptions, or data corruption.",
     verify_prompt:
       "Is this static field properly synchronized (synchronized access, ConcurrentHashMap, Collections.synchronizedX, or volatile)? " +
       "If thread-safe access is ensured, respond FALSE_POSITIVE. If unprotected, respond CONFIRMED.",
     cwe: "CWE-362",
-    fix_template: "Make field final with an unmodifiable collection, or use ConcurrentHashMap/CopyOnWriteArrayList.",
+    fix_template:
+      "Make field final with an unmodifiable collection, or use ConcurrentHashMap/CopyOnWriteArrayList.",
   },
 
   // ── Catching generic Exception ─────────────────────────────────
@@ -307,7 +334,7 @@ export const JAVA_PATTERNS: BugPattern[] = [
       "An X509TrustManager whose checkServerTrusted is empty (or a HostnameVerifier whose verify always returns true) accepts every certificate including self-signed and attacker-presented ones. Any MITM on the path can decrypt and forge the traffic.",
     verify_prompt:
       "Is this in a production code path or a test fixture?\n" +
-      "1. If in src/test/ or wrapped in `if (env.equals(\"test\"))` → FALSE_POSITIVE.\n" +
+      '1. If in src/test/ or wrapped in `if (env.equals("test"))` → FALSE_POSITIVE.\n' +
       "2. If the empty-body method actually pins a specific cert (compares against a known fingerprint inside the body) → FALSE_POSITIVE.\n" +
       "3. If the trust-all is gated behind a config flag that's off in production → FALSE_POSITIVE (still flag for review).\n" +
       "Only CONFIRMED when the trust manager is unconditional and reachable from production.",
@@ -339,8 +366,7 @@ export const JAVA_PATTERNS: BugPattern[] = [
     title: "Spring @RequestBody Map<String,Object> used directly in business logic",
     severity: "high",
     languages: ["java", "kotlin"],
-    regex:
-      /@RequestBody\s+(?:final\s+)?Map\s*<\s*String\s*,\s*(?:Object|\?)\s*>/g,
+    regex: /@RequestBody\s+(?:final\s+)?Map\s*<\s*String\s*,\s*(?:Object|\?)\s*>/g,
     explanation:
       "Binding the request body to a raw Map<String,Object> defeats schema validation. Any field the attacker sends ends up in the map, and downstream code may persist privileged fields (isAdmin, role, balance) without realizing they came from outside. Use a typed DTO with explicit @JsonIgnore / Bean Validation.",
     verify_prompt:

@@ -129,7 +129,9 @@ export class AuditLog {
       ${limit}
     `;
 
-    const rows = this.db.prepare(sql).all(params as Record<string, string | number | null>) as Array<{
+    const rows = this.db
+      .prepare(sql)
+      .all(params as Record<string, string | number | null>) as Array<{
       timestamp: number;
       tool_name: string;
       action: string;

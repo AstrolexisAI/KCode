@@ -26,9 +26,9 @@ describe("derivePrimaryFailureCause", () => {
   });
 
   test("python traceback", () => {
-    expect(
-      derivePrimaryFailureCause("Traceback (most recent call last):\n  File..."),
-    ).toBe("runtime_traceback");
+    expect(derivePrimaryFailureCause("Traceback (most recent call last):\n  File...")).toBe(
+      "runtime_traceback",
+    );
   });
 
   test("module not found → dependency_missing", () => {

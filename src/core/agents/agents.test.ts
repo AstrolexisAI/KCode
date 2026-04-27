@@ -14,11 +14,11 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AgentPool, _resetAgentPoolForTests } from "./pool";
-import { NameGenerator, CODENAME_POOL_SIZE } from "./names";
 import { detectStack, dispatch, dispatchFromInstruction } from "./factory";
-import { roleFromTask, ROLES } from "./roles";
+import { CODENAME_POOL_SIZE, NameGenerator } from "./names";
 import { buildAgentSystemPromptFragment, formatPoolStatus } from "./narrative";
+import { _resetAgentPoolForTests, AgentPool } from "./pool";
+import { ROLES, roleFromTask } from "./roles";
 import type { AgentExecutor } from "./types";
 
 // ── Synthetic executors ─────────────────────────────────────────
@@ -27,10 +27,12 @@ import type { AgentExecutor } from "./types";
 const instantExecutor: AgentExecutor = async (agent) => `result-for-${agent.name}`;
 
 /** Delays for `ms` before resolving. Used to test queueing. */
-const delayedExecutor = (ms: number): AgentExecutor => async (agent) => {
-  await new Promise((r) => setTimeout(r, ms));
-  return `delayed-result-for-${agent.name}`;
-};
+const delayedExecutor =
+  (ms: number): AgentExecutor =>
+  async (agent) => {
+    await new Promise((r) => setTimeout(r, ms));
+    return `delayed-result-for-${agent.name}`;
+  };
 
 /** Throws — used to test error paths. */
 const erroringExecutor: AgentExecutor = async () => {

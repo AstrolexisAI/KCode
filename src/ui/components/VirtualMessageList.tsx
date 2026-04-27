@@ -148,7 +148,6 @@ export default function VirtualMessageList({
 
       {/* Live streaming Bash output */}
       {bashStreamOutput.length > 0 && <BashStreamDisplay output={bashStreamOutput} />}
-
     </Box>
   );
 }
@@ -171,7 +170,13 @@ function EntryRenderer({ entry }: { entry: MessageEntry }) {
         />
       );
     case "thinking":
-      return <ThinkingMessage text={entry.text} blockCount={entry.blockCount} totalChars={entry.totalChars} />;
+      return (
+        <ThinkingMessage
+          text={entry.text}
+          blockCount={entry.blockCount}
+          totalChars={entry.totalChars}
+        />
+      );
     case "banner":
       return <BannerMessage title={entry.title} subtitle={entry.subtitle} />;
     case "learn":
@@ -361,7 +366,11 @@ function ThinkingMessage({ text, blockCount = 1, totalChars }: Omit<ThinkingEntr
     return (
       <Box paddingLeft={2}>
         <Text color={theme.accent} dimColor>
-          {"🧠 "}{tokLabel}{" tok · "}{blockCount}{" blocks ▸"}
+          {"🧠 "}
+          {tokLabel}
+          {" tok · "}
+          {blockCount}
+          {" blocks ▸"}
         </Text>
       </Box>
     );

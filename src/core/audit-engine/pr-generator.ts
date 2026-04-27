@@ -85,14 +85,21 @@ function defaultBranch(cwd: string): string {
     const ref = git(cwd, ["symbolic-ref", "refs/remotes/origin/HEAD"]);
     const m = ref.match(/^refs\/remotes\/origin\/(.+)$/);
     if (m) return m[1]!;
-  } catch { /* origin/HEAD not set — try fallbacks */ }
+  } catch {
+    /* origin/HEAD not set — try fallbacks */
+  }
   for (const candidate of ["main", "master", "devel", "develop", "trunk"]) {
     try {
       execFileSync("git", ["rev-parse", "--verify", "--quiet", candidate], {
-        cwd, encoding: "utf-8", timeout: 10_000, stdio: ["pipe", "pipe", "pipe"],
+        cwd,
+        encoding: "utf-8",
+        timeout: 10_000,
+        stdio: ["pipe", "pipe", "pipe"],
       });
       return candidate;
-    } catch { /* not this one */ }
+    } catch {
+      /* not this one */
+    }
   }
   return "main";
 }
@@ -194,8 +201,15 @@ function detectEcosystem(projectRoot: string): Ecosystem {
  */
 function buildTestingChecklist(ecosystem: Ecosystem): string[] {
   const ecosystemCmd: Record<Ecosystem, string[]> = {
-    cmake: ["`cmake -B build && cmake --build build`", "`ctest --test-dir build --output-on-failure`"],
-    cargo: ["`cargo build --all-targets`", "`cargo test --all-features`", "`cargo clippy -- -D warnings`"],
+    cmake: [
+      "`cmake -B build && cmake --build build`",
+      "`ctest --test-dir build --output-on-failure`",
+    ],
+    cargo: [
+      "`cargo build --all-targets`",
+      "`cargo test --all-features`",
+      "`cargo clippy -- -D warnings`",
+    ],
     go: ["`go build ./...`", "`go test ./...`", "`go vet ./...`"],
     bun: ["`bun install`", "`bun test`", "`bun run --bun tsc --noEmit` (if TypeScript)"],
     npm: ["`npm install`", "`npm test`", "`npm run typecheck` (if TypeScript)"],
@@ -204,7 +218,10 @@ function buildTestingChecklist(ecosystem: Ecosystem): string[] {
     gradle: ["`./gradlew build`", "`./gradlew test`"],
     maven: ["`mvn clean install`", "`mvn test`"],
     make: ["`make`", "`make test`"],
-    unknown: ["Build the project using the repository's standard tooling.", "Run the project's test suite."],
+    unknown: [
+      "Build the project using the repository's standard tooling.",
+      "Run the project's test suite.",
+    ],
   };
   const cmds = ecosystemCmd[ecosystem];
   const lines: string[] = [];
@@ -289,7 +306,12 @@ function sanitizeExecutiveSummary(text: string, projectRoot: string): string {
 
   // Strip absolute paths.
   const projectAbs = projectRoot.replace(/\/+$/, "");
-  if (projectAbs) out = out.split(projectAbs + "/").join("").split(projectAbs).join("");
+  if (projectAbs)
+    out = out
+      .split(projectAbs + "/")
+      .join("")
+      .split(projectAbs)
+      .join("");
   out = out.replace(/\/(?:home|Users|var|opt|tmp)\/[\w./-]+\/([\w./-]+)/g, "$1");
 
   // Wrap brand terms.
@@ -404,15 +426,11 @@ English terms, no vendor names.]
  */
 const SUMMARY_PLACEHOLDER = "<!-- KCODE_SUMMARY -->";
 
-function buildStructuredPrBody(
-  result: AuditResult,
-  projectRoot: string,
-  compact = false,
-): string {
+function buildStructuredPrBody(result: AuditResult, projectRoot: string, compact = false): string {
   const lines: string[] = [];
-  const fixSummary =
-    (result as { fix_support_summary?: { rewrite: number; annotate: number; manual: number } })
-      .fix_support_summary;
+  const fixSummary = (
+    result as { fix_support_summary?: { rewrite: number; annotate: number; manual: number } }
+  ).fix_support_summary;
 
   lines.push("## Security and code-quality audit");
   lines.push("");
@@ -520,9 +538,7 @@ function buildStructuredPrBody(
     }
     if (ev?.execution_path_steps && ev.execution_path_steps.length > 0) {
       lines.push("");
-      lines.push(
-        `**Execution path.** ${ev.execution_path_steps.join(" → ").slice(0, 500)}`,
-      );
+      lines.push(`**Execution path.** ${ev.execution_path_steps.join(" → ").slice(0, 500)}`);
     } else if (f.verification.execution_path) {
       lines.push("");
       lines.push(
@@ -536,9 +552,7 @@ function buildStructuredPrBody(
     }
     if (ev?.test_suggestion) {
       lines.push("");
-      lines.push(
-        `**Regression test.** ${ev.test_suggestion.slice(0, 300).replace(/\n/g, " ")}`,
-      );
+      lines.push(`**Regression test.** ${ev.test_suggestion.slice(0, 300).replace(/\n/g, " ")}`);
     }
     lines.push("");
   };
@@ -577,9 +591,7 @@ function buildStructuredPrBody(
   lines.push(`### Manual findings (${manualFindings.length})`);
   lines.push("");
   if (manualFindings.length === 0) {
-    lines.push(
-      "_None — every confirmed finding had a rewrite-tier fix recipe._",
-    );
+    lines.push("_None — every confirmed finding had a rewrite-tier fix recipe._");
     lines.push("");
   } else {
     lines.push(
@@ -609,7 +621,9 @@ function buildStructuredPrBody(
     }
   }
   if (compact) {
-    lines.push("> Compact body — see `AUDIT_REPORT.md` in the diff for full evidence per finding (sink, input boundary, execution path, suggested fix).");
+    lines.push(
+      "> Compact body — see `AUDIT_REPORT.md` in the diff for full evidence per finding (sink, input boundary, execution path, suggested fix).",
+    );
     lines.push("");
   }
 
@@ -641,7 +655,9 @@ function buildStructuredPrBody(
         ? fp.file.slice(projectRoot.length + 1)
         : fp.file;
       const reason = (fp as { review_reason?: string }).review_reason ?? "manual_confirmation";
-      lines.push(`- \`${fp.pattern_id}\` @ \`${rel}:${fp.line}\` — demoted to FP — reason: \`${reason}\``);
+      lines.push(
+        `- \`${fp.pattern_id}\` @ \`${rel}:${fp.line}\` — demoted to FP — reason: \`${reason}\``,
+      );
     }
     lines.push("");
   }
@@ -691,10 +707,7 @@ function composePrBody(structured: string, summary: string): string {
 
 /** Backwards-compat alias kept for external callers / tests. */
 function buildFallbackPrBody(result: AuditResult): string {
-  return composePrBody(
-    buildStructuredPrBody(result, result.project),
-    "",
-  );
+  return composePrBody(buildStructuredPrBody(result, result.project), "");
 }
 
 /**
@@ -739,10 +752,7 @@ function sanitizePrBody(body: string, projectRoot: string): string {
   }
   // Defensive: drop any other absolute path that escaped the LLM, replacing
   // it with the trailing path component only.
-  out = out.replace(
-    /\/(?:home|Users|var|opt|tmp)\/[\w./-]+\/([\w./-]+)/g,
-    "$1",
-  );
+  out = out.replace(/\/(?:home|Users|var|opt|tmp)\/[\w./-]+\/([\w./-]+)/g, "$1");
 
   // 2. Wrap brand / project-codename terms in inline code so spell-check
   //    skips them. The built-in list covers Astrolexis-org branding; users
@@ -827,10 +837,12 @@ export async function createPr(opts: PrOptions): Promise<PrResult> {
         // shorthand that assumed `main` exists.
         const base = defaultBranch(projectRoot);
         try {
-          return Number.parseInt(
-            git(projectRoot, ["rev-list", "--count", `${base}..HEAD`]).trim() || "0",
-            10,
-          ) || 0;
+          return (
+            Number.parseInt(
+              git(projectRoot, ["rev-list", "--count", `${base}..HEAD`]).trim() || "0",
+              10,
+            ) || 0
+          );
         } catch {
           return 0; // base branch missing locally — show 0 rather than crash
         }
@@ -840,7 +852,10 @@ export async function createPr(opts: PrOptions): Promise<PrResult> {
   // Diff stat is captured for the commit message footer; the PR
   // body itself no longer needs it (structured body draws from JSON).
   const diffStat = git(projectRoot, ["diff", "--stat"]);
-  const fixes = diffStat.split("\n").filter((l) => l.includes("|")).map((l) => l.trim());
+  const fixes = diffStat
+    .split("\n")
+    .filter((l) => l.includes("|"))
+    .map((l) => l.trim());
 
   // v2.10.329 (Sprint 4) — structured-first generation.
   //
@@ -893,14 +908,20 @@ export async function createPr(opts: PrOptions): Promise<PrResult> {
       // Capture the existing HEAD as the commit hash.
       try {
         commitHash = git(projectRoot, ["rev-parse", "--short", "HEAD"]);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     } else {
       // Create branch
       step("Creating branch...");
       try {
         git(projectRoot, ["checkout", "-b", branchName]);
       } catch {
-        try { git(projectRoot, ["checkout", branchName]); } catch { /* ignore */ }
+        try {
+          git(projectRoot, ["checkout", branchName]);
+        } catch {
+          /* ignore */
+        }
       }
 
       // Stage only the files that the audit actually modified, NOT the
@@ -916,9 +937,7 @@ export async function createPr(opts: PrOptions): Promise<PrResult> {
       // and that includes not staging any unrelated edits in the
       // same file just because /fix tried to annotate it.
       const auditFiles = actionableFindings(auditResult).map((f) =>
-        f.file.startsWith(projectRoot + "/")
-          ? f.file.slice(projectRoot.length + 1)
-          : f.file,
+        f.file.startsWith(projectRoot + "/") ? f.file.slice(projectRoot.length + 1) : f.file,
       );
       // HD.1 — argv-form passes path as one argument; spaces and
       // special chars no longer require manual JSON.stringify quoting.
@@ -957,7 +976,11 @@ Signed-off-by: Astrolexis.space — Kulvex Code
         const hashMatch = commitHash.match(/\[[\w/]+ ([a-f0-9]+)\]/);
         commitHash = hashMatch ? hashMatch[1]! : "";
       } finally {
-        try { unlinkSync(msgFile); } catch { /* ignore */ }
+        try {
+          unlinkSync(msgFile);
+        } catch {
+          /* ignore */
+        }
       }
     }
 
@@ -986,12 +1009,7 @@ Signed-off-by: Astrolexis.space — Kulvex Code
 
     if (!pushedToFork) {
       step("Pushing to origin...");
-      const originPush = runCapturing("git", projectRoot, [
-        "push",
-        "-u",
-        "origin",
-        branchName,
-      ]);
+      const originPush = runCapturing("git", projectRoot, ["push", "-u", "origin", branchName]);
       if (!originPush.ok) {
         // Origin push failed (likely 403 — no write access). Try fork workflow.
         if (upstreamRepo) {
@@ -1109,7 +1127,11 @@ Signed-off-by: Astrolexis.space — Kulvex Code
           pushError = `gh pr create failed: ${(create.stderr || create.stdout).slice(0, 240)}`;
         }
       }
-      try { unlinkSync(bodyFile); } catch { /* ignore */ }
+      try {
+        unlinkSync(bodyFile);
+      } catch {
+        /* ignore */
+      }
 
       // After the PR exists, add an attribution comment. PR comments are
       // not in scope of upstream spell-check / lint workflows, so this is
@@ -1123,15 +1145,16 @@ Signed-off-by: Astrolexis.space — Kulvex Code
         const commentFile = resolve(projectRoot, ".kcode-pr-comment");
         try {
           writeFileSync(commentFile, commentBody);
-          runCapturing("gh", projectRoot, [
-            "pr",
-            "comment",
-            prUrl,
-            "--body-file",
-            commentFile,
-          ]);
-        } catch { /* non-fatal */ }
-        finally { try { unlinkSync(commentFile); } catch { /* ignore */ } }
+          runCapturing("gh", projectRoot, ["pr", "comment", prUrl, "--body-file", commentFile]);
+        } catch {
+          /* non-fatal */
+        } finally {
+          try {
+            unlinkSync(commentFile);
+          } catch {
+            /* ignore */
+          }
+        }
       }
     }
   }

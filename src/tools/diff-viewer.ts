@@ -168,14 +168,11 @@ function diffGit(file: string, staged: boolean, contextLines: number): ToolResul
         // Sanitize inputs to prevent shell injection
         const safeFile = resolvedFile.replace(/["`$\\]/g, "");
         const safeCtx = String(Math.min(Math.max(parseInt(String(contextLines)) || 3, 0), 100));
-        const result = execSync(
-          `git diff ${flag} -U${safeCtx} -- "${safeFile}" 2>&1 || true`,
-          {
-            cwd: process.cwd(),
-            stdio: "pipe",
-            timeout: 10000,
-          },
-        ).toString();
+        const result = execSync(`git diff ${flag} -U${safeCtx} -- "${safeFile}" 2>&1 || true`, {
+          cwd: process.cwd(),
+          stdio: "pipe",
+          timeout: 10000,
+        }).toString();
         return { tool_use_id: "", content: result || `No changes for ${file}.` };
       } catch {
         return { tool_use_id: "", content: `No changes for ${file}.` };

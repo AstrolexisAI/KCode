@@ -129,10 +129,7 @@ export function detectBadKeyError(status: number, errorText: string): string | n
  * valid. Catches typos/truncations before the first API call.
  * Pure — no I/O.
  */
-export function validateKeyFormat(
-  providerOrUrl: string,
-  key: string | undefined,
-): string | null {
+export function validateKeyFormat(providerOrUrl: string, key: string | undefined): string | null {
   if (!key) return null; // no key configured — not a format error
   const p = providerOrUrl.toLowerCase();
   if (p.includes("x.ai") || p.includes("grok") || p.includes("xai")) {
@@ -425,14 +422,10 @@ export async function buildRequestForModel(
           break;
         }
       }
-      const mentionsAgents = /\b(agent|agente|worker|bot|grupo|group|team|swarm)\b/i.test(
-        lastText,
-      );
+      const mentionsAgents = /\b(agent|agente|worker|bot|grupo|group|team|swarm)\b/i.test(lastText);
       const RECENT_SPAWN_WINDOW_MS = 2 * 60 * 1000;
       const now = Date.now();
-      const hasRecentSpawn = status.active.some(
-        (a) => now - a.startedAt < RECENT_SPAWN_WINDOW_MS,
-      );
+      const hasRecentSpawn = status.active.some((a) => now - a.startedAt < RECENT_SPAWN_WINDOW_MS);
       if (mentionsAgents || hasRecentSpawn) {
         const fragment = buildAgentSystemPromptFragment(status);
         if (fragment) {
@@ -594,7 +587,10 @@ export async function buildRequestForModel(
       if (msg.role !== "user") continue;
       if (typeof msg.content === "string") {
         msg.content = [
-          { type: "text", text: msg.content, cache_control: { type: "ephemeral" } } as { type: "text"; text: string },
+          { type: "text", text: msg.content, cache_control: { type: "ephemeral" } } as {
+            type: "text";
+            text: string;
+          },
         ];
         break;
       }
@@ -664,8 +660,7 @@ export async function buildRequestForModel(
     // Send reasoning_effort only to providers that fully support it.
     // xAI is "selective" (grok-3-mini yes, grok-4.20-reasoning no) — skip to avoid 400s.
     // OpenAI o-series support is stable and documented.
-    const supportsReasoningEffort =
-      isReasoningModel && caps.supportsReasoningEffort === true;
+    const supportsReasoningEffort = isReasoningModel && caps.supportsReasoningEffort === true;
     if (supportsReasoningEffort) {
       const reasoningEffort =
         effort === "low" ? "low" : effort === "high" || effort === "max" ? "high" : "medium";
@@ -763,7 +758,11 @@ export async function executeModelRequest(
   // Empty messages can appear when a reasoning loop aborts mid-stream, when a
   // tool call produces no follow-up text, or when retry logic injects a stub.
   if (Array.isArray(req.body.messages)) {
-    const original = req.body.messages as Array<{ role: string; content: unknown; tool_calls?: unknown }>;
+    const original = req.body.messages as Array<{
+      role: string;
+      content: unknown;
+      tool_calls?: unknown;
+    }>;
     const stripped: Array<{ idx: number; role: string; shape: string }> = [];
     req.body.messages = original.filter((m, idx) => {
       // OpenAI-format assistant messages with tool_calls legitimately have content=null.
@@ -783,26 +782,34 @@ export async function executeModelRequest(
         return m.content == null;
       })();
       if (isEmpty) {
-        const shape = typeof m.content === "string"
-          ? "string" : Array.isArray(m.content)
-          ? `array(${m.content.length})` : "null/other";
+        const shape =
+          typeof m.content === "string"
+            ? "string"
+            : Array.isArray(m.content)
+              ? `array(${m.content.length})`
+              : "null/other";
         stripped.push({ idx, role: m.role, shape });
         return false;
       }
       return true;
     });
     if (stripped.length > 0) {
-      log.warn("llm", `Stripped ${stripped.length} empty messages: ${stripped.map(s => `#${s.idx}:${s.role}(${s.shape})`).join(" ")}`);
+      log.warn(
+        "llm",
+        `Stripped ${stripped.length} empty messages: ${stripped.map((s) => `#${s.idx}:${s.role}(${s.shape})`).join(" ")}`,
+      );
     }
   }
 
   // Log message structure at debug level for diagnosing tool_use/tool_result pairing
   if ((log as { isDebugEnabled?: () => boolean }).isDebugEnabled?.()) {
-    const msgs = Array.isArray(req.body.messages) ? req.body.messages as Array<{role: string; content: unknown}> : [];
+    const msgs = Array.isArray(req.body.messages)
+      ? (req.body.messages as Array<{ role: string; content: unknown }>)
+      : [];
     const summary = msgs.map((m, i) => {
       if (typeof m.content === "string") return `${i}:${m.role}(text)`;
       if (Array.isArray(m.content)) {
-        const types = (m.content as Array<{type: string}>).map(b => b.type).join(",");
+        const types = (m.content as Array<{ type: string }>).map((b) => b.type).join(",");
         return `${i}:${m.role}[${types}]`;
       }
       return `${i}:${m.role}(?)`;
@@ -852,7 +859,8 @@ export async function executeModelRequest(
       // Check x-should-retry header — Anthropic tells us if retrying will help
       const shouldRetryHeader = response.headers.get("x-should-retry");
       const shouldNotRetry = shouldRetryHeader === "false";
-      const representativeClaim = response.headers.get("anthropic-ratelimit-unified-representative-claim") ?? undefined;
+      const representativeClaim =
+        response.headers.get("anthropic-ratelimit-unified-representative-claim") ?? undefined;
 
       // Calculate exact reset time from Anthropic's unified reset header
       let resetAtMs: number | undefined;
@@ -866,9 +874,14 @@ export async function executeModelRequest(
         const resetMsg = resetAtMs
           ? ` Resets in ~${Math.ceil((resetAtMs - Date.now()) / 60_000)} minutes.`
           : resetInfo;
-        const limitType = representativeClaim === "seven_day" ? " (7-day limit)" :
-          representativeClaim === "five_hour" ? " (5-hour limit)" :
-          representativeClaim === "seven_day_opus" ? " (7-day Opus limit)" : "";
+        const limitType =
+          representativeClaim === "seven_day"
+            ? " (7-day limit)"
+            : representativeClaim === "five_hour"
+              ? " (5-hour limit)"
+              : representativeClaim === "seven_day_opus"
+                ? " (7-day Opus limit)"
+                : "";
         const err = new Error(
           `Rate limit reached${limitType}.${resetMsg} Switch to a smaller model with /model.`,
         );

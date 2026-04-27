@@ -37,9 +37,7 @@ const PHANTOM_PATTERNS: RegExp[] = [
 // Strip decorative/boundary punctuation from a token so
 // "`setProperty`," and "setProperty" compare equal.
 function stripBoundaryPunct(s: string): string {
-  return s
-    .replace(/^[\s`'".,;:()\[\]{}!?<>]+/, "")
-    .replace(/[\s`'".,;:()\[\]{}!?<>]+$/, "");
+  return s.replace(/^[\s`'".,;:()[\]{}!?<>]+/, "").replace(/[\s`'".,;:()[\]{}!?<>]+$/, "");
 }
 
 export interface PhantomTypoMatch {

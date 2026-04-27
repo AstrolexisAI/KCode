@@ -265,19 +265,14 @@ async function _executeMultiEditInner(input: Record<string, unknown>): Promise<T
     try {
       const firstOp = ops[0];
       if (firstOp) {
-        const firstEditLine =
-          plan.original.slice(0, plan.original.indexOf(firstOp.old_string))
-            .split("\n").length;
+        const firstEditLine = plan.original
+          .slice(0, plan.original.indexOf(firstOp.old_string))
+          .split("\n").length;
         const { getUserTexts } = await import("../core/session-tracker.js");
         const { extractLocationHints, checkEditLocationMismatch, buildLocationWarning } =
           await import("../core/edit-location-check.js");
         const hints = extractLocationHints(getUserTexts());
-        const verdict = checkEditLocationMismatch(
-          hints,
-          firstEditLine,
-          filePath,
-          plan.original,
-        );
+        const verdict = checkEditLocationMismatch(hints, firstEditLine, filePath, plan.original);
         if (verdict.isMismatch) {
           results.push(buildLocationWarning(verdict));
         }

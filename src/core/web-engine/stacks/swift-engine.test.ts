@@ -1,13 +1,17 @@
-import { describe, test, expect } from "bun:test";
-import { createSwiftProject } from "./swift-engine";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createSwiftProject } from "./swift-engine";
 
 describe("swift-engine", () => {
   function withTmp(fn: (dir: string) => void) {
     const dir = mkdtempSync(join(tmpdir(), "kcode-swift-"));
-    try { fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
+    try {
+      fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
 
   test("creates iOS SwiftUI app", () => {
@@ -31,7 +35,7 @@ describe("swift-engine", () => {
     withTmp((dir) => {
       const r = createSwiftProject("CLI command tool", dir);
       expect(r.config.type).toBe("cli");
-      expect(r.config.dependencies.some(d => d.url.includes("argument-parser"))).toBe(true);
+      expect(r.config.dependencies.some((d) => d.url.includes("argument-parser"))).toBe(true);
     });
   });
 
@@ -53,8 +57,8 @@ describe("swift-engine", () => {
   test("has tests and CI", () => {
     withTmp((dir) => {
       const r = createSwiftProject("iOS app", dir);
-      expect(r.files.some(f => f.path.includes("Tests"))).toBe(true);
-      expect(r.files.some(f => f.path.includes("ci.yml"))).toBe(true);
+      expect(r.files.some((f) => f.path.includes("Tests"))).toBe(true);
+      expect(r.files.some((f) => f.path.includes("ci.yml"))).toBe(true);
     });
   });
 });

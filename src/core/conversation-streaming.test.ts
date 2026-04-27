@@ -131,9 +131,7 @@ describe("detectLargeBlockRepetition", () => {
   test("returns null for normal prose with no repeats", () => {
     const prose =
       "This is a normal paragraph of writing. ".repeat(50) +
-      "Now a different passage continues here describing something else entirely. ".repeat(
-        20,
-      );
+      "Now a different passage continues here describing something else entirely. ".repeat(20);
     // Different subparagraphs, no exact repeated fingerprint
     // Actually repeat(50) would catch… so use unique lorem-ish text
     const text =
@@ -187,9 +185,7 @@ describe("detectLargeBlockRepetition", () => {
   test("ignores fingerprints dominated by punctuation / box-drawing chars", () => {
     // Markdown tables use many box-drawing chars that repeat legitimately
     const table =
-      "┌" + "─".repeat(60) + "┐\n" +
-      "│" + " ".repeat(60) + "│\n" +
-      "└" + "─".repeat(60) + "┘\n";
+      "┌" + "─".repeat(60) + "┐\n" + "│" + " ".repeat(60) + "│\n" + "└" + "─".repeat(60) + "┘\n";
     const text = "Here is a table:\n" + table.repeat(3) + "End of tables.";
     // The fingerprint would be mostly box-drawing — reject
     expect(detectLargeBlockRepetition(text)).toBeNull();
@@ -205,8 +201,7 @@ describe("detectLargeBlockRepetition", () => {
       "from the tail edge of the buffer so the sample offset still hits it. ";
     // Six repetitions with varying whitespace between — should normalize
     const text =
-      base + "\n  " + base + "\n\n  " + base + "\n\n\n" + base +
-      "\n\n" + base + "\n" + base;
+      base + "\n  " + base + "\n\n  " + base + "\n\n\n" + base + "\n\n" + base + "\n" + base;
     expect(detectLargeBlockRepetition(text)).not.toBeNull();
   });
 });
@@ -223,7 +218,8 @@ describe("detectCompletionMarkerLoop", () => {
     // Normal flow: model says "done" once, then provides the summary
     const text =
       "✅ Aplicación Orbital completada con éxito. " +
-      "x".repeat(1500) + " Additional details here continue below. ";
+      "x".repeat(1500) +
+      " Additional details here continue below. ";
     expect(detectCompletionMarkerLoop(text)).toBeNull();
   });
 
@@ -236,17 +232,20 @@ describe("detectCompletionMarkerLoop", () => {
       "✅ ¡Aplicación 'Orbital' completada con éxito! " +
       "Se ha generado un archivo 100% autónomo con todas las " +
       "secciones solicitadas implementadas correctamente. " +
-      "x".repeat(500) + " ";
+      "x".repeat(500) +
+      " ";
     const block2 =
       "✅ ¡Orbital completada! " +
       "He creado una aplicación web profesional y visualmente " +
       "impactante tal como se solicitó en el prompt original. " +
-      "y".repeat(500) + " ";
+      "y".repeat(500) +
+      " ";
     const block3 =
       "✅ ¡Orbital completada con éxito! " +
       "He generado una aplicación web completa con todos los " +
       "requisitos del Mission Control de la NASA implementados. " +
-      "z".repeat(500) + " ";
+      "z".repeat(500) +
+      " ";
     const text = block1 + block2 + block3;
     expect(text.length).toBeGreaterThan(1500);
     const result = detectCompletionMarkerLoop(text);
@@ -257,14 +256,14 @@ describe("detectCompletionMarkerLoop", () => {
   test("fires on English Task Complete restarts", () => {
     const block =
       "✅ Task complete! The application has been done with all the features " +
-      "requested. Here is a summary of what was done: " + "x".repeat(400);
+      "requested. Here is a summary of what was done: " +
+      "x".repeat(400);
     const text = block + " ... " + block + " ... " + block;
     expect(detectCompletionMarkerLoop(text)).not.toBeNull();
   });
 
   test("does NOT fire on 2 restarts (below threshold)", () => {
-    const block =
-      "✅ Orbital completada. Summary follows: " + "x".repeat(500);
+    const block = "✅ Orbital completada. Summary follows: " + "x".repeat(500);
     const text = block + block; // only 2 markers
     expect(detectCompletionMarkerLoop(text)).toBeNull();
   });

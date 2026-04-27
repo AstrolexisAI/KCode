@@ -47,11 +47,7 @@ export interface AstPattern {
    * minimal AST-node interface so taint-style follow-up traversals
    * are possible.
    */
-  match(
-    captures: Record<string, AstCapture[]>,
-    source: string,
-    file: string,
-  ): Candidate | null;
+  match(captures: Record<string, AstCapture[]>, source: string, file: string): Candidate | null;
   explanation: string;
   verify_prompt: string;
   cwe?: string;

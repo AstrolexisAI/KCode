@@ -1,8 +1,8 @@
 // Tests for DiffViewer tool — file and git diffs
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { diffViewerDefinition, executeDiffViewer } from "./diff-viewer";
 
 const testDir = join(tmpdir(), `kcode-diff-test-${Date.now()}`);

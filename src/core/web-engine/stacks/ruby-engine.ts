@@ -5,7 +5,12 @@ import { dirname, join } from "node:path";
 
 export type RubyProjectType = "api" | "web" | "cli" | "library" | "worker" | "custom";
 
-interface RubyConfig { name: string; type: RubyProjectType; framework?: string; gems: string[]; }
+interface RubyConfig {
+  name: string;
+  type: RubyProjectType;
+  framework?: string;
+  gems: string[];
+}
 
 function detectRubyProject(msg: string): RubyConfig {
   const lower = msg.toLowerCase();
@@ -14,27 +19,26 @@ function detectRubyProject(msg: string): RubyConfig {
   const gems: string[] = [];
 
   if (/\b(?:rails|full.?stack|mvc)\b/i.test(lower)) {
-    type = "web"; framework = "rails";
+    type = "web";
+    framework = "rails";
     gems.push("rails", "puma", "sqlite3");
-  }
-  else if (/\b(?:sinatra|api|rest|server)\b/i.test(lower)) {
-    type = "api"; framework = "sinatra";
+  } else if (/\b(?:sinatra|api|rest|server)\b/i.test(lower)) {
+    type = "api";
+    framework = "sinatra";
     gems.push("sinatra", "sinatra-contrib", "puma", "rack", "rack-test");
-  }
-  else if (/\b(?:grape)\b/i.test(lower)) {
-    type = "api"; framework = "grape";
+  } else if (/\b(?:grape)\b/i.test(lower)) {
+    type = "api";
+    framework = "grape";
     gems.push("grape", "grape-entity", "rack");
-  }
-  else if (/\b(?:cli|console|command|tool|script)\b/i.test(lower)) {
+  } else if (/\b(?:cli|console|command|tool|script)\b/i.test(lower)) {
     type = "cli";
     gems.push("thor", "tty-prompt", "pastel");
-  }
-  else if (/\b(?:gem|lib|library|package)\b/i.test(lower)) { type = "library"; }
-  else if (/\b(?:worker|sidekiq|job|queue|background)\b/i.test(lower)) {
+  } else if (/\b(?:gem|lib|library|package)\b/i.test(lower)) {
+    type = "library";
+  } else if (/\b(?:worker|sidekiq|job|queue|background)\b/i.test(lower)) {
     type = "worker";
     gems.push("sidekiq", "redis");
-  }
-  else {
+  } else {
     framework = "sinatra";
     gems.push("sinatra", "sinatra-contrib", "puma", "rack-test");
   }
@@ -42,7 +46,10 @@ function detectRubyProject(msg: string): RubyConfig {
   if (/\b(?:sequel|activerecord|database|db|postgres|mysql|sqlite)\b/i.test(lower)) {
     if (!gems.includes("rails")) gems.push("sequel", "sqlite3");
   }
-  if (/\b(?:rspec)\b/i.test(lower) || true) gems.push("rspec");
+  // rspec is included unconditionally — the regex test was redundant since the
+  // `|| true` made the branch always-taken. Kept the explicit always-include
+  // semantics so ruby projects always get rspec set up.
+  gems.push("rspec");
   if (/\b(?:redis)\b/i.test(lower) && !gems.includes("redis")) gems.push("redis");
   if (/\b(?:faraday|http|client)\b/i.test(lower)) gems.push("faraday");
   if (/\b(?:jwt|auth|token)\b/i.test(lower)) gems.push("jwt");
@@ -53,29 +60,44 @@ function detectRubyProject(msg: string): RubyConfig {
   return { name, type, framework, gems: [...new Set(gems)] };
 }
 
-interface GenFile { path: string; content: string; needsLlm: boolean; }
-export interface RubyProjectResult { config: RubyConfig; files: GenFile[]; projectPath: string; prompt: string; }
+interface GenFile {
+  path: string;
+  content: string;
+  needsLlm: boolean;
+}
+export interface RubyProjectResult {
+  config: RubyConfig;
+  files: GenFile[];
+  projectPath: string;
+  prompt: string;
+}
 
 export function createRubyProject(userRequest: string, cwd: string): RubyProjectResult {
   const cfg = detectRubyProject(userRequest);
   const files: GenFile[] = [];
 
   // Gemfile
-  files.push({ path: "Gemfile", content: `source "https://rubygems.org"
+  files.push({
+    path: "Gemfile",
+    content: `source "https://rubygems.org"
 
 ruby ">= 3.3"
 
-${cfg.gems.map(g => `gem "${g}"`).join("\n")}
+${cfg.gems.map((g) => `gem "${g}"`).join("\n")}
 
 group :development, :test do
   gem "rspec" unless ${cfg.gems.includes("rspec")}
   gem "rubocop"
 end
-`, needsLlm: false });
+`,
+    needsLlm: false,
+  });
 
   // Main code
   if (cfg.type === "api" && cfg.framework === "sinatra") {
-    files.push({ path: "app.rb", content: `require "sinatra"
+    files.push({
+      path: "app.rb",
+      content: `require "sinatra"
 require "sinatra/json"
 require "json"
 require "logger"
@@ -190,14 +212,21 @@ delete "/api/items/:id" do
   LOGGER.info("Deleted item #{item.id}")
   json deleted: true
 end
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
 
-    files.push({ path: "config.ru", content: `require_relative "app"
+    files.push({
+      path: "config.ru",
+      content: `require_relative "app"
 run Sinatra::Application
-`, needsLlm: false });
-
+`,
+      needsLlm: false,
+    });
   } else if (cfg.type === "cli") {
-    files.push({ path: "lib/${cfg.name}/cli.rb", content: `require "thor"
+    files.push({
+      path: "lib/${cfg.name}/cli.rb",
+      content: `require "thor"
 
 module ${cap(cfg.name)}
   class CLI < Thor
@@ -218,15 +247,22 @@ module ${cap(cfg.name)}
     end
   end
 end
-`, needsLlm: true });
+`,
+      needsLlm: true,
+    });
 
-    files.push({ path: `bin/${cfg.name}`, content: `#!/usr/bin/env ruby
+    files.push({
+      path: `bin/${cfg.name}`,
+      content: `#!/usr/bin/env ruby
 require_relative "../lib/${cfg.name}/cli"
 ${cap(cfg.name)}::CLI.start(ARGV)
-`, needsLlm: false });
-
+`,
+      needsLlm: false,
+    });
   } else if (cfg.type === "library") {
-    files.push({ path: `lib/${cfg.name}.rb`, content: `module ${cap(cfg.name)}
+    files.push({
+      path: `lib/${cfg.name}.rb`,
+      content: `module ${cap(cfg.name)}
   class Error < StandardError; end
   VERSION = "0.1.0"
 
@@ -248,9 +284,13 @@ ${cap(cfg.name)}::CLI.start(ARGV)
     end
   end
 end
-`, needsLlm: true });
+`,
+      needsLlm: true,
+    });
 
-    files.push({ path: `${cfg.name}.gemspec`, content: `Gem::Specification.new do |s|
+    files.push({
+      path: `${cfg.name}.gemspec`,
+      content: `Gem::Specification.new do |s|
   s.name        = "${cfg.name}"
   s.version     = "0.1.0"
   s.summary     = "${cfg.name} — A Ruby library"
@@ -259,10 +299,13 @@ end
   s.require_paths = ["lib"]
   s.required_ruby_version = ">= 3.3"
 end
-`, needsLlm: false });
-
+`,
+      needsLlm: false,
+    });
   } else if (cfg.type === "worker") {
-    files.push({ path: "app/workers/main_worker.rb", content: `require "sidekiq"
+    files.push({
+      path: "app/workers/main_worker.rb",
+      content: `require "sidekiq"
 
 class MainWorker
   include Sidekiq::Job
@@ -275,18 +318,25 @@ class MainWorker
     puts "Job #{job_id} done!"
   end
 end
-`, needsLlm: true });
-
+`,
+      needsLlm: true,
+    });
   } else {
-    files.push({ path: "app.rb", content: `# ${cfg.name}
+    files.push({
+      path: "app.rb",
+      content: `# ${cfg.name}
 # TODO: implement
 puts "${cfg.name} started"
-`, needsLlm: true });
+`,
+      needsLlm: true,
+    });
   }
 
   // RSpec
   if (cfg.type === "api" && cfg.framework === "sinatra") {
-    files.push({ path: `spec/${cfg.name}_spec.rb`, content: `require "spec_helper"
+    files.push({
+      path: `spec/${cfg.name}_spec.rb`,
+      content: `require "spec_helper"
 require "rack/test"
 require_relative "../app"
 
@@ -332,7 +382,7 @@ RSpec.describe "${cfg.name} API" do
     it "returns an item by id" do
       post "/api/items", { name: "Widget", description: "A widget" }.to_json, "CONTENT_TYPE" => "application/json"
       item = JSON.parse(last_response.body)
-      get "/api/items/\#{item['id']}"
+      get "/api/items/#{item['id']}"
       expect(last_response.status).to eq(200)
       found = JSON.parse(last_response.body)
       expect(found["name"]).to eq("Widget")
@@ -367,7 +417,7 @@ RSpec.describe "${cfg.name} API" do
     it "updates an existing item" do
       post "/api/items", { name: "Old", description: "Old desc" }.to_json, "CONTENT_TYPE" => "application/json"
       item = JSON.parse(last_response.body)
-      put "/api/items/\#{item['id']}", { name: "Updated" }.to_json, "CONTENT_TYPE" => "application/json"
+      put "/api/items/#{item['id']}", { name: "Updated" }.to_json, "CONTENT_TYPE" => "application/json"
       expect(last_response.status).to eq(200)
       updated = JSON.parse(last_response.body)
       expect(updated["name"]).to eq("Updated")
@@ -384,11 +434,11 @@ RSpec.describe "${cfg.name} API" do
     it "deletes an existing item" do
       post "/api/items", { name: "ToDelete" }.to_json, "CONTENT_TYPE" => "application/json"
       item = JSON.parse(last_response.body)
-      delete "/api/items/\#{item['id']}"
+      delete "/api/items/#{item['id']}"
       expect(last_response.status).to eq(200)
       body = JSON.parse(last_response.body)
       expect(body["deleted"]).to eq(true)
-      get "/api/items/\#{item['id']}"
+      get "/api/items/#{item['id']}"
       expect(last_response.status).to eq(404)
     end
 
@@ -398,9 +448,13 @@ RSpec.describe "${cfg.name} API" do
     end
   end
 end
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
 
-    files.push({ path: "spec/spec_helper.rb", content: `require "rack/test"
+    files.push({
+      path: "spec/spec_helper.rb",
+      content: `require "rack/test"
 require "json"
 
 RSpec.configure do |config|
@@ -409,16 +463,24 @@ RSpec.configure do |config|
   end
   config.include Rack::Test::Methods
 end
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
   } else {
-    files.push({ path: "spec/spec_helper.rb", content: `RSpec.configure do |config|
+    files.push({
+      path: "spec/spec_helper.rb",
+      content: `RSpec.configure do |config|
   config.expect_with :rspec do |c|
     c.syntax = :expect
   end
 end
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
 
-    files.push({ path: `spec/${cfg.name}_spec.rb`, content: `require "spec_helper"
+    files.push({
+      path: `spec/${cfg.name}_spec.rb`,
+      content: `require "spec_helper"
 
 RSpec.describe "${cfg.name}" do
   it "works" do
@@ -427,29 +489,65 @@ RSpec.describe "${cfg.name}" do
 
   # TODO: add tests
 end
-`, needsLlm: true });
+`,
+      needsLlm: true,
+    });
   }
 
   // Extras
-  files.push({ path: ".gitignore", content: ".bundle/\nvendor/\n*.gem\n.env\nGemfile.lock\ntmp/\n", needsLlm: false });
+  files.push({
+    path: ".gitignore",
+    content: ".bundle/\nvendor/\n*.gem\n.env\nGemfile.lock\ntmp/\n",
+    needsLlm: false,
+  });
   files.push({ path: ".ruby-version", content: "3.3.0\n", needsLlm: false });
-  files.push({ path: "Dockerfile", content: `FROM ruby:3.3-slim
+  files.push({
+    path: "Dockerfile",
+    content: `FROM ruby:3.3-slim
 WORKDIR /app
 COPY Gemfile* ./
 RUN bundle install --without development test
 COPY . .
 EXPOSE 10080
 CMD ["ruby", "app.rb"]
-`, needsLlm: false });
-  files.push({ path: "Rakefile", content: `require "rspec/core/rake_task"\nRSpec::Core::RakeTask.new(:spec)\ntask default: :spec\n`, needsLlm: false });
-  files.push({ path: ".github/workflows/ci.yml", content: `name: CI\non: [push, pull_request]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: ruby/setup-ruby@v1\n        with: { ruby-version: "3.3", bundler-cache: true }\n      - run: bundle exec rspec\n`, needsLlm: false });
-  files.push({ path: "README.md", content: `# ${cfg.name}\n\nRuby ${cfg.type}${cfg.framework ? " (" + cfg.framework + ")" : ""}. Built with KCode.\n\n\`\`\`bash\nbundle install\nruby app.rb\nbundle exec rspec\n\`\`\`\n\n*Astrolexis.space — Kulvex Code*\n`, needsLlm: false });
+`,
+    needsLlm: false,
+  });
+  files.push({
+    path: "Rakefile",
+    content: `require "rspec/core/rake_task"\nRSpec::Core::RakeTask.new(:spec)\ntask default: :spec\n`,
+    needsLlm: false,
+  });
+  files.push({
+    path: ".github/workflows/ci.yml",
+    content: `name: CI\non: [push, pull_request]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: ruby/setup-ruby@v1\n        with: { ruby-version: "3.3", bundler-cache: true }\n      - run: bundle exec rspec\n`,
+    needsLlm: false,
+  });
+  files.push({
+    path: "README.md",
+    content: `# ${cfg.name}\n\nRuby ${cfg.type}${cfg.framework ? " (" + cfg.framework + ")" : ""}. Built with KCode.\n\n\`\`\`bash\nbundle install\nruby app.rb\nbundle exec rspec\n\`\`\`\n\n*Astrolexis.space — Kulvex Code*\n`,
+    needsLlm: false,
+  });
 
   const projectPath = join(cwd, cfg.name);
-  for (const f of files) { const p = join(projectPath, f.path); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, f.content); }
+  for (const f of files) {
+    const p = join(projectPath, f.path);
+    mkdirSync(dirname(p), { recursive: true });
+    writeFileSync(p, f.content);
+  }
 
-  const m = files.filter(f => !f.needsLlm).length;
-  return { config: cfg, files, projectPath, prompt: `Implement Ruby ${cfg.type}${cfg.framework ? " (" + cfg.framework + ")" : ""}. ${m} files machine. USER: "${userRequest}"` };
+  const m = files.filter((f) => !f.needsLlm).length;
+  return {
+    config: cfg,
+    files,
+    projectPath,
+    prompt: `Implement Ruby ${cfg.type}${cfg.framework ? " (" + cfg.framework + ")" : ""}. ${m} files machine. USER: "${userRequest}"`,
+  };
 }
 
-function cap(s: string): string { return s.split(/[-_]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(""); }
+function cap(s: string): string {
+  return s
+    .split(/[-_]/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join("");
+}

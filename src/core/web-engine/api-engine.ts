@@ -126,58 +126,69 @@ function detectApiFramework(message: string): ApiFramework {
 
 // ── Express API Generator ──────────────────────────────────────
 
-function generateExpressApi(entities: Entity[], name: string): Array<{ path: string; content: string; needsLlm: boolean }> {
+function generateExpressApi(
+  entities: Entity[],
+  name: string,
+): Array<{ path: string; content: string; needsLlm: boolean }> {
   const files: Array<{ path: string; content: string; needsLlm: boolean }> = [];
 
   // package.json
   files.push({
     path: "package.json",
-    content: JSON.stringify({
-      name,
-      version: "0.1.0",
-      type: "module",
-      scripts: {
-        dev: "tsx watch src/index.ts",
-        build: "tsc",
-        start: "node dist/index.js",
-        test: "vitest run",
+    content: JSON.stringify(
+      {
+        name,
+        version: "0.1.0",
+        type: "module",
+        scripts: {
+          dev: "tsx watch src/index.ts",
+          build: "tsc",
+          start: "node dist/index.js",
+          test: "vitest run",
+        },
+        dependencies: {
+          express: "^5.1.0",
+          cors: "^2.8.5",
+          zod: "^3.24.0",
+          "better-sqlite3": "^11.0.0",
+          uuid: "^11.0.0",
+        },
+        devDependencies: {
+          typescript: "^5.8.0",
+          tsx: "^4.19.0",
+          "@types/express": "^5.0.0",
+          "@types/better-sqlite3": "^7.6.0",
+          "@types/cors": "^2.8.0",
+          "@types/uuid": "^10.0.0",
+          vitest: "^3.0.0",
+        },
       },
-      dependencies: {
-        express: "^5.1.0",
-        cors: "^2.8.5",
-        zod: "^3.24.0",
-        "better-sqlite3": "^11.0.0",
-        "uuid": "^11.0.0",
-      },
-      devDependencies: {
-        typescript: "^5.8.0",
-        tsx: "^4.19.0",
-        "@types/express": "^5.0.0",
-        "@types/better-sqlite3": "^7.6.0",
-        "@types/cors": "^2.8.0",
-        "@types/uuid": "^10.0.0",
-        vitest: "^3.0.0",
-      },
-    }, null, 2),
+      null,
+      2,
+    ),
     needsLlm: false,
   });
 
   // tsconfig
   files.push({
     path: "tsconfig.json",
-    content: JSON.stringify({
-      compilerOptions: {
-        target: "ES2022",
-        module: "ESNext",
-        moduleResolution: "bundler",
-        strict: true,
-        outDir: "dist",
-        rootDir: "src",
-        esModuleInterop: true,
-        declaration: true,
+    content: JSON.stringify(
+      {
+        compilerOptions: {
+          target: "ES2022",
+          module: "ESNext",
+          moduleResolution: "bundler",
+          strict: true,
+          outDir: "dist",
+          rootDir: "src",
+          esModuleInterop: true,
+          declaration: true,
+        },
+        include: ["src"],
       },
-      include: ["src"],
-    }, null, 2),
+      null,
+      2,
+    ),
     needsLlm: false,
   });
 
@@ -186,7 +197,7 @@ function generateExpressApi(entities: Entity[], name: string): Array<{ path: str
     path: "src/index.ts",
     content: `import express from "express";
 import cors from "cors";
-${entities.map(e => `import { ${e.name}Router } from "./routes/${e.name}";`).join("\n")}
+${entities.map((e) => `import { ${e.name}Router } from "./routes/${e.name}";`).join("\n")}
 import { initDb } from "./db";
 
 const app = express();
@@ -199,7 +210,7 @@ app.use(express.json());
 app.get("/health", (_req, res) => res.json({ status: "ok", timestamp: new Date().toISOString() }));
 
 // Routes
-${entities.map(e => `app.use("/api/${e.name}s", ${e.name}Router);`).join("\n")}
+${entities.map((e) => `app.use("/api/${e.name}s", ${e.name}Router);`).join("\n")}
 
 // Initialize database and start
 initDb();
@@ -229,12 +240,16 @@ export function getDb(): Database.Database {
 
 export function initDb(): void {
   const db = getDb();
-${entities.map(e => `
+${entities
+  .map(
+    (e) => `
   db.exec(\`
     CREATE TABLE IF NOT EXISTS ${e.name}s (
-      ${e.fields.map(f => `${f.name} ${sqlType(f.type)}${f.required && f.name !== "id" ? " NOT NULL" : ""}${f.name === "id" ? " PRIMARY KEY" : ""}`).join(",\n      ")}
+      ${e.fields.map((f) => `${f.name} ${sqlType(f.type)}${f.required && f.name !== "id" ? " NOT NULL" : ""}${f.name === "id" ? " PRIMARY KEY" : ""}`).join(",\n      ")}
     )
-  \`);`).join("\n")}
+  \`);`,
+  )
+  .join("\n")}
 }
 
 function sqlType(t: string): string {
@@ -256,7 +271,7 @@ function sqlType(t: string): string {
   for (const entity of entities) {
     const E = entity.name;
     const Es = E + "s";
-    const fields = entity.fields.filter(f => f.name !== "id" && f.name !== "created_at");
+    const fields = entity.fields.filter((f) => f.name !== "id" && f.name !== "created_at");
 
     // Zod validation schema
     files.push({
@@ -264,7 +279,7 @@ function sqlType(t: string): string {
       content: `import { z } from "zod";
 
 export const create${cap(E)}Schema = z.object({
-${fields.map(f => `  ${f.name}: z.${zodType(f.type)}()${f.required ? "" : ".optional()"},`).join("\n")}
+${fields.map((f) => `  ${f.name}: z.${zodType(f.type)}()${f.required ? "" : ".optional()"},`).join("\n")}
 });
 
 export const update${cap(E)}Schema = create${cap(E)}Schema.partial();
@@ -306,8 +321,8 @@ ${E}Router.post("/", (req, res) => {
   const id = uuid();
   const data = parsed.data;
   getDb().prepare(
-    "INSERT INTO ${Es} (id, ${fields.map(f => f.name).join(", ")}) VALUES (?, ${fields.map(() => "?").join(", ")})"
-  ).run(id, ${fields.map(f => `data.${f.name}${f.type === "json" ? " ? JSON.stringify(data." + f.name + ") : null" : f.type === "boolean" ? " ? 1 : 0" : ""}`).join(", ")});
+    "INSERT INTO ${Es} (id, ${fields.map((f) => f.name).join(", ")}) VALUES (?, ${fields.map(() => "?").join(", ")})"
+  ).run(id, ${fields.map((f) => `data.${f.name}${f.type === "json" ? " ? JSON.stringify(data." + f.name + ") : null" : f.type === "boolean" ? " ? 1 : 0" : ""}`).join(", ")});
 
   const item = getDb().prepare("SELECT * FROM ${Es} WHERE id = ?").get(id);
   res.status(201).json(item);
@@ -362,7 +377,10 @@ describe("${cap(E)} API", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        ${fields.filter(f => f.required).map(f => `${f.name}: ${testValue(f.type)}`).join(",\n        ")}
+        ${fields
+          .filter((f) => f.required)
+          .map((f) => `${f.name}: ${testValue(f.type)}`)
+          .join(",\n        ")}
       }),
     });
     // Test structure — actual HTTP tests need supertest
@@ -382,23 +400,68 @@ describe("${cap(E)} API", () => {
   }
 
   // .gitignore
-  files.push({ path: ".gitignore", content: "node_modules/\ndist/\ndata.db\n.env\n", needsLlm: false });
+  files.push({
+    path: ".gitignore",
+    content: "node_modules/\ndist/\ndata.db\n.env\n",
+    needsLlm: false,
+  });
   files.push({ path: ".env", content: "PORT=3001\nDATABASE_URL=data.db\n", needsLlm: false });
-  files.push({ path: "README.md", content: `# ${name} API\n\nGenerated by KCode.\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n\n## Endpoints\n\n${entities.map(e => `- \`/api/${e.name}s\` — CRUD for ${e.name}s`).join("\n")}\n`, needsLlm: false });
+  files.push({
+    path: "README.md",
+    content: `# ${name} API\n\nGenerated by KCode.\n\n\`\`\`bash\nnpm install\nnpm run dev\n\`\`\`\n\n## Endpoints\n\n${entities.map((e) => `- \`/api/${e.name}s\` — CRUD for ${e.name}s`).join("\n")}\n`,
+    needsLlm: false,
+  });
 
   return files;
 }
 
 // Helpers
-function cap(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
+function cap(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 function zodType(t: string): string {
-  switch (t) { case "number": return "number"; case "integer": return "number().int"; case "boolean": return "boolean"; case "json": return "any"; default: return "string"; }
+  switch (t) {
+    case "number":
+      return "number";
+    case "integer":
+      return "number().int";
+    case "boolean":
+      return "boolean";
+    case "json":
+      return "any";
+    default:
+      return "string";
+  }
 }
 function sqlType(t: string): string {
-  switch (t) { case "number": return "REAL"; case "integer": return "INTEGER"; case "boolean": return "INTEGER"; case "datetime": return "TEXT DEFAULT (datetime('now'))"; case "json": return "TEXT"; default: return "TEXT"; }
+  switch (t) {
+    case "number":
+      return "REAL";
+    case "integer":
+      return "INTEGER";
+    case "boolean":
+      return "INTEGER";
+    case "datetime":
+      return "TEXT DEFAULT (datetime('now'))";
+    case "json":
+      return "TEXT";
+    default:
+      return "TEXT";
+  }
 }
 function testValue(t: string): string {
-  switch (t) { case "number": return "9.99"; case "integer": return "10"; case "boolean": return "true"; case "json": return "[]"; default: return '"test"'; }
+  switch (t) {
+    case "number":
+      return "9.99";
+    case "integer":
+      return "10";
+    case "boolean":
+      return "true";
+    case "json":
+      return "[]";
+    default:
+      return '"test"';
+  }
 }
 
 // ── Main API Creator ───────────────────────────────────────────

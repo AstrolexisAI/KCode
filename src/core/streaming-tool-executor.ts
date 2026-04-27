@@ -137,9 +137,7 @@ export class StreamingToolExecutor {
    * These need to be executed by the normal sequential/parallel flow.
    */
   getUnstartedTools(): ToolUseBlock[] {
-    return this.queue
-      .filter((item) => item.status === "queued")
-      .map((item) => item.toolCall);
+    return this.queue.filter((item) => item.status === "queued").map((item) => item.toolCall);
   }
 
   /**
@@ -207,8 +205,7 @@ export class StreamingToolExecutor {
       );
       const resultStr =
         typeof result === "string" ? result : (result.content ?? JSON.stringify(result));
-      const isError =
-        typeof result === "string" ? false : (result.is_error ?? false);
+      const isError = typeof result === "string" ? false : (result.is_error ?? false);
 
       log.info("tool", `[streaming] ${toolCall.name} completed in ${Date.now() - start}ms`);
 

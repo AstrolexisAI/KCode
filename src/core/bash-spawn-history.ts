@@ -52,7 +52,7 @@ function normalizeCommand(command: string): string {
   return command
     .trim()
     .replace(/\s+/g, " ")
-    .replace(/\bPORT=\d+/g, "PORT=N")  // port-only changes still count as same intent
+    .replace(/\bPORT=\d+/g, "PORT=N") // port-only changes still count as same intent
     .replace(/--port[=\s]\d+/g, "--port N");
 }
 
@@ -103,10 +103,7 @@ export interface RetryWarning {
  * tool result with is_error=true and SKIP execution. Treat the warning
  * itself as the "second failure" for fingerprint accounting.
  */
-export function detectImmediateRetry(
-  command: string,
-  cwd: string,
-): RetryWarning | null {
+export function detectImmediateRetry(command: string, cwd: string): RetryWarning | null {
   // Phase 3 is scoped to server-spawn commands only — it exists to
   // break the dev-server retry loop pattern. Sudo prompts, file ops,
   // builds, tests, etc. should never see this warning.
@@ -138,7 +135,9 @@ export function detectImmediateRetry(
     lines.push(`  Retrying without changing anything will fail the same way and waste a turn.`);
     lines.push(`  Before re-issuing this command you MUST do ONE of:`);
     lines.push(`    1. Diagnose: explain in one sentence what would be different this time.`);
-    lines.push(`       (e.g. "I just killed the conflicting process" or "I added the missing file")`);
+    lines.push(
+      `       (e.g. "I just killed the conflicting process" or "I added the missing file")`,
+    );
     lines.push(`    2. Change the command: different cwd, different args, different tool.`);
     lines.push(`    3. Read more state first (ls / ss / ps / cat the failing file).`);
     lines.push(``);

@@ -11,14 +11,8 @@
 // Security: the private key NEVER leaves the local filesystem.
 // Signing happens in-process; no network calls.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import {
-  createPrivateKey,
-  createPublicKey,
-  createSign,
-  generateKeyPairSync,
-} from "node:crypto";
-import { chmodSync } from "node:fs";
+import { createPrivateKey, createPublicKey, createSign, generateKeyPairSync } from "node:crypto";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { kcodePath } from "./paths";
 
@@ -140,9 +134,7 @@ export function signLicense(input: LicenseInput, privateKeyOverride?: string): s
       : Math.floor(new Date(input.expiresAt).getTime() / 1000);
 
   if (!Number.isFinite(exp) || exp <= now) {
-    throw new Error(
-      `Invalid expiresAt: must be a future date. Got ${input.expiresAt}`,
-    );
+    throw new Error(`Invalid expiresAt: must be a future date. Got ${input.expiresAt}`);
   }
 
   const header = { alg: "RS256", typ: "JWT" };
@@ -173,9 +165,11 @@ export function signLicense(input: LicenseInput, privateKeyOverride?: string): s
 }
 
 /** Same as signLicense but returns the full JWT plus a summary of claims. */
-export function signLicenseWithSummary(
-  input: LicenseInput,
-): { jwt: string; claims: Record<string, unknown>; expiresInDays: number } {
+export function signLicenseWithSummary(input: LicenseInput): {
+  jwt: string;
+  claims: Record<string, unknown>;
+  expiresInDays: number;
+} {
   const jwt = signLicense(input);
   const parts = jwt.split(".");
   const payload = JSON.parse(

@@ -14,10 +14,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { log } from "./logger.js";
-import {
-  detectDevServer,
-  startDevServer,
-} from "./task-orchestrator/level1-handlers.js";
+import { detectDevServer, startDevServer } from "./task-orchestrator/level1-handlers.js";
 import type { Message } from "./types.js";
 
 // ─── Session state ───────────────────────────────────────────────
@@ -195,11 +192,10 @@ function portInUse(port: number): boolean {
     // says: never interpolate into a shell string if you can avoid it.
     // Gemma 4 audit (v2.10.83) correctly flagged this pattern.
     const { spawnSync } = require("node:child_process") as typeof import("node:child_process");
-    const result = spawnSync(
-      "ss",
-      ["-tlnp", "state", "listening", `( sport = :${port} )`],
-      { timeout: 1000, stdio: ["ignore", "pipe", "ignore"] },
-    );
+    const result = spawnSync("ss", ["-tlnp", "state", "listening", `( sport = :${port} )`], {
+      timeout: 1000,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
     if (result.status !== 0) return false;
     const out = result.stdout?.toString() ?? "";
     return out.trim().split("\n").length > 1;
@@ -297,8 +293,7 @@ export async function maybeAutoLaunchDevServer(
         require("./runtime-mode") as typeof import("./runtime-mode");
       let inferCwd = cwd;
       try {
-        const { getTaskScopeManager } =
-          require("./task-scope") as typeof import("./task-scope");
+        const { getTaskScopeManager } = require("./task-scope") as typeof import("./task-scope");
         const sc = getTaskScopeManager().current();
         if (sc?.projectRoot?.path) inferCwd = sc.projectRoot.path;
       } catch {
@@ -357,10 +352,7 @@ export async function maybeAutoLaunchDevServer(
     lines.push("");
 
     const notice = lines.join("\n");
-    log.info(
-      "auto-launch",
-      `started ${srv.name} on :${srv.port}${pid ? ` (PID ${pid})` : ""}`,
-    );
+    log.info("auto-launch", `started ${srv.name} on :${srv.port}${pid ? ` (PID ${pid})` : ""}`);
     return { notice, pid, url };
   } catch (err) {
     log.debug("auto-launch", `check failed (non-fatal): ${err}`);

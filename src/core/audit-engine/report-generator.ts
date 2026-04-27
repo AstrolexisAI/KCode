@@ -48,16 +48,12 @@ function renderFalsePositiveSection(result: AuditResult, lines: string[]): void 
     const rel = fp.file.startsWith(result.project + "/")
       ? fp.file.slice(result.project.length + 1)
       : fp.file;
-    lines.push(
-      `${i + 1}. \`${rel}:${fp.line}\` — pattern \`${fp.pattern_id}\` (${fp.severity})`,
-    );
+    lines.push(`${i + 1}. \`${rel}:${fp.line}\` — pattern \`${fp.pattern_id}\` (${fp.severity})`);
     lines.push(`   - Reason: ${fp.verification.reasoning.slice(0, 400).replace(/\n/g, " ")}`);
   }
   if (details.length > shown.length) {
     lines.push("");
-    lines.push(
-      `_…and ${details.length - shown.length} more. See \`AUDIT_REPORT.json\`._`,
-    );
+    lines.push(`_…and ${details.length - shown.length} more. See \`AUDIT_REPORT.json\`._`);
   }
   lines.push("");
 }
@@ -93,9 +89,7 @@ function renderPatternMetricsSection(result: AuditResult, lines: string[]): void
   lines.push("| Pattern | Hits | Sites | Confirmed | FP | needs_context | confirmed_rate |");
   lines.push("|---------|-----:|------:|----------:|---:|---:|---------------:|");
   for (const [pid, m] of top) {
-    const rate = m.confirmed_rate !== undefined
-      ? `${(m.confirmed_rate * 100).toFixed(0)}%`
-      : "—";
+    const rate = m.confirmed_rate !== undefined ? `${(m.confirmed_rate * 100).toFixed(0)}%` : "—";
     // unique_sites was added in v2.10.331 audit fix; older JSONs
     // without the field fall back to "—" so the column stays valid.
     const sites =
@@ -108,7 +102,9 @@ function renderPatternMetricsSection(result: AuditResult, lines: string[]): void
   }
   if (entries.length > top.length) {
     lines.push("");
-    lines.push(`_…and ${entries.length - top.length} more patterns. See \`AUDIT_REPORT.json → pattern_metrics\` for the full list._`);
+    lines.push(
+      `_…and ${entries.length - top.length} more patterns. See \`AUDIT_REPORT.json → pattern_metrics\` for the full list._`,
+    );
   }
   lines.push("");
 }
@@ -166,9 +162,10 @@ function renderAuditConfidence(result: AuditResult, lines: string[]): void {
   // ── Coverage line ─────────────────────────────────────────
   const cov = result.coverage;
   if (cov) {
-    const pct = cov.totalCandidateFiles > 0
-      ? Math.round((cov.scannedFiles / cov.totalCandidateFiles) * 100)
-      : 100;
+    const pct =
+      cov.totalCandidateFiles > 0
+        ? Math.round((cov.scannedFiles / cov.totalCandidateFiles) * 100)
+        : 100;
     const since = (cov as { since?: string }).since;
     const mode = since ? `diff scan since \`${since}\`` : "full scan";
     lines.push(
@@ -197,9 +194,7 @@ function renderAuditConfidence(result: AuditResult, lines: string[]): void {
         .filter((s) => !s.loaded)
         .map((s) => s.language)
         .join(", ");
-      lines.push(
-        `**AST grammars:** ${loaded} loaded, ${missing} missing (${missingLangs})`,
-      );
+      lines.push(`**AST grammars:** ${loaded} loaded, ${missing} missing (${missingLangs})`);
     }
   }
 
@@ -223,8 +218,9 @@ function renderAuditConfidence(result: AuditResult, lines: string[]): void {
   }
 
   // ── Autofix line ──────────────────────────────────────────
-  const fs = (result as { fix_support_summary?: { rewrite: number; annotate: number; manual: number } })
-    .fix_support_summary;
+  const fs = (
+    result as { fix_support_summary?: { rewrite: number; annotate: number; manual: number } }
+  ).fix_support_summary;
   if (fs) {
     lines.push(
       `**Autofix:** ${fs.rewrite} rewrite · ${fs.annotate} annotate · ${fs.manual} manual-only`,
@@ -277,9 +273,7 @@ function renderAuditConfidence(result: AuditResult, lines: string[]): void {
       const summary = top
         .map((n) => `\`${n.id}\` (${Math.round(n.rate * 100)}% confirm)`)
         .join(", ");
-      lines.push(
-        `**Top noise (≥3 sites, <50% confirm):** ${summary}`,
-      );
+      lines.push(`**Top noise (≥3 sites, <50% confirm):** ${summary}`);
     }
   }
 
@@ -304,7 +298,10 @@ function renderAuditConfidence(result: AuditResult, lines: string[]): void {
   if (disabled.length > 0) {
     warnings.push(
       `Audit-disabled: ${disabled.length} file(s) carried a \`kcode-disable: audit\` directive and were skipped from pattern matching. ` +
-      `Files: ${disabled.slice(0, 3).map((f) => f.split("/").pop()).join(", ")}${disabled.length > 3 ? `, +${disabled.length - 3} more` : ""}.`,
+        `Files: ${disabled
+          .slice(0, 3)
+          .map((f) => f.split("/").pop())
+          .join(", ")}${disabled.length > 3 ? `, +${disabled.length - 3} more` : ""}.`,
     );
   }
   if (astStatus.some((s) => !s.loaded)) {
@@ -384,9 +381,7 @@ function renderIgnoredFindingsSection(
       ? f.file.slice(projectRoot.length + 1)
       : f.file;
     const reason = f.review_reason ? ` — ${f.review_reason}` : "";
-    const tags = f.review_tags && f.review_tags.length > 0
-      ? ` [${f.review_tags.join(", ")}]`
-      : "";
+    const tags = f.review_tags && f.review_tags.length > 0 ? ` [${f.review_tags.join(", ")}]` : "";
     lines.push(`- \`${rel}:${f.line}\` — ${f.pattern_id}${reason}${tags}`);
   }
   lines.push("");
@@ -413,16 +408,12 @@ function renderNeedsContextSection(result: AuditResult, lines: string[]): void {
     const rel = fp.file.startsWith(result.project + "/")
       ? fp.file.slice(result.project.length + 1)
       : fp.file;
-    lines.push(
-      `${i + 1}. \`${rel}:${fp.line}\` — pattern \`${fp.pattern_id}\` (${fp.severity})`,
-    );
+    lines.push(`${i + 1}. \`${rel}:${fp.line}\` — pattern \`${fp.pattern_id}\` (${fp.severity})`);
     lines.push(`   - Reason: ${fp.verification.reasoning.slice(0, 400).replace(/\n/g, " ")}`);
   }
   if (details.length > shown.length) {
     lines.push("");
-    lines.push(
-      `_…and ${details.length - shown.length} more. See \`AUDIT_REPORT.json\`._`,
-    );
+    lines.push(`_…and ${details.length - shown.length} more. See \`AUDIT_REPORT.json\`._`);
   }
   lines.push("");
 }
@@ -471,7 +462,9 @@ export function generateMarkdownReport(result: AuditResult): string {
       }
     }
     lines.push(`- Files in project: **${cov.totalCandidateFiles}**`);
-    lines.push(`- Files scanned: **${cov.scannedFiles}** (${Math.round((cov.scannedFiles / Math.max(cov.totalCandidateFiles, 1)) * 100)}%)`);
+    lines.push(
+      `- Files scanned: **${cov.scannedFiles}** (${Math.round((cov.scannedFiles / Math.max(cov.totalCandidateFiles, 1)) * 100)}%)`,
+    );
     lines.push(`- Truncated: ${truncLabel}`);
     // MAX_SAFE_INTEGER (or numbers larger than reasonable project sizes)
     // mean "unlimited" — render as such instead of an ugly 9-quadrillion.
@@ -509,9 +502,13 @@ export function generateMarkdownReport(result: AuditResult): string {
   lines.push(`- Files scanned: **${result.files_scanned}**`);
   lines.push(`- Candidates found: **${result.candidates_found}**`);
   if (ignoredFindings.length > 0 || actionableFindings.length !== result.confirmed_findings) {
-    lines.push(`- Confirmed findings: **${actionableFindings.length}** (of ${result.confirmed_findings} pre-review)`);
+    lines.push(
+      `- Confirmed findings: **${actionableFindings.length}** (of ${result.confirmed_findings} pre-review)`,
+    );
     if (ignoredFindings.length > 0) {
-      lines.push(`- Reviewer-ignored: **${ignoredFindings.length}** (excluded from /fix, /pr, SARIF, severity breakdown)`);
+      lines.push(
+        `- Reviewer-ignored: **${ignoredFindings.length}** (excluded from /fix, /pr, SARIF, severity breakdown)`,
+      );
     }
   } else {
     lines.push(`- Confirmed findings: **${result.confirmed_findings}**`);
@@ -658,9 +655,7 @@ export function generateMarkdownReport(result: AuditResult): string {
 
     const fixText = ev?.suggested_fix ?? f.verification.suggested_fix;
     if (fixText) {
-      const strategy = ev?.suggested_fix_strategy
-        ? ` (${ev.suggested_fix_strategy})`
-        : "";
+      const strategy = ev?.suggested_fix_strategy ? ` (${ev.suggested_fix_strategy})` : "";
       lines.push(`**Suggested fix${strategy}:**`);
       lines.push("```");
       lines.push(fixText);

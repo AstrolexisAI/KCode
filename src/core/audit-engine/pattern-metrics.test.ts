@@ -1,8 +1,8 @@
 // KCode - Tests for v2.10.330 pattern metrics (Sprint 5/6).
 
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { runAudit } from "./audit-engine";
 import { generateMarkdownReport } from "./report-generator";
 import type { AuditResult } from "./types";
@@ -31,7 +31,8 @@ describe("pattern_metrics", () => {
     w("a.c", `void f(const char* src) { char buf[16]; strcpy(buf, src); }\n`);
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
     });
     expect(result.pattern_metrics).toBeDefined();
     const ids = Object.keys(result.pattern_metrics ?? {});
@@ -65,7 +66,8 @@ describe("pattern_metrics", () => {
     );
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
     });
     const m = (result.pattern_metrics ?? {})["cpp-006-strcpy-family"];
     if (m) {
@@ -91,7 +93,8 @@ describe("pattern_metrics", () => {
     );
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
     });
     const m = (result.pattern_metrics ?? {})["cpp-006-strcpy-family"];
     if (m) {
@@ -103,7 +106,8 @@ describe("pattern_metrics", () => {
     w("a.c", `void f(const char* src) { char buf[16]; strcpy(buf, src); }\n`);
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
     });
     for (const [, m] of Object.entries(result.pattern_metrics ?? {})) {
       if (m.hits === 0) continue;
@@ -117,7 +121,8 @@ describe("pattern_metrics", () => {
     w("clean.c", "int main(void) { return 0; }\n");
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
     });
     // Without any pattern matches, pattern_metrics should be empty.
     // (Some patterns may still fire on innocuous code; the assertion
@@ -208,7 +213,7 @@ describe("renderPatternMetricsSection", () => {
   it("formats confirmed_rate as a percentage", () => {
     const md = generateMarkdownReport(makeResult());
     expect(md).toContain("100%"); // fsw-010 with 1/1
-    expect(md).toContain("0%");   // cpp-012 with 0/8
+    expect(md).toContain("0%"); // cpp-012 with 0/8
   });
 
   it("omits the section when pattern_metrics is empty", () => {

@@ -1,13 +1,17 @@
-import { describe, test, expect } from "bun:test";
-import { createPyProject } from "./python-engine";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createPyProject } from "./python-engine";
 
 describe("python-engine", () => {
   function withTmp(fn: (dir: string) => void) {
     const dir = mkdtempSync(join(tmpdir(), "kcode-py-"));
-    try { fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
+    try {
+      fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
 
   test("creates FastAPI project", () => {

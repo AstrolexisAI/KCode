@@ -1,13 +1,17 @@
-import { describe, test, expect } from "bun:test";
-import { createMonorepoProject } from "./monorepo-engine";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createMonorepoProject } from "./monorepo-engine";
 
 describe("monorepo-engine", () => {
   function withTmp(fn: (dir: string) => void) {
     const dir = mkdtempSync(join(tmpdir(), "kcode-mono-"));
-    try { fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
+    try {
+      fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
 
   test("creates Turborepo project with web + api", () => {
@@ -40,15 +44,15 @@ describe("monorepo-engine", () => {
   test("adds UI package when requested", () => {
     withTmp((dir) => {
       const r = createMonorepoProject("web + api + ui components", dir);
-      expect(r.config.packages.some(p => p.type === "ui")).toBe(true);
+      expect(r.config.packages.some((p) => p.type === "ui")).toBe(true);
     });
   });
 
   test("always includes shared and tsconfig packages", () => {
     withTmp((dir) => {
       const r = createMonorepoProject("web app", dir);
-      expect(r.config.packages.some(p => p.type === "shared")).toBe(true);
-      expect(r.config.packages.some(p => p.type === "config")).toBe(true);
+      expect(r.config.packages.some((p) => p.type === "shared")).toBe(true);
+      expect(r.config.packages.some((p) => p.type === "config")).toBe(true);
     });
   });
 

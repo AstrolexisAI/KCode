@@ -95,9 +95,7 @@ describe("wasPathReferenced", () => {
   });
 
   test("returns true when all significant tokens appear in history", () => {
-    const history = [
-      "Can you edit the hero section and update the features component?",
-    ];
+    const history = ["Can you edit the hero section and update the features component?"];
     expect(wasPathReferenced("src/components/hero.tsx", history)).toBe(true);
     expect(wasPathReferenced("src/components/features.tsx", history)).toBe(true);
   });
@@ -158,11 +156,7 @@ describe("isLikelyFabricated", () => {
   });
 
   test("does NOT flag conventional filenames", () => {
-    const r = isLikelyFabricated(
-      "package.json",
-      "ENOENT: no such file or directory",
-      nasaHistory,
-    );
+    const r = isLikelyFabricated("package.json", "ENOENT: no such file or directory", nasaHistory);
     expect(r.fabricated).toBe(false);
   });
 

@@ -93,7 +93,10 @@ for (const dir of fixtureDirs) {
     const pattern = lookup as BugPattern | undefined;
 
     test(`pattern "${dir}" is registered`, () => {
-      expect(pattern, `No pattern with id=${dir}. Did you add the fixture dir before the pattern?`).toBeDefined();
+      expect(
+        pattern,
+        `No pattern with id=${dir}. Did you add the fixture dir before the pattern?`,
+      ).toBeDefined();
     });
 
     if (!pattern) return;

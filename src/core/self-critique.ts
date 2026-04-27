@@ -24,7 +24,7 @@
 //
 // Opt-out: KCODE_DISABLE_SELF_CRITIQUE=1.
 
-import { runForkedAgent, type ForkedAgentResult } from "./forked-agent";
+import { type ForkedAgentResult, runForkedAgent } from "./forked-agent";
 import { log } from "./logger";
 import type { Message } from "./types";
 
@@ -142,17 +142,20 @@ function summarizeToolHistory(messages: Message[], maxPairs = 10): string {
         ) {
           const raw = (b as { content?: unknown }).content;
           const isError = (b as { is_error?: unknown }).is_error === true;
-          const text = typeof raw === "string"
-            ? raw
-            : Array.isArray(raw)
+          const text =
+            typeof raw === "string"
               ? raw
-                  .filter((c: unknown): c is { type: string; text: string } =>
-                    typeof c === "object" && c !== null &&
-                    (c as { type?: unknown }).type === "text",
-                  )
-                  .map((c) => c.text)
-                  .join(" ")
-              : "";
+              : Array.isArray(raw)
+                ? raw
+                    .filter(
+                      (c: unknown): c is { type: string; text: string } =>
+                        typeof c === "object" &&
+                        c !== null &&
+                        (c as { type?: unknown }).type === "text",
+                    )
+                    .map((c) => c.text)
+                    .join(" ")
+                : "";
           const truncated = text.length > 400 ? text.slice(0, 400) + "…" : text;
           pairs.push(`[result${isError ? ",ERROR" : ""}] ${truncated}`);
           pairCount++;
@@ -164,16 +167,13 @@ function summarizeToolHistory(messages: Message[], maxPairs = 10): string {
     // tool_use block (inside an assistant message)
     if (m.role === "assistant" && Array.isArray(m.content)) {
       for (const b of m.content) {
-        if (
-          typeof b === "object" &&
-          b !== null &&
-          (b as { type?: unknown }).type === "tool_use"
-        ) {
+        if (typeof b === "object" && b !== null && (b as { type?: unknown }).type === "tool_use") {
           const name = (b as { name?: unknown }).name ?? "?";
           const inp = (b as { input?: unknown }).input;
-          const inpSummary = typeof inp === "object" && inp !== null
-            ? JSON.stringify(inp).slice(0, 200)
-            : String(inp ?? "").slice(0, 200);
+          const inpSummary =
+            typeof inp === "object" && inp !== null
+              ? JSON.stringify(inp).slice(0, 200)
+              : String(inp ?? "").slice(0, 200);
           pairs.push(`[${name}] ${inpSummary}`);
         }
       }
@@ -186,9 +186,8 @@ function summarizeToolHistory(messages: Message[], maxPairs = 10): string {
 
 function buildCritiquePrompt(input: SelfCritiqueInput): string {
   const toolHistory = summarizeToolHistory(input.recentMessages);
-  const filesList = input.filesWritten.length > 0
-    ? input.filesWritten.slice(0, 10).join("\n  - ")
-    : "(none)";
+  const filesList =
+    input.filesWritten.length > 0 ? input.filesWritten.slice(0, 10).join("\n  - ") : "(none)";
 
   return [
     `## Draft final text from the assistant`,
@@ -197,9 +196,7 @@ function buildCritiquePrompt(input: SelfCritiqueInput): string {
     "```",
     "",
     `## Original user request`,
-    input.userPrompt
-      ? input.userPrompt.slice(0, 500)
-      : "(not provided)",
+    input.userPrompt ? input.userPrompt.slice(0, 500) : "(not provided)",
     "",
     `## Tool history (most recent last)`,
     toolHistory || "(no tool calls recorded)",
@@ -233,15 +230,15 @@ function extractJson(raw: string): string | null {
   if (start < 0) return null;
   let depth = 0;
   let inString = false;
-  let escape = false;
+  let isEscaped = false;
   for (let i = start; i < candidate.length; i++) {
     const ch = candidate[i];
-    if (escape) {
-      escape = false;
+    if (isEscaped) {
+      isEscaped = false;
       continue;
     }
     if (ch === "\\") {
-      escape = true;
+      isEscaped = true;
       continue;
     }
     if (ch === '"') {
@@ -270,8 +267,7 @@ export function parseCritiqueResponse(raw: string): {
     const obj = parsed as Record<string, unknown>;
 
     const verdictRaw = obj.verdict;
-    const verdict: "ok" | "downgrade" =
-      verdictRaw === "downgrade" ? "downgrade" : "ok";
+    const verdict: "ok" | "downgrade" = verdictRaw === "downgrade" ? "downgrade" : "ok";
 
     const rawList = obj.contradictions;
     const contradictions: Contradiction[] = [];
@@ -283,9 +279,7 @@ export function parseCritiqueResponse(raw: string): {
         const evidence = typeof x.evidence === "string" ? x.evidence : "";
         const sevRaw = x.severity;
         const severity: Contradiction["severity"] =
-          sevRaw === "high" || sevRaw === "medium" || sevRaw === "low"
-            ? sevRaw
-            : "medium";
+          sevRaw === "high" || sevRaw === "medium" || sevRaw === "low" ? sevRaw : "medium";
         if (claim && evidence) {
           contradictions.push({ claim, evidence, severity });
         }
@@ -308,9 +302,7 @@ const DEFAULT_MAX_TOKENS = 800;
  * Run the self-critique pass. Returns the parsed result, or a
  * {skipped: true} result on any failure path. Never throws.
  */
-export async function runSelfCritique(
-  input: SelfCritiqueInput,
-): Promise<SelfCritiqueResult> {
+export async function runSelfCritique(input: SelfCritiqueInput): Promise<SelfCritiqueResult> {
   if (process.env.KCODE_DISABLE_SELF_CRITIQUE === "1") {
     log.info("self-critique", "skipped: disabled via KCODE_DISABLE_SELF_CRITIQUE");
     return {
@@ -323,10 +315,7 @@ export async function runSelfCritique(
 
   // Skip if nothing substantial to critique
   if (!input.draftText || input.draftText.trim().length < 40) {
-    log.info(
-      "self-critique",
-      `skipped: draft too short (${input.draftText?.length ?? 0} chars)`,
-    );
+    log.info("self-critique", `skipped: draft too short (${input.draftText?.length ?? 0} chars)`);
     return {
       contradictions: [],
       verdict: "ok",

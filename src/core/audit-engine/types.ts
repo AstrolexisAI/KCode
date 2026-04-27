@@ -23,12 +23,7 @@ export type Severity = "critical" | "high" | "medium" | "low";
  * Persisted on Finding so the reviewer's decisions survive across
  * reruns of /fix and /pr without re-running /scan.
  */
-export type ReviewState =
-  | "confirmed"
-  | "demoted_fp"
-  | "promoted"
-  | "needs_context"
-  | "ignored";
+export type ReviewState = "confirmed" | "demoted_fp" | "promoted" | "needs_context" | "ignored";
 
 /**
  * Why a reviewer made a decision in /review (Sprint 2). Used to
@@ -37,13 +32,13 @@ export type ReviewState =
  * "trusted_boundary" or "test_only" should drop in ranking.
  */
 export type ReviewReason =
-  | "trusted_boundary"     // intra-process IPC, sibling component, framework guarantee
-  | "test_only"            // file is in a test/spec/fixture path
-  | "generated_code"       // autogen — fixing requires regenerating, not patching
-  | "build_time_only"      // CMake / scripts / autocoder — outside runtime threat model
-  | "placeholder_secret"   // hardcoded value is a doc / fixture / changeme
-  | "sanitized"            // input is validated upstream, verifier missed the guard
-  | "manual_confirmation"  // reviewer confirmed by inspection
+  | "trusted_boundary" // intra-process IPC, sibling component, framework guarantee
+  | "test_only" // file is in a test/spec/fixture path
+  | "generated_code" // autogen — fixing requires regenerating, not patching
+  | "build_time_only" // CMake / scripts / autocoder — outside runtime threat model
+  | "placeholder_secret" // hardcoded value is a doc / fixture / changeme
+  | "sanitized" // input is validated upstream, verifier missed the guard
+  | "manual_confirmation" // reviewer confirmed by inspection
   | "other";
 
 /**
@@ -106,15 +101,37 @@ export interface PatternMetrics {
   false_positive_rate?: number;
 }
 export type Language =
-  | "c" | "cpp" | "python" | "go" | "rust"
-  | "javascript" | "typescript" | "swift" | "java"
-  | "kotlin" | "csharp" | "php" | "ruby" | "dart"
-  | "scala" | "elixir" | "lua" | "zig" | "haskell"
-  | "perl" | "r" | "julia" | "sql" | "matlab" | "shell"
+  | "c"
+  | "cpp"
+  | "python"
+  | "go"
+  | "rust"
+  | "javascript"
+  | "typescript"
+  | "swift"
+  | "java"
+  | "kotlin"
+  | "csharp"
+  | "php"
+  | "ruby"
+  | "dart"
+  | "scala"
+  | "elixir"
+  | "lua"
+  | "zig"
+  | "haskell"
+  | "perl"
+  | "r"
+  | "julia"
+  | "sql"
+  | "matlab"
+  | "shell"
   // P2.1 (v2.10.389) — IaC at-rest scanning. yaml covers Kubernetes
   // manifests + GitHub Actions workflows; terraform is .tf; dockerfile
   // is matched by filename (no extension) in scanner.ts.
-  | "yaml" | "terraform" | "dockerfile";
+  | "yaml"
+  | "terraform"
+  | "dockerfile";
 
 /**
  * A bug pattern is a rule that identifies a specific class of dangerous code.
@@ -181,12 +198,7 @@ export interface BugPattern {
 }
 
 /** Stable pack names for the F9 vendible-packs taxonomy. */
-export type PatternPack =
-  | "web"
-  | "ai-ml"
-  | "cloud"
-  | "supply-chain"
-  | "embedded";
+export type PatternPack = "web" | "ai-ml" | "cloud" | "supply-chain" | "embedded";
 
 /** A candidate finding — a pattern match that hasn't been verified yet. */
 export interface Candidate {

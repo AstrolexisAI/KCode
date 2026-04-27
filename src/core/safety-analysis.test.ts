@@ -526,10 +526,7 @@ describe("validateFileWritePath", () => {
     // auto-correcting with the obvious alternative. The denial
     // message now names the exact cwd-relocated path and tells the
     // model not to defer to the user.
-    const result = validateFileWritePath(
-      "/home/user/NEXUS_Telemetry.html",
-      "/home/curly/projects",
-    );
+    const result = validateFileWritePath("/home/user/NEXUS_Telemetry.html", "/home/curly/projects");
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain("RETRY NOW");
     expect(result.reason).toContain("/home/curly/projects/NEXUS_Telemetry.html");

@@ -126,21 +126,14 @@ export default function AgentPanel({ maxVisible = 10 }: AgentPanelProps) {
   const header = `Agents (${headerParts.join(", ")})${costBadge}`;
 
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="round"
-      borderColor={theme.primary}
-      paddingX={1}
-    >
+    <Box flexDirection="column" borderStyle="round" borderColor={theme.primary} paddingX={1}>
       <Text bold color={theme.primary}>
         {header}
       </Text>
       {visibleAgents.map((agent) => (
         <AgentRow key={agent.id} agent={agent} />
       ))}
-      {hiddenCount > 0 && (
-        <Text color={theme.dimmed}>  …and {hiddenCount} more</Text>
-      )}
+      {hiddenCount > 0 && <Text color={theme.dimmed}> …and {hiddenCount} more</Text>}
       {status.groups.length > 0 && <GroupsList status={status} />}
     </Box>
   );
@@ -211,8 +204,7 @@ function GroupsList({ status }: { status: PoolStatus }) {
           const a = status.active.find((x) => x.id === id) ?? status.done.find((x) => x.id === id);
           return a?.name ?? id.slice(0, 6);
         });
-        const icon =
-          g.status === "complete" ? "✓" : g.status === "cancelled" ? "⊘" : "●";
+        const icon = g.status === "complete" ? "✓" : g.status === "cancelled" ? "⊘" : "●";
         const iconColor =
           g.status === "complete"
             ? theme.success

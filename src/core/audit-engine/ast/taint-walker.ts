@@ -70,8 +70,8 @@ export const TAINT_ROOTS: ReadonlySet<string> = new Set([
 // The remaining names are specific enough that a same-named method
 // is overwhelmingly likely to be the laundering helper they imply.
 export const SANITIZER_CALLS: ReadonlySet<string> = new Set([
-  "escape",          // validator.escape, html-escape
-  "sanitize",        // DOMPurify.sanitize, sanitize-html
+  "escape", // validator.escape, html-escape
+  "sanitize", // DOMPurify.sanitize, sanitize-html
   "sanitizeHtml",
   "purify",
   "encodeURI",
@@ -79,7 +79,7 @@ export const SANITIZER_CALLS: ReadonlySet<string> = new Set([
   "escapeShellArg",
   "shellescape",
   "shell-escape",
-  "quote",           // shell-quote.quote
+  "quote", // shell-quote.quote
 ]);
 
 /**

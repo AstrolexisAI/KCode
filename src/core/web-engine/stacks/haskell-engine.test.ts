@@ -1,13 +1,17 @@
-import { describe, test, expect } from "bun:test";
-import { createHaskellProject } from "./haskell-engine";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createHaskellProject } from "./haskell-engine";
 
 describe("haskell-engine", () => {
   function withTmp(fn: (dir: string) => void) {
     const dir = mkdtempSync(join(tmpdir(), "kcode-hs-"));
-    try { fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
+    try {
+      fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
 
   test("creates Scotty API project", () => {
@@ -29,7 +33,7 @@ describe("haskell-engine", () => {
       const r = createHaskellProject("CLI command tool called mytool", dir);
       expect(r.config.type).toBe("cli");
       expect(r.config.name).toBe("mytool");
-      expect(r.config.deps.some(d => d.name === "optparse-applicative")).toBe(true);
+      expect(r.config.deps.some((d) => d.name === "optparse-applicative")).toBe(true);
       expect(existsSync(join(dir, "mytool", "app/Main.hs"))).toBe(true);
     });
   });
@@ -46,9 +50,9 @@ describe("haskell-engine", () => {
   test("detects dependencies", () => {
     withTmp((dir) => {
       const r = createHaskellProject("API with postgresql and mtl and lens", dir);
-      expect(r.config.deps.some(d => d.name === "postgresql-simple")).toBe(true);
-      expect(r.config.deps.some(d => d.name === "mtl")).toBe(true);
-      expect(r.config.deps.some(d => d.name === "lens")).toBe(true);
+      expect(r.config.deps.some((d) => d.name === "postgresql-simple")).toBe(true);
+      expect(r.config.deps.some((d) => d.name === "mtl")).toBe(true);
+      expect(r.config.deps.some((d) => d.name === "lens")).toBe(true);
     });
   });
 
@@ -64,7 +68,7 @@ describe("haskell-engine", () => {
       const r = createHaskellProject("servant API", dir);
       expect(r.config.type).toBe("api");
       expect(r.config.framework).toBe("servant");
-      expect(r.config.deps.some(d => d.name === "servant")).toBe(true);
+      expect(r.config.deps.some((d) => d.name === "servant")).toBe(true);
     });
   });
 

@@ -11,18 +11,18 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 export type PyProjectType =
-  | "cli"          // Command-line tool (click/typer/argparse)
-  | "api"          // Web API (FastAPI/Flask/Django)
-  | "library"      // Reusable library (pip install)
-  | "scraper"      // Web scraper (requests/beautifulsoup/scrapy)
-  | "bot"          // Discord/Telegram/Slack bot
-  | "ml"           // Machine learning / AI
-  | "data"         // Data processing / ETL / pipeline
-  | "automation"   // Task automation / scripting
-  | "gui"          // Desktop GUI (tkinter/PyQt/Kivy)
-  | "blockchain"   // Blockchain / crypto
-  | "iot"          // IoT / Raspberry Pi / hardware
-  | "game"         // Game (pygame)
+  | "cli" // Command-line tool (click/typer/argparse)
+  | "api" // Web API (FastAPI/Flask/Django)
+  | "library" // Reusable library (pip install)
+  | "scraper" // Web scraper (requests/beautifulsoup/scrapy)
+  | "bot" // Discord/Telegram/Slack bot
+  | "ml" // Machine learning / AI
+  | "data" // Data processing / ETL / pipeline
+  | "automation" // Task automation / scripting
+  | "gui" // Desktop GUI (tkinter/PyQt/Kivy)
+  | "blockchain" // Blockchain / crypto
+  | "iot" // IoT / Raspberry Pi / hardware
+  | "game" // Game (pygame)
   | "custom";
 
 export interface PyProjectConfig {
@@ -51,83 +51,94 @@ function detectPyProject(message: string): PyProjectConfig {
   // Type detection (order matters — more specific first)
   if (/\b(?:fastapi|django|flask|api|rest|endpoint|backend|servidor|server)\b/i.test(lower)) {
     type = "api";
-    if (/\bdjango\b/i.test(lower)) { framework = "django"; dependencies.push("django", "djangorestframework"); }
-    else if (/\bflask\b/i.test(lower)) { framework = "flask"; dependencies.push("flask", "flask-cors"); }
-    else { framework = "fastapi"; dependencies.push("fastapi", "uvicorn[standard]", "pydantic"); }
-  }
-  else if (/\b(?:scrap|crawl|spider|araña|scraper)\b/i.test(lower)) {
+    if (/\bdjango\b/i.test(lower)) {
+      framework = "django";
+      dependencies.push("django", "djangorestframework");
+    } else if (/\bflask\b/i.test(lower)) {
+      framework = "flask";
+      dependencies.push("flask", "flask-cors");
+    } else {
+      framework = "fastapi";
+      dependencies.push("fastapi", "uvicorn[standard]", "pydantic");
+    }
+  } else if (/\b(?:scrap|crawl|spider|araña|scraper)\b/i.test(lower)) {
     type = "scraper";
-    if (/\bscrapy\b/i.test(lower)) { dependencies.push("scrapy"); }
-    else { dependencies.push("requests", "beautifulsoup4", "lxml", "httpx"); }
-  }
-  else if (/\b(?:bot|discord|telegram|slack)\b/i.test(lower)) {
+    if (/\bscrapy\b/i.test(lower)) {
+      dependencies.push("scrapy");
+    } else {
+      dependencies.push("requests", "beautifulsoup4", "lxml", "httpx");
+    }
+  } else if (/\b(?:bot|discord|telegram|slack)\b/i.test(lower)) {
     type = "bot";
     if (/\bdiscord\b/i.test(lower)) dependencies.push("discord.py");
     else if (/\btelegram\b/i.test(lower)) dependencies.push("python-telegram-bot");
     else if (/\bslack\b/i.test(lower)) dependencies.push("slack-bolt");
     else dependencies.push("python-telegram-bot");
-  }
-  else if (/\b(?:ml|machine\s*learn|ai|model|train|neural|deep\s*learn|torch|tensorflow|llm)\b/i.test(lower)) {
+  } else if (
+    /\b(?:ml|machine\s*learn|ai|model|train|neural|deep\s*learn|torch|tensorflow|llm)\b/i.test(
+      lower,
+    )
+  ) {
     type = "ml";
     if (/\btorch|pytorch\b/i.test(lower)) dependencies.push("torch", "torchvision");
     else if (/\btensorflow|keras\b/i.test(lower)) dependencies.push("tensorflow");
     else if (/\bllm|langchain|openai\b/i.test(lower)) dependencies.push("langchain", "openai");
     else dependencies.push("scikit-learn", "pandas", "numpy");
     dependencies.push("matplotlib", "jupyter");
-  }
-  else if (/\b(?:data|etl|pipeline|pandas|csv|parquet|process|transform)\b/i.test(lower)) {
+  } else if (/\b(?:data|etl|pipeline|pandas|csv|parquet|process|transform)\b/i.test(lower)) {
     type = "data";
     dependencies.push("pandas", "numpy", "polars");
-    if (/\bsql|postgres|database\b/i.test(lower)) dependencies.push("sqlalchemy", "psycopg2-binary");
+    if (/\bsql|postgres|database\b/i.test(lower))
+      dependencies.push("sqlalchemy", "psycopg2-binary");
     if (/\bparquet|arrow\b/i.test(lower)) dependencies.push("pyarrow");
-  }
-  else if (/\b(?:automat|script|cron|schedule|task)\b/i.test(lower)) {
+  } else if (/\b(?:automat|script|cron|schedule|task)\b/i.test(lower)) {
     type = "automation";
     dependencies.push("schedule", "python-dotenv");
     if (/\bselenium|browser\b/i.test(lower)) dependencies.push("selenium");
     if (/\bemail|smtp|correo\b/i.test(lower)) dependencies.push("aiosmtplib");
-  }
-  else if (/\b(?:gui|desktop|ventana|window|tkinter|qt|kivy)\b/i.test(lower)) {
+  } else if (/\b(?:gui|desktop|ventana|window|tkinter|qt|kivy)\b/i.test(lower)) {
     type = "gui";
     if (/\bqt|pyqt\b/i.test(lower)) dependencies.push("PyQt6");
     else if (/\bkivy\b/i.test(lower)) dependencies.push("kivy");
     else features.push("tkinter"); // built-in
-  }
-  else if (/\b(?:blockchain|crypto|web3|ethereum|solana|bitcoin)\b/i.test(lower)) {
+  } else if (/\b(?:blockchain|crypto|web3|ethereum|solana|bitcoin)\b/i.test(lower)) {
     type = "blockchain";
     dependencies.push("web3", "eth-account", "python-dotenv");
-  }
-  else if (/\b(?:iot|raspberry|gpio|sensor|hardware|mqtt)\b/i.test(lower)) {
+  } else if (/\b(?:iot|raspberry|gpio|sensor|hardware|mqtt)\b/i.test(lower)) {
     type = "iot";
     dependencies.push("paho-mqtt", "RPi.GPIO");
-  }
-  else if (/\b(?:game|pygame|juego)\b/i.test(lower)) {
+  } else if (/\b(?:game|pygame|juego)\b/i.test(lower)) {
     type = "game";
     dependencies.push("pygame");
-  }
-  else if (/\b(?:lib|library|package|biblioteca|pip\s*install)\b/i.test(lower)) {
+  } else if (/\b(?:lib|library|package|biblioteca|pip\s*install)\b/i.test(lower)) {
     type = "library";
-  }
-  else {
+  } else {
     type = "cli";
     dependencies.push("typer", "rich");
   }
 
   // Additional dependency detection
-  if (/\b(?:async|asyncio|aiohttp)\b/i.test(lower) && !dependencies.includes("aiohttp")) dependencies.push("aiohttp");
+  if (/\b(?:async|asyncio|aiohttp)\b/i.test(lower) && !dependencies.includes("aiohttp"))
+    dependencies.push("aiohttp");
   if (/\b(?:redis)\b/i.test(lower)) dependencies.push("redis");
   if (/\b(?:mongo|mongodb)\b/i.test(lower)) dependencies.push("pymongo", "motor");
-  if (/\b(?:postgres|postgresql)\b/i.test(lower) && !dependencies.includes("psycopg2-binary")) dependencies.push("psycopg2-binary", "sqlalchemy");
+  if (/\b(?:postgres|postgresql)\b/i.test(lower) && !dependencies.includes("psycopg2-binary"))
+    dependencies.push("psycopg2-binary", "sqlalchemy");
   if (/\b(?:sqlite)\b/i.test(lower)) dependencies.push("aiosqlite");
   if (/\b(?:jwt|auth|token)\b/i.test(lower)) dependencies.push("PyJWT", "python-dotenv");
   if (/\b(?:yaml|config)\b/i.test(lower)) dependencies.push("pyyaml");
-  if (/\b(?:csv|excel|xlsx)\b/i.test(lower) && !dependencies.includes("pandas")) dependencies.push("pandas", "openpyxl");
+  if (/\b(?:csv|excel|xlsx)\b/i.test(lower) && !dependencies.includes("pandas"))
+    dependencies.push("pandas", "openpyxl");
   if (/\b(?:image|pillow|foto|photo)\b/i.test(lower)) dependencies.push("Pillow");
   if (/\b(?:pdf)\b/i.test(lower)) dependencies.push("reportlab", "PyPDF2");
-  if (/\b(?:email|smtp)\b/i.test(lower) && !dependencies.includes("aiosmtplib")) dependencies.push("aiosmtplib");
+  if (/\b(?:email|smtp)\b/i.test(lower) && !dependencies.includes("aiosmtplib"))
+    dependencies.push("aiosmtplib");
   if (/\b(?:docker|container)\b/i.test(lower)) features.push("docker");
   if (/\b(?:log|logging)\b/i.test(lower)) features.push("logging");
-  if (/\b(?:click)\b/i.test(lower)) { dependencies.push("click"); dependencies.splice(dependencies.indexOf("typer"), 1); }
+  if (/\b(?:click)\b/i.test(lower)) {
+    dependencies.push("click");
+    dependencies.splice(dependencies.indexOf("typer"), 1);
+  }
 
   const nameMatch = message.match(/(?:called|named|nombre)\s+(\w[\w-]*)/i);
   const name = nameMatch?.[1]?.replace(/-/g, "_") ?? (type === "library" ? "mylib" : "myapp");
@@ -148,7 +159,11 @@ function detectPyProject(message: string): PyProjectConfig {
 
 // ── Generators ─────────────────────────────────────────────────
 
-interface GenFile { path: string; content: string; needsLlm: boolean; }
+interface GenFile {
+  path: string;
+  content: string;
+  needsLlm: boolean;
+}
 
 function generatePyProject(cfg: PyProjectConfig): GenFile {
   const allDeps = [...cfg.dependencies, ...cfg.devDependencies];
@@ -164,17 +179,21 @@ version = "0.1.0"
 description = "Generated by KCode"
 requires-python = ">=${cfg.pythonVersion}"
 dependencies = [
-${cfg.dependencies.map(d => `    "${d}",`).join("\n")}
+${cfg.dependencies.map((d) => `    "${d}",`).join("\n")}
 ]
 
 [project.optional-dependencies]
 dev = [
-${cfg.devDependencies.map(d => `    "${d}",`).join("\n")}
+${cfg.devDependencies.map((d) => `    "${d}",`).join("\n")}
 ]
-${cfg.type === "cli" ? `
+${
+  cfg.type === "cli"
+    ? `
 [project.scripts]
 ${cfg.name} = "${cfg.name}.cli:app"
-` : ""}
+`
+    : ""
+}
 [tool.ruff]
 line-length = 100
 target-version = "py${cfg.pythonVersion.replace(".", "")}"
@@ -246,7 +265,9 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 `,
-    api: cfg.framework === "fastapi" ? `"""${cfg.name} API."""
+    api:
+      cfg.framework === "fastapi"
+        ? `"""${cfg.name} API."""
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -333,7 +354,8 @@ async def delete_item(item_id: int) -> None:
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=10080)
-` : `"""${cfg.name} API."""
+`
+        : `"""${cfg.name} API."""
 # TODO: implement with ${cfg.framework}
 `,
     scraper: `"""${cfg.name} Web Scraper."""
@@ -623,7 +645,9 @@ function generateTests(cfg: PyProjectConfig): GenFile[] {
       content: `"""Test fixtures."""
 
 import pytest
-${cfg.type === "api" && cfg.framework === "fastapi" ? `
+${
+  cfg.type === "api" && cfg.framework === "fastapi"
+    ? `
 from fastapi.testclient import TestClient
 from ${cfg.name}.main import app
 
@@ -631,17 +655,21 @@ from ${cfg.name}.main import app
 @pytest.fixture
 def client():
     return TestClient(app)
-` : `
+`
+    : `
 @pytest.fixture
 def sample_data():
     """Provide sample test data."""
     return {}
-`}`,
+`
+}`,
       needsLlm: false,
     },
     {
       path: `tests/test_${cfg.name}.py`,
-      content: cfg.type === "api" && cfg.framework === "fastapi" ? `"""API tests."""
+      content:
+        cfg.type === "api" && cfg.framework === "fastapi"
+          ? `"""API tests."""
 
 
 def test_health(client):
@@ -657,7 +685,8 @@ def test_not_found(client):
 
 
 # TODO: add domain-specific tests
-` : `"""Tests for ${cfg.name}."""
+`
+          : `"""Tests for ${cfg.name}."""
 
 import pytest
 from ${cfg.name} import __version__
@@ -737,13 +766,19 @@ format:
 \truff format .
 \truff check --fix .
 
-${cfg.type === "api" ? `run:
+${
+  cfg.type === "api"
+    ? `run:
 \tuvicorn ${cfg.name}.main:app --reload --port 10080
-` : cfg.type === "cli" ? `run:
+`
+    : cfg.type === "cli"
+      ? `run:
 \tpython -m ${cfg.name}.cli
-` : `run:
+`
+      : `run:
 \tpython -m ${cfg.name}.main
-`}
+`
+}
 clean:
 \trm -rf build/ dist/ *.egg-info .mypy_cache .pytest_cache .ruff_cache htmlcov/
 `,
@@ -762,8 +797,12 @@ RUN pip install --no-cache-dir .
 COPY . .
 RUN pip install --no-cache-dir -e .
 
-${cfg.type === "api" ? `EXPOSE 10080
-CMD ["uvicorn", "${cfg.name}.main:app", "--host", "0.0.0.0", "--port", "10080"]` : `CMD ["python", "-m", "${cfg.name}.main"]`}
+${
+  cfg.type === "api"
+    ? `EXPOSE 10080
+CMD ["uvicorn", "${cfg.name}.main:app", "--host", "0.0.0.0", "--port", "10080"]`
+    : `CMD ["python", "-m", "${cfg.name}.main"]`
+}
 `,
       needsLlm: false,
     });
@@ -837,7 +876,7 @@ make test
 \`\`\`bash
 make lint
 \`\`\`
-${cfg.dependencies.length > 0 ? "\n## Dependencies\n\n" + cfg.dependencies.map(d => `- ${d}`).join("\n") + "\n" : ""}
+${cfg.dependencies.length > 0 ? "\n## Dependencies\n\n" + cfg.dependencies.map((d) => `- ${d}`).join("\n") + "\n" : ""}
 *Generated by KCode — Astrolexis.space*
 `,
     needsLlm: false,
@@ -847,7 +886,10 @@ ${cfg.dependencies.length > 0 ? "\n## Dependencies\n\n" + cfg.dependencies.map(d
 }
 
 function capitalize(s: string): string {
-  return s.split(/[-_]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join("");
+  return s
+    .split(/[-_]/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join("");
 }
 
 // ── Main Creator ───────────────────────────────────────────────
@@ -877,8 +919,8 @@ export function createPyProject(userRequest: string, cwd: string): PyProjectResu
     writeFileSync(fullPath, file.content);
   }
 
-  const machineFiles = files.filter(f => !f.needsLlm).length;
-  const llmFiles = files.filter(f => f.needsLlm).length;
+  const machineFiles = files.filter((f) => !f.needsLlm).length;
+  const llmFiles = files.filter((f) => f.needsLlm).length;
 
   const prompt = `You are implementing a Python ${config.type} project.
 
@@ -891,7 +933,10 @@ DEPENDENCIES: ${config.dependencies.join(", ") || "none"}
 The machine created ${machineFiles} files (pyproject.toml, structure, tests, CI).
 You need to implement business logic in ${llmFiles} files:
 
-${files.filter(f => f.needsLlm).map(f => `- ${f.path}`).join("\n")}
+${files
+  .filter((f) => f.needsLlm)
+  .map((f) => `- ${f.path}`)
+  .join("\n")}
 
 USER REQUEST: "${userRequest}"
 

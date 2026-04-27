@@ -4,7 +4,7 @@
 // and executes directly — no tokens spent, instant response.
 
 import { execSync, spawn } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 function run(cmd: string, cwd: string, timeout = 30_000): { output: string; code: number } {
@@ -109,7 +109,7 @@ function detectBuildSystem(cwd: string): BuildSystem | null {
     },
   ];
 
-  return checks.find(c => c.detected && c.command) ?? null;
+  return checks.find((c) => c.detected && c.command) ?? null;
 }
 
 // ── Test Runner Detection ──────────────────────────────────────
@@ -168,7 +168,11 @@ function detectLinter(cwd: string): { name: string; command: string } | null {
   if (existsSync(join(cwd, "biome.json")) || existsSync(join(cwd, "biome.jsonc"))) {
     return { name: "biome", command: "npx biome check ." };
   }
-  if (existsSync(join(cwd, ".eslintrc.js")) || existsSync(join(cwd, ".eslintrc.json")) || existsSync(join(cwd, "eslint.config.js"))) {
+  if (
+    existsSync(join(cwd, ".eslintrc.js")) ||
+    existsSync(join(cwd, ".eslintrc.json")) ||
+    existsSync(join(cwd, "eslint.config.js"))
+  ) {
     return { name: "eslint", command: "npx eslint ." };
   }
   if (pkg?.devDependencies?.prettier || existsSync(join(cwd, ".prettierrc"))) {
@@ -203,10 +207,12 @@ function generateCommitMessage(cwd: string): { message: string; files: string } 
   const files = diffContent.split("\n").filter(Boolean);
 
   // Detect type from files changed
-  const hasTests = files.some(f => f.includes("test") || f.includes("spec"));
-  const hasDocs = files.some(f => f.endsWith(".md") || f.includes("doc"));
-  const hasFix = files.some(f => f.includes("fix") || f.includes("patch"));
-  const hasConfig = files.some(f => f.includes("config") || f.includes(".json") || f.includes(".yml"));
+  const hasTests = files.some((f) => f.includes("test") || f.includes("spec"));
+  const hasDocs = files.some((f) => f.endsWith(".md") || f.includes("doc"));
+  const hasFix = files.some((f) => f.includes("fix") || f.includes("patch"));
+  const hasConfig = files.some(
+    (f) => f.includes("config") || f.includes(".json") || f.includes(".yml"),
+  );
 
   const type = hasTests ? "test" : hasDocs ? "docs" : hasFix ? "fix" : hasConfig ? "chore" : "feat";
 
@@ -301,21 +307,35 @@ export function detectDevServer(cwd: string, requestedPort?: number): DevServer 
   let cwdHasRootHtml = false;
   try {
     const entries = readdirSync(cwd, { withFileTypes: true });
-    cwdHasRootHtml = entries.some(
-      (e) => e.isFile() && e.name.toLowerCase().endsWith(".html"),
-    );
+    cwdHasRootHtml = entries.some((e) => e.isFile() && e.name.toLowerCase().endsWith(".html"));
   } catch {
     /* unreadable — treat as no html, fall through to subdir scan */
   }
 
   // If no project in cwd AND no root HTML file, check common project
   // subdirectory names.
-  if (!existsSync(join(cwd, "package.json")) && !existsSync(join(cwd, "go.mod")) &&
-      !existsSync(join(cwd, "Cargo.toml")) && !existsSync(join(cwd, "pyproject.toml")) &&
-      !existsSync(join(cwd, "mix.exs")) && !existsSync(join(cwd, "docker-compose.yml")) &&
-      !cwdHasRootHtml) {
+  if (
+    !existsSync(join(cwd, "package.json")) &&
+    !existsSync(join(cwd, "go.mod")) &&
+    !existsSync(join(cwd, "Cargo.toml")) &&
+    !existsSync(join(cwd, "pyproject.toml")) &&
+    !existsSync(join(cwd, "mix.exs")) &&
+    !existsSync(join(cwd, "docker-compose.yml")) &&
+    !cwdHasRootHtml
+  ) {
     // Check well-known project directory names first (fast)
-    const commonNames = ["my-site", "my-app", "app", "web", "frontend", "backend", "api", "server", "project", "site"];
+    const commonNames = [
+      "my-site",
+      "my-app",
+      "app",
+      "web",
+      "frontend",
+      "backend",
+      "api",
+      "server",
+      "project",
+      "site",
+    ];
     for (const name of commonNames) {
       const sub = join(cwd, name);
       if (existsSync(sub)) {
@@ -329,13 +349,20 @@ export function detectDevServer(cwd: string, requestedPort?: number): DevServer 
       let checked = 0;
       for (const entry of entries) {
         if (checked >= 20) break;
-        if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules" && !commonNames.includes(entry.name)) {
+        if (
+          entry.isDirectory() &&
+          !entry.name.startsWith(".") &&
+          entry.name !== "node_modules" &&
+          !commonNames.includes(entry.name)
+        ) {
           const subResult = detectDevServer(join(cwd, entry.name), requestedPort);
           if (subResult) return subResult;
           checked++;
         }
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return null;
   }
 
@@ -344,12 +371,20 @@ export function detectDevServer(cwd: string, requestedPort?: number): DevServer 
   if (pkg) {
     const hasNodeModules = existsSync(join(cwd, "node_modules"));
     const scripts = pkg.scripts ?? {};
-    const pm = existsSync(join(cwd, "bun.lockb")) ? "bun" : existsSync(join(cwd, "pnpm-lock.yaml")) ? "pnpm" : "npm";
+    const pm = existsSync(join(cwd, "bun.lockb"))
+      ? "bun"
+      : existsSync(join(cwd, "pnpm-lock.yaml"))
+        ? "pnpm"
+        : "npm";
 
     if (scripts.dev) {
       // Next.js uses --port, Vite uses --port, generic uses PORT env
-      const isNext = existsSync(join(cwd, "next.config.ts")) || existsSync(join(cwd, "next.config.js")) || existsSync(join(cwd, "next.config.mjs"));
-      const isVite = existsSync(join(cwd, "vite.config.ts")) || existsSync(join(cwd, "vite.config.js"));
+      const isNext =
+        existsSync(join(cwd, "next.config.ts")) ||
+        existsSync(join(cwd, "next.config.js")) ||
+        existsSync(join(cwd, "next.config.mjs"));
+      const isVite =
+        existsSync(join(cwd, "vite.config.ts")) || existsSync(join(cwd, "vite.config.js"));
 
       let devCmd: string;
       if (isNext) devCmd = `${pm} run dev -- --port ${port}`;
@@ -357,13 +392,27 @@ export function detectDevServer(cwd: string, requestedPort?: number): DevServer 
       else devCmd = `PORT=${port} ${pm} run dev`;
 
       // Check if any dependency is missing from node_modules
-      const depsOk = hasNodeModules && Object.keys(pkg.dependencies ?? {}).every(
-        (dep: string) => existsSync(join(cwd, "node_modules", dep))
-      );
-      return { name: isNext ? "Next.js" : isVite ? "Vite" : pkg.name ?? "Node.js", command: devCmd, port, installCmd: `${pm} install`, needsInstall: !depsOk };
+      const depsOk =
+        hasNodeModules &&
+        Object.keys(pkg.dependencies ?? {}).every((dep: string) =>
+          existsSync(join(cwd, "node_modules", dep)),
+        );
+      return {
+        name: isNext ? "Next.js" : isVite ? "Vite" : (pkg.name ?? "Node.js"),
+        command: devCmd,
+        port,
+        installCmd: `${pm} install`,
+        needsInstall: !depsOk,
+      };
     }
     if (scripts.start) {
-      return { name: pkg.name ?? "Node.js", command: `PORT=${port} ${pm} run start`, port, installCmd: `${pm} install`, needsInstall: !hasNodeModules };
+      return {
+        name: pkg.name ?? "Node.js",
+        command: `PORT=${port} ${pm} run start`,
+        port,
+        installCmd: `${pm} install`,
+        needsInstall: !hasNodeModules,
+      };
     }
   }
 
@@ -373,13 +422,35 @@ export function detectDevServer(cwd: string, requestedPort?: number): DevServer 
   // that just serves static files from the directory and is never what
   // a user wanted for a backend project.
   if (existsSync(join(cwd, "pyproject.toml")) || existsSync(join(cwd, "requirements.txt"))) {
-    const hasFastapi = existsSync(join(cwd, "pyproject.toml")) && readFileSync(join(cwd, "pyproject.toml"), "utf-8").includes("fastapi");
-    const hasFlask = existsSync(join(cwd, "pyproject.toml")) && readFileSync(join(cwd, "pyproject.toml"), "utf-8").includes("flask");
+    const hasFastapi =
+      existsSync(join(cwd, "pyproject.toml")) &&
+      readFileSync(join(cwd, "pyproject.toml"), "utf-8").includes("fastapi");
+    const hasFlask =
+      existsSync(join(cwd, "pyproject.toml")) &&
+      readFileSync(join(cwd, "pyproject.toml"), "utf-8").includes("flask");
     const hasDjango = existsSync(join(cwd, "manage.py"));
 
-    if (hasDjango) return { name: "Django", command: `python manage.py runserver 0.0.0.0:${port}`, port, needsInstall: false };
-    if (hasFastapi) return { name: "FastAPI", command: `uvicorn main:app --host 0.0.0.0 --port ${port} --reload`, port, needsInstall: false };
-    if (hasFlask) return { name: "Flask", command: `flask run --host 0.0.0.0 --port ${port}`, port, needsInstall: false };
+    if (hasDjango)
+      return {
+        name: "Django",
+        command: `python manage.py runserver 0.0.0.0:${port}`,
+        port,
+        needsInstall: false,
+      };
+    if (hasFastapi)
+      return {
+        name: "FastAPI",
+        command: `uvicorn main:app --host 0.0.0.0 --port ${port} --reload`,
+        port,
+        needsInstall: false,
+      };
+    if (hasFlask)
+      return {
+        name: "Flask",
+        command: `flask run --host 0.0.0.0 --port ${port}`,
+        port,
+        needsInstall: false,
+      };
     // No known Python web framework — don't fall through to http.server.
     // Let the LLM figure out what to run instead.
   }
@@ -442,9 +513,7 @@ export function detectDevServer(cwd: string, requestedPort?: number): DevServer 
         const size = statSync(join(cwd, htmlFile)).size;
         if (size >= 500) {
           const hasBunx = tryWhich("bunx");
-          const command = hasBunx
-            ? `bunx serve -l ${port} .`
-            : `python3 -m http.server ${port}`;
+          const command = hasBunx ? `bunx serve -l ${port} .` : `python3 -m http.server ${port}`;
           return {
             name: "Static",
             command,
@@ -477,7 +546,10 @@ export function startDevServer(srv: DevServer, cwd: string): Level1Result {
   if (srv.needsInstall && srv.installCmd) {
     const installResult = run(srv.installCmd, cwd, 120_000);
     if (installResult.code !== 0) {
-      return { handled: true, output: `  ❌ Install failed\n  $ ${srv.installCmd}\n\n${installResult.output.slice(-1000)}` };
+      return {
+        handled: true,
+        output: `  ❌ Install failed\n  $ ${srv.installCmd}\n\n${installResult.output.slice(-1000)}`,
+      };
     }
   }
 
@@ -581,14 +653,25 @@ export function tryLevel1(message: string, cwd: string): Level1Result {
     return { handled: false, output: "" };
   }
   // If message has creation intent + run intent, skip Level 1 (engine handles both)
-  if (/\b(?:create|build|make|crea|genera|scaffold)\b/i.test(lower) && /(?:levant|start|launch|arranca|ejecuta|run\s)/i.test(lower)) {
+  if (
+    /\b(?:create|build|make|crea|genera|scaffold)\b/i.test(lower) &&
+    /(?:levant|start|launch|arranca|ejecuta|run\s)/i.test(lower)
+  ) {
     return { handled: false, output: "" };
   }
 
   // ── Build ──
-  if (/^(?:build|compile|make|construir|compilar)(?:\s+(?:the\s+)?(?:project|app|it))?[.!]?$/i.test(lower)) {
+  if (
+    /^(?:build|compile|make|construir|compilar)(?:\s+(?:the\s+)?(?:project|app|it))?[.!]?$/i.test(
+      lower,
+    )
+  ) {
     const bs = detectBuildSystem(cwd);
-    if (!bs) return { handled: true, output: "  No build system detected (no package.json, Makefile, Cargo.toml, etc.)" };
+    if (!bs)
+      return {
+        handled: true,
+        output: "  No build system detected (no package.json, Makefile, Cargo.toml, etc.)",
+      };
 
     const result = run(bs.command, cwd, 60_000);
     const icon = result.code === 0 ? "✅" : "❌";
@@ -599,7 +682,11 @@ export function tryLevel1(message: string, cwd: string): Level1Result {
   }
 
   // ── Test ──
-  if (/^(?:test|tests|run tests|pruebas|correr tests|ejecutar tests)(?:\s+(?:the\s+)?(?:project|app|it|all))?[.!]?$/i.test(lower)) {
+  if (
+    /^(?:test|tests|run tests|pruebas|correr tests|ejecutar tests)(?:\s+(?:the\s+)?(?:project|app|it|all))?[.!]?$/i.test(
+      lower,
+    )
+  ) {
     const tr = detectTestRunner(cwd);
     if (!tr) return { handled: true, output: "  No test runner detected." };
 
@@ -612,7 +699,11 @@ export function tryLevel1(message: string, cwd: string): Level1Result {
   }
 
   // ── Lint ──
-  if (/^(?:lint|format|check style|lintear|formatear)(?:\s+(?:the\s+)?(?:project|code|it|all))?[.!]?$/i.test(lower)) {
+  if (
+    /^(?:lint|format|check style|lintear|formatear)(?:\s+(?:the\s+)?(?:project|code|it|all))?[.!]?$/i.test(
+      lower,
+    )
+  ) {
     const linter = detectLinter(cwd);
     if (!linter) return { handled: true, output: "  No linter detected." };
 
@@ -652,7 +743,9 @@ export function tryLevel1(message: string, cwd: string): Level1Result {
   }
 
   // ── Find / Search ──
-  const findMatch = lower.match(/^(?:find|search|buscar?|donde|where)\s+(?:is\s+)?["']?(.+?)["']?\s*$/i);
+  const findMatch = lower.match(
+    /^(?:find|search|buscar?|donde|where)\s+(?:is\s+)?["']?(.+?)["']?\s*$/i,
+  );
   if (findMatch) {
     const query = findMatch[1]!.trim();
     const grepResult = run(
@@ -683,8 +776,15 @@ export function tryLevel1(message: string, cwd: string): Level1Result {
   }
 
   // ── Stop / Kill server (BEFORE run — "para el server" must not match "serve") ──
-  if (/(?:^|\s)(?:stop|kill|para(?:r|\s+el)?|det[eé]n(?:lo)?|frena|baja|shutdown|apaga)(?:\s+(?:the\s+)?(?:server|app|it|lo|el\s+server|la\s+app))?[.!]?$/i.test(lower)) {
-    run("pkill -f 'next dev|vite|tsx watch|uvicorn|flask run|cargo run|go run|mix phx|http.server' 2>/dev/null; true", cwd);
+  if (
+    /(?:^|\s)(?:stop|kill|para(?:r|\s+el)?|det[eé]n(?:lo)?|frena|baja|shutdown|apaga)(?:\s+(?:the\s+)?(?:server|app|it|lo|el\s+server|la\s+app))?[.!]?$/i.test(
+      lower,
+    )
+  ) {
+    run(
+      "pkill -f 'next dev|vite|tsx watch|uvicorn|flask run|cargo run|go run|mix phx|http.server' 2>/dev/null; true",
+      cwd,
+    );
     return { handled: true, output: "  ✅ Server stopped." };
   }
 
@@ -706,8 +806,10 @@ export function tryLevel1(message: string, cwd: string): Level1Result {
   // anchor, "run git status" / "start the build" / "launch the test runner"
   // matched on their first word and spawned a dev server — even though the
   // rest of the sentence was unrelated. See audit round 2026-04-13.
-  const startVerbRex = /^(?:levant[ae](?:lo|la)?|run(?:\s+it)?|start|launch|arranca(?:lo)?|ejecuta(?:lo)?|inicia(?:lo)?|corr[ei](?:lo)?|lanza(?:lo)?|pon(?:lo)?|abre(?:lo)?)(?:\s+(?:the\s+)?(?:app|server|project|dev|it|lo|la\s+app|el\s+server|el\s+proyecto))?(?:\s+(?:en|on|in|at)\s+(?:(?:el\s+)?puerto|port)\s+(\d+))?[.!?]?$/i;
-  const portOverrideRex = /\b(?:usa(?:lo|la)?|use|cambia(?:lo|la)?|switch|change|move|mu[eé]ve(?:lo|la)?|re?int[eé]ntalo|retry|retri[ée]ntalo|el\s+servidor\s+no\s+levant[oó])\b[^.!?]*?\b(?:(?:el\s+)?puerto|port)\s+(\d+)/i;
+  const startVerbRex =
+    /^(?:levant[ae](?:lo|la)?|run(?:\s+it)?|start|launch|arranca(?:lo)?|ejecuta(?:lo)?|inicia(?:lo)?|corr[ei](?:lo)?|lanza(?:lo)?|pon(?:lo)?|abre(?:lo)?)(?:\s+(?:the\s+)?(?:app|server|project|dev|it|lo|la\s+app|el\s+server|el\s+proyecto))?(?:\s+(?:en|on|in|at)\s+(?:(?:el\s+)?puerto|port)\s+(\d+))?[.!?]?$/i;
+  const portOverrideRex =
+    /\b(?:usa(?:lo|la)?|use|cambia(?:lo|la)?|switch|change|move|mu[eé]ve(?:lo|la)?|re?int[eé]ntalo|retry|retri[ée]ntalo|el\s+servidor\s+no\s+levant[oó])\b[^.!?]*?\b(?:(?:el\s+)?puerto|port)\s+(\d+)/i;
 
   const runMatch = lower.match(startVerbRex);
   const overrideMatch = !runMatch ? lower.match(portOverrideRex) : null;

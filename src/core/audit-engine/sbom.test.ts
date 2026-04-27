@@ -1,15 +1,10 @@
 // P2.4 slice 1 (v2.10.392+) — SBOM tests.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  matchesRange,
-  parsePackageJson,
-  scanDependencies,
-  type AdvisoryRecord,
-} from "./sbom";
+import { type AdvisoryRecord, matchesRange, parsePackageJson, scanDependencies } from "./sbom";
 
 let TMP: string;
 
@@ -17,7 +12,9 @@ beforeEach(() => {
   TMP = mkdtempSync(join(tmpdir(), "kcode-sbom-"));
 });
 afterEach(() => {
-  try { rmSync(TMP, { recursive: true, force: true }); } catch {}
+  try {
+    rmSync(TMP, { recursive: true, force: true });
+  } catch {}
 });
 
 // ─── Range matcher ────────────────────────────────────────────
@@ -64,12 +61,15 @@ describe("parsePackageJson", () => {
 
   test("extracts deps + devDeps + peerDeps", () => {
     const path = join(TMP, "package.json");
-    writeFileSync(path, JSON.stringify({
-      name: "demo",
-      dependencies: { "lodash": "^4.17.21", "react": "18.0.0" },
-      devDependencies: { "vitest": "^1.0.0" },
-      peerDependencies: { "react-dom": "^18.0.0" },
-    }));
+    writeFileSync(
+      path,
+      JSON.stringify({
+        name: "demo",
+        dependencies: { lodash: "^4.17.21", react: "18.0.0" },
+        devDependencies: { vitest: "^1.0.0" },
+        peerDependencies: { "react-dom": "^18.0.0" },
+      }),
+    );
     const deps = parsePackageJson(path);
     expect(deps.length).toBe(4);
     expect(deps.find((d) => d.name === "lodash")?.source).toBe("dependencies");
@@ -83,9 +83,12 @@ describe("parsePackageJson", () => {
 
   test("ignores non-string deps (yarn workspace style)", () => {
     const path = join(TMP, "package.json");
-    writeFileSync(path, JSON.stringify({
-      dependencies: { "valid-pkg": "1.0.0", "weird": { not: "string" } },
-    }));
+    writeFileSync(
+      path,
+      JSON.stringify({
+        dependencies: { "valid-pkg": "1.0.0", weird: { not: "string" } },
+      }),
+    );
     const deps = parsePackageJson(path);
     expect(deps.length).toBe(1);
     expect(deps[0]?.name).toBe("valid-pkg");
@@ -96,9 +99,12 @@ describe("parsePackageJson", () => {
 
 describe("scanDependencies", () => {
   test("flags event-stream@3.3.6 (the original incident)", () => {
-    writeFileSync(join(TMP, "package.json"), JSON.stringify({
-      dependencies: { "event-stream": "3.3.6" },
-    }));
+    writeFileSync(
+      join(TMP, "package.json"),
+      JSON.stringify({
+        dependencies: { "event-stream": "3.3.6" },
+      }),
+    );
     const findings = scanDependencies(TMP);
     expect(findings.length).toBe(1);
     expect(findings[0]?.package).toBe("event-stream");
@@ -107,25 +113,34 @@ describe("scanDependencies", () => {
   });
 
   test("flags ua-parser-js across multiple disjuncts", () => {
-    writeFileSync(join(TMP, "package.json"), JSON.stringify({
-      dependencies: { "ua-parser-js": "0.7.29" },
-    }));
+    writeFileSync(
+      join(TMP, "package.json"),
+      JSON.stringify({
+        dependencies: { "ua-parser-js": "0.7.29" },
+      }),
+    );
     const findings = scanDependencies(TMP);
     expect(findings.length).toBe(1);
   });
 
   test("does NOT flag a clean version of a vulnerable package", () => {
-    writeFileSync(join(TMP, "package.json"), JSON.stringify({
-      dependencies: { "ua-parser-js": "1.0.40" },
-    }));
+    writeFileSync(
+      join(TMP, "package.json"),
+      JSON.stringify({
+        dependencies: { "ua-parser-js": "1.0.40" },
+      }),
+    );
     const findings = scanDependencies(TMP);
     expect(findings.length).toBe(0);
   });
 
   test("does NOT flag packages outside the advisory list", () => {
-    writeFileSync(join(TMP, "package.json"), JSON.stringify({
-      dependencies: { "lodash": "4.17.21", "react": "18.2.0" },
-    }));
+    writeFileSync(
+      join(TMP, "package.json"),
+      JSON.stringify({
+        dependencies: { lodash: "4.17.21", react: "18.2.0" },
+      }),
+    );
     const findings = scanDependencies(TMP);
     expect(findings.length).toBe(0);
   });
@@ -133,12 +148,18 @@ describe("scanDependencies", () => {
   test("walks subdirectories (monorepo with multiple package.json)", () => {
     mkdirSync(join(TMP, "packages", "a"), { recursive: true });
     mkdirSync(join(TMP, "packages", "b"), { recursive: true });
-    writeFileSync(join(TMP, "packages", "a", "package.json"), JSON.stringify({
-      dependencies: { "event-stream": "3.3.6" },
-    }));
-    writeFileSync(join(TMP, "packages", "b", "package.json"), JSON.stringify({
-      dependencies: { "rc": "1.2.9" },
-    }));
+    writeFileSync(
+      join(TMP, "packages", "a", "package.json"),
+      JSON.stringify({
+        dependencies: { "event-stream": "3.3.6" },
+      }),
+    );
+    writeFileSync(
+      join(TMP, "packages", "b", "package.json"),
+      JSON.stringify({
+        dependencies: { rc: "1.2.9" },
+      }),
+    );
     const findings = scanDependencies(TMP);
     expect(findings.length).toBe(2);
     const pkgs = findings.map((f) => f.package).sort();
@@ -147,17 +168,23 @@ describe("scanDependencies", () => {
 
   test("skips node_modules even if a package.json inside is vulnerable", () => {
     mkdirSync(join(TMP, "node_modules", "anything"), { recursive: true });
-    writeFileSync(join(TMP, "node_modules", "anything", "package.json"), JSON.stringify({
-      dependencies: { "event-stream": "3.3.6" },
-    }));
+    writeFileSync(
+      join(TMP, "node_modules", "anything", "package.json"),
+      JSON.stringify({
+        dependencies: { "event-stream": "3.3.6" },
+      }),
+    );
     const findings = scanDependencies(TMP);
     expect(findings.length).toBe(0);
   });
 
   test("supports custom advisories injection (for tests / live DB swap)", () => {
-    writeFileSync(join(TMP, "package.json"), JSON.stringify({
-      dependencies: { "test-pkg": "1.0.0" },
-    }));
+    writeFileSync(
+      join(TMP, "package.json"),
+      JSON.stringify({
+        dependencies: { "test-pkg": "1.0.0" },
+      }),
+    );
     const advisories: AdvisoryRecord[] = [
       {
         id: "TEST-001",

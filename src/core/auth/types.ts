@@ -1,7 +1,14 @@
 // Auth type definitions
 
 export interface OAuthConfig {
-  provider: "anthropic" | "openai" | "openai-codex" | "gemini" | "kcode-cloud" | "astrolexis" | "custom";
+  provider:
+    | "anthropic"
+    | "openai"
+    | "openai-codex"
+    | "gemini"
+    | "kcode-cloud"
+    | "astrolexis"
+    | "custom";
   authorizationUrl: string;
   tokenUrl: string;
   clientId: string;

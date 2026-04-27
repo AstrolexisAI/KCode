@@ -8,10 +8,10 @@
 //   - Auto-discovery hook: kicks off a background benchmark run after
 //     listModels registers new entries.
 
-import { log } from "./logger";
-import { listModels } from "./models";
 import { benchmarkModel, minimalReadTool } from "./benchmark-runner";
 import { isBenchmarked } from "./benchmark-store";
+import { log } from "./logger";
+import { listModels } from "./models";
 
 const LOCAL_PATTERNS = /localhost|127\.0\.0\.1/;
 // Throttle between benchmark calls (same provider often rate-limits)
@@ -29,13 +29,19 @@ async function resolveApiKeyForModel(baseUrl: string): Promise<string> {
   const { loadUserSettingsRaw } = await import("./config.js");
   const settings = await loadUserSettingsRaw();
   const url = baseUrl.toLowerCase();
-  if (url.includes("anthropic.com")) return String(settings.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY ?? "");
+  if (url.includes("anthropic.com"))
+    return String(settings.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY ?? "");
   if (url.includes("x.ai")) return String(settings.xaiApiKey ?? process.env.XAI_API_KEY ?? "");
-  if (url.includes("openai.com")) return String(settings.apiKey ?? process.env.OPENAI_API_KEY ?? "");
-  if (url.includes("moonshot")) return String(settings.kimiApiKey ?? process.env.MOONSHOT_API_KEY ?? "");
-  if (url.includes("groq.com")) return String(settings.groqApiKey ?? process.env.GROQ_API_KEY ?? "");
-  if (url.includes("deepseek.com")) return String(settings.deepseekApiKey ?? process.env.DEEPSEEK_API_KEY ?? "");
-  if (url.includes("together.xyz")) return String(settings.togetherApiKey ?? process.env.TOGETHER_API_KEY ?? "");
+  if (url.includes("openai.com"))
+    return String(settings.apiKey ?? process.env.OPENAI_API_KEY ?? "");
+  if (url.includes("moonshot"))
+    return String(settings.kimiApiKey ?? process.env.MOONSHOT_API_KEY ?? "");
+  if (url.includes("groq.com"))
+    return String(settings.groqApiKey ?? process.env.GROQ_API_KEY ?? "");
+  if (url.includes("deepseek.com"))
+    return String(settings.deepseekApiKey ?? process.env.DEEPSEEK_API_KEY ?? "");
+  if (url.includes("together.xyz"))
+    return String(settings.togetherApiKey ?? process.env.TOGETHER_API_KEY ?? "");
   if (url.includes("google") || url.includes("generativelanguage"))
     return String(settings.geminiApiKey ?? process.env.GEMINI_API_KEY ?? "");
   return "";
@@ -51,10 +57,26 @@ export interface BenchmarkBatchProgress {
 
 /** Skip models that are obviously not chat-capable (image / audio / TTS / embeddings). */
 const NON_CHAT_PATTERNS = [
-  /^dall-e/i, /^whisper/i, /^tts-/i, /^text-embedding/i, /-vision-/i,
-  /^gpt-4o-realtime/i, /^gpt-4o-audio/i, /^gpt-4o-mini-realtime/i, /^gpt-4o-mini-audio/i,
-  /^gpt-4o-tts/i, /^gpt-4o-transcribe/i, /^omni-moderation/i, /-codex$/i, /-search-api/i,
-  /^o1-pro/i, /^gpt-image/i, /^chatgpt-image/i, /^sora/i, /^babbage/i, /^davinci/i,
+  /^dall-e/i,
+  /^whisper/i,
+  /^tts-/i,
+  /^text-embedding/i,
+  /-vision-/i,
+  /^gpt-4o-realtime/i,
+  /^gpt-4o-audio/i,
+  /^gpt-4o-mini-realtime/i,
+  /^gpt-4o-mini-audio/i,
+  /^gpt-4o-tts/i,
+  /^gpt-4o-transcribe/i,
+  /^omni-moderation/i,
+  /-codex$/i,
+  /-search-api/i,
+  /^o1-pro/i,
+  /^gpt-image/i,
+  /^chatgpt-image/i,
+  /^sora/i,
+  /^babbage/i,
+  /^davinci/i,
 ];
 
 function shouldSkipModel(modelName: string): boolean {

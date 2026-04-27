@@ -12,8 +12,10 @@ export const FRAMEWORK_PATTERNS: BugPattern[] = [
     severity: "critical",
     languages: ["python"],
     regex: /\b(?:raw|extra)\s*\(\s*(?:f["']|["'].*%|["'].*\.format)/g,
-    explanation: "Django raw()/extra() with string formatting bypasses ORM protections → SQL injection.",
-    verify_prompt: "Check ALL: 1. Is this using Django's parameterized form raw(sql, [params])? → FP. 2. Is user input interpolated? Only CONFIRMED if untrusted input is formatted into SQL." +
+    explanation:
+      "Django raw()/extra() with string formatting bypasses ORM protections → SQL injection.",
+    verify_prompt:
+      "Check ALL: 1. Is this using Django's parameterized form raw(sql, [params])? → FP. 2. Is user input interpolated? Only CONFIRMED if untrusted input is formatted into SQL." +
       "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
       "1. Parameterized queries are used: raw('SELECT ... WHERE id = %s', [param])\n" +
       "2. The interpolated values are integer IDs from validated/internal sources\n" +
@@ -30,7 +32,8 @@ export const FRAMEWORK_PATTERNS: BugPattern[] = [
     languages: ["python"],
     regex: /\bmark_safe\s*\(\s*(?:f["']|.*\+|.*\.format|.*%)/g,
     explanation: "mark_safe() tells Django to NOT escape HTML. With dynamic content → XSS.",
-    verify_prompt: "Is the argument entirely hardcoded HTML? → FP. Does it include ANY user input? → CONFIRMED." +
+    verify_prompt:
+      "Is the argument entirely hardcoded HTML? → FP. Does it include ANY user input? → CONFIRMED." +
       "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
       "1. The argument is entirely hardcoded HTML with no dynamic content\n" +
       "2. The dynamic content is already escaped via django.utils.html.escape() before mark_safe()\n" +
@@ -47,7 +50,8 @@ export const FRAMEWORK_PATTERNS: BugPattern[] = [
     languages: ["python"],
     regex: /SECRET_KEY\s*=\s*["'][A-Za-z0-9!@#$%^&*]{20,}["']/g,
     explanation: "Hardcoded SECRET_KEY in settings.py. If leaked, session forgery + CSRF bypass.",
-    verify_prompt: "Is this in a test/example file? → FP. Is it in production settings? → CONFIRMED." +
+    verify_prompt:
+      "Is this in a test/example file? → FP. Is it in production settings? → CONFIRMED." +
       "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
       "1. This is in a test, example, or template file (not production settings)\n" +
       "2. The value is a placeholder ('changeme', 'your-secret-key-here', 'TODO')\n" +
@@ -64,8 +68,10 @@ export const FRAMEWORK_PATTERNS: BugPattern[] = [
     severity: "critical",
     languages: ["javascript", "typescript"],
     regex: /\b(?:find|findOne|updateOne|deleteOne)\s*\(\s*(?:req\.body|req\.query|req\.params)/g,
-    explanation: "Passing req.body directly to MongoDB enables NoSQL injection ($gt, $ne operators).",
-    verify_prompt: "Is req.body passed directly without type validation/casting? → CONFIRMED. Is input validated/cast first? → FP." +
+    explanation:
+      "Passing req.body directly to MongoDB enables NoSQL injection ($gt, $ne operators).",
+    verify_prompt:
+      "Is req.body passed directly without type validation/casting? → CONFIRMED. Is input validated/cast first? → FP." +
       "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
       "1. Input fields are explicitly cast/validated (String(), Number(), mongoose schema validation)\n" +
       "2. A validation middleware (joi, zod, express-validator) runs before this handler\n" +
@@ -82,7 +88,8 @@ export const FRAMEWORK_PATTERNS: BugPattern[] = [
     languages: ["javascript", "typescript"],
     regex: /res\.send\s*\(\s*(?:req\.|`.*\$\{req\.)/g,
     explanation: "Sending user input directly in response without escaping → reflected XSS.",
-    verify_prompt: "Is the response HTML with user input interpolated? → CONFIRMED. Is it JSON or escaped? → FP." +
+    verify_prompt:
+      "Is the response HTML with user input interpolated? → CONFIRMED. Is it JSON or escaped? → FP." +
       "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
       "1. The response is JSON (res.json()) not HTML\n" +
       "2. The output is already escaped/sanitized before being sent\n" +
@@ -90,7 +97,8 @@ export const FRAMEWORK_PATTERNS: BugPattern[] = [
       "4. Content-Type is set to text/plain (not text/html)\n" +
       "Only respond CONFIRMED if user input is interpolated into an HTML response without escaping.",
     cwe: "CWE-79",
-    fix_template: "Use a template engine with auto-escaping, or escape: require('he').encode(input)",
+    fix_template:
+      "Use a template engine with auto-escaping, or escape: require('he').encode(input)",
   },
   {
     id: "express-003-cors-wildcard",
@@ -99,7 +107,8 @@ export const FRAMEWORK_PATTERNS: BugPattern[] = [
     languages: ["javascript", "typescript"],
     regex: /cors\s*\(\s*\{[^}]*origin\s*:\s*(?:true|["']\*["'])/g,
     explanation: "CORS with wildcard origin allows any site to make authenticated requests.",
-    verify_prompt: "Is credentials: true also set? → CONFIRMED. Is this a public API without auth? → FP." +
+    verify_prompt:
+      "Is credentials: true also set? → CONFIRMED. Is this a public API without auth? → FP." +
       "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
       "1. This is a public API that requires no authentication (no cookies/sessions)\n" +
       "2. credentials is not set or is set to false\n" +
@@ -116,8 +125,10 @@ export const FRAMEWORK_PATTERNS: BugPattern[] = [
     severity: "high",
     languages: ["javascript", "typescript"],
     regex: /dangerouslySetInnerHTML\s*=\s*\{\s*\{\s*__html\s*:\s*(?!["'`]\s*[}])/g,
-    explanation: "dangerouslySetInnerHTML bypasses React's XSS protection. With dynamic content → XSS.",
-    verify_prompt: "Is __html a hardcoded constant? → FP. Does it include ANY user/external data? → CONFIRMED." +
+    explanation:
+      "dangerouslySetInnerHTML bypasses React's XSS protection. With dynamic content → XSS.",
+    verify_prompt:
+      "Is __html a hardcoded constant? → FP. Does it include ANY user/external data? → CONFIRMED." +
       "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
       "1. The __html value is a hardcoded constant string\n" +
       "2. The content is sanitized with DOMPurify or a similar sanitizer before use\n" +
@@ -134,8 +145,10 @@ export const FRAMEWORK_PATTERNS: BugPattern[] = [
     severity: "critical",
     languages: ["python"],
     regex: /\brender_template_string\s*\(\s*(?:request\.|f["']|.*\+|.*\.format|.*%)/g,
-    explanation: "render_template_string() with user input enables Server-Side Template Injection → RCE.",
-    verify_prompt: "Is the template string from user input? → CONFIRMED. Is it hardcoded? → FP." +
+    explanation:
+      "render_template_string() with user input enables Server-Side Template Injection → RCE.",
+    verify_prompt:
+      "Is the template string from user input? → CONFIRMED. Is it hardcoded? → FP." +
       "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
       "1. The template string is hardcoded (no user input in the template itself)\n" +
       "2. User input is passed only as template variables (not as part of the template string)\n" +
@@ -153,7 +166,8 @@ export const FRAMEWORK_PATTERNS: BugPattern[] = [
     languages: ["python"],
     regex: /\b(?:execute|text)\s*\(\s*(?:f["']|["'].*\{)/g,
     explanation: "Raw SQL with f-strings in FastAPI/SQLAlchemy bypasses parameterized queries.",
-    verify_prompt: "Is this using text() with :param placeholders? → FP. Is user input in f-string? → CONFIRMED." +
+    verify_prompt:
+      "Is this using text() with :param placeholders? → FP. Is user input in f-string? → CONFIRMED." +
       "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
       "1. Parameterized queries are used: text('... WHERE id = :id').bindparams(id=val)\n" +
       "2. The interpolated values are integer IDs from validated/internal sources\n" +
@@ -171,7 +185,8 @@ export const FRAMEWORK_PATTERNS: BugPattern[] = [
     languages: ["ruby"],
     regex: /\.html_safe\b/g,
     explanation: ".html_safe tells Rails to skip HTML escaping. On user content → XSS.",
-    verify_prompt: "Is the string entirely hardcoded/internal? → FP. Could it contain user input? → CONFIRMED." +
+    verify_prompt:
+      "Is the string entirely hardcoded/internal? → FP. Could it contain user input? → CONFIRMED." +
       "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
       "1. The string is entirely hardcoded HTML (e.g., '<br>'.html_safe)\n" +
       "2. The content is already sanitized with sanitize() or ERB::Util.html_escape before .html_safe\n" +

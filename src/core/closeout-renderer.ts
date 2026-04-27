@@ -80,7 +80,9 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
   if (scope.phase === "failed" || !scope.completion.mayClaimReady) {
     lines.push("## ⚠ Verified status (supersedes any 'ready/created successfully' claim above)");
   } else if (scope.completion.mustUsePartialLanguage) {
-    lines.push("## ⚠ Verified status — partial progress (read below, not the optimistic summary above)");
+    lines.push(
+      "## ⚠ Verified status — partial progress (read below, not the optimistic summary above)",
+    );
   } else {
     lines.push("**⚖ Scope-grounded status**");
   }
@@ -130,14 +132,10 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
     }
   } else {
     if (written.length > 0) {
-      lines.push(
-        `- Files created: \`${written.map((p) => basename(p)).join("`, `")}\``,
-      );
+      lines.push(`- Files created: \`${written.map((p) => basename(p)).join("`, `")}\``);
     }
     if (edited.length > 0) {
-      lines.push(
-        `- Files edited: \`${edited.map((p) => basename(p)).join("`, `")}\``,
-      );
+      lines.push(`- Files edited: \`${edited.map((p) => basename(p)).join("`, `")}\``);
     }
   }
 
@@ -169,16 +167,14 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
         last.output
           .split("\n")
           .map((l) => l.trim())
-          .find((l) => /401|403|Unauthorized|Forbidden|auth/i.test(l)) ??
-        "auth rejected";
+          .find((l) => /401|403|Unauthorized|Forbidden|auth/i.test(l)) ?? "auth rejected";
       lines.push(`- Runtime: **failed_auth** (${authLine.slice(0, 140)})`);
     } else if (last.status === "failed_dependency") {
       const depLine =
         last.output
           .split("\n")
           .map((l) => l.trim())
-          .find((l) => /ModuleNotFound|ImportError|cannot find/i.test(l)) ??
-        "missing dependency";
+          .find((l) => /ModuleNotFound|ImportError|cannot find/i.test(l)) ?? "missing dependency";
       lines.push(`- Runtime: **failed_dependency** (${depLine.slice(0, 140)})`);
     } else if (last.status === "failed_connection") {
       const connLine =
@@ -188,7 +184,11 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
           .find((l) => /refused|unreachable|resolve|ECONNREFUSED|ENOTFOUND/i.test(l)) ??
         "connection refused";
       lines.push(`- Runtime: **failed_connection** (${connLine.slice(0, 140)})`);
-    } else if (last.runtimeFailed || last.status === "failed_traceback" || last.status === "failed_unknown") {
+    } else if (
+      last.runtimeFailed ||
+      last.status === "failed_traceback" ||
+      last.status === "failed_unknown"
+    ) {
       const errorLine =
         last.output
           .split("\n")
@@ -198,11 +198,12 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
               l,
             ),
           ) ??
-        last.output.split("\n").find((l) => l.trim())?.trim() ??
+        last.output
+          .split("\n")
+          .find((l) => l.trim())
+          ?.trim() ??
         "";
-      lines.push(
-        `- Runtime: **failed** (${errorLine.slice(0, 140) || "see previous output"})`,
-      );
+      lines.push(`- Runtime: **failed** (${errorLine.slice(0, 140) || "see previous output"})`);
     } else if (last.exitCode === 124 || last.status === "alive_timeout") {
       lines.push(
         `- Runtime: **started and stayed alive under timeout** — no connection/RPC/UI assertion verified.`,
@@ -213,13 +214,18 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
           .split("\n")
           .map((l) => l.trim())
           .find((l) => /(^|[\s\n])(?:Error|ERROR|error)\s*[:\-—]/.test(l)) ??
-        last.output.split("\n").find((l) => l.trim())?.trim() ??
+        last.output
+          .split("\n")
+          .find((l) => l.trim())
+          ?.trim() ??
         "";
       lines.push(
         `- Runtime: **started_unverified** — process exited cleanly but printed an application error (${errLine.slice(0, 140)}); end-to-end behavior not proven.`,
       );
     } else {
-      lines.push(`- Runtime: verified (${runtimes.length} command${runtimes.length > 1 ? "s" : ""}).`);
+      lines.push(
+        `- Runtime: verified (${runtimes.length} command${runtimes.length > 1 ? "s" : ""}).`,
+      );
     }
   }
 
@@ -232,13 +238,14 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
   // v298: functional probe result. Tier-3 evidence — the probe
   // actually exercised the app's external surface. Much stronger
   // than 'process spawned' (tier 2) or 'files written' (tier 1).
-  const probe = (scope.verification as { lastProbeResult?: { status: string; probeId: string; evidence?: string; error?: string } })
-    .lastProbeResult;
+  const probe = (
+    scope.verification as {
+      lastProbeResult?: { status: string; probeId: string; evidence?: string; error?: string };
+    }
+  ).lastProbeResult;
   if (probe) {
     if (probe.status === "pass") {
-      lines.push(
-        `- **Functional probe**: ✓ ${probe.probeId} passed — ${probe.evidence ?? "ok"}.`,
-      );
+      lines.push(`- **Functional probe**: ✓ ${probe.probeId} passed — ${probe.evidence ?? "ok"}.`);
     } else if (probe.status === "fail_auth") {
       lines.push(
         `- **Functional probe**: ✗ ${probe.probeId} failed auth — ${probe.error ?? "credentials rejected"}.`,
@@ -270,14 +277,9 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
   const derivedCompleted = countDerivedCompletedSteps(scope);
   const completed = Math.max(explicitCompleted, derivedCompleted);
   if (planned > 0) {
-    const current = scope.progress.currentStep
-      ? ` — current: "${scope.progress.currentStep}"`
-      : "";
-    const note =
-      derivedCompleted > explicitCompleted ? " (derived from verification)" : "";
-    lines.push(
-      `- Plan progress: ${completed}/${planned} step(s) completed${current}${note}.`,
-    );
+    const current = scope.progress.currentStep ? ` — current: "${scope.progress.currentStep}"` : "";
+    const note = derivedCompleted > explicitCompleted ? " (derived from verification)" : "";
+    lines.push(`- Plan progress: ${completed}/${planned} step(s) completed${current}${note}.`);
   }
 
   // Why the turn cannot be marked done
@@ -310,7 +312,11 @@ export function renderCloseoutFromScope(scope: TaskScope): string | null {
   // not the SyntaxError from a throwaway import test. If the model
   // later fixes imports, the app will still fail until credentials
   // are fixed.
-  const probeResult = (scope.verification as { lastProbeResult?: { status: string; probeId: string; error?: string; evidence?: string } }).lastProbeResult;
+  const probeResult = (
+    scope.verification as {
+      lastProbeResult?: { status: string; probeId: string; error?: string; evidence?: string };
+    }
+  ).lastProbeResult;
   if (probeResult?.status === "fail_auth") {
     lines.push(
       "**Status: blocked by configuration.** The project artifacts exist and the dependencies installed cleanly, but the live-node probe was rejected by the RPC endpoint.",
@@ -434,10 +440,7 @@ export function countDerivedCompletedSteps(scope: TaskScope): number {
 
     // Create / scaffold a project root
     if (/(create|cre[aá]r|init|setup|scaffold|project|directory|carpeta|proyecto)/i.test(t)) {
-      if (
-        scope.projectRoot.status === "verified" ||
-        scope.projectRoot.status === "created"
-      ) {
+      if (scope.projectRoot.status === "verified" || scope.projectRoot.status === "created") {
         done++;
         continue;
       }
@@ -468,7 +471,11 @@ export function countDerivedCompletedSteps(scope: TaskScope): number {
     }
 
     // Write / implement application code
-    if (/(write|escribi|code|c[oó]digo|main|app|script|application|aplicaci|implement|implementar|rpc|client|cliente)/i.test(t)) {
+    if (
+      /(write|escribi|code|c[oó]digo|main|app|script|application|aplicaci|implement|implementar|rpc|client|cliente)/i.test(
+        t,
+      )
+    ) {
       if (anyFileWritten) {
         done++;
         continue;
@@ -479,7 +486,6 @@ export function countDerivedCompletedSteps(scope: TaskScope): number {
     if (/(test|verify|verific|run|ejecut|check|revis|connect|conect|probar|prueba)/i.test(t)) {
       if (lastRuntimeVerified) {
         done++;
-        continue;
       }
       // Runtime happened but status is started_unverified / alive_timeout /
       // failed_* — the step is open. The closeout verdict already renders

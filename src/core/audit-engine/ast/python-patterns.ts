@@ -72,7 +72,10 @@ function parameterNames(func: AstNode): Set<string> {
       // list_splat_pattern / dictionary_splat_pattern wrap the name
       // inside an inner identifier. If the direct-child scan didn't
       // find one, try one level deeper.
-      if (!foundName && (param.type === "list_splat_pattern" || param.type === "dictionary_splat_pattern")) {
+      if (
+        !foundName &&
+        (param.type === "list_splat_pattern" || param.type === "dictionary_splat_pattern")
+      ) {
         for (let k = 0; k < param.namedChildCount; k++) {
           const sub = param.namedChild(k);
           if (!sub) continue;
@@ -171,15 +174,14 @@ export const PYTHON_AST_PATTERNS: AstPattern[] = [
       // intentionally NOT in this set — they're the safe alternatives.
       const m = mod.node.text;
       const fn = method.node.text;
-      const dangerous = (
+      const dangerous =
         (m === "pickle" && (fn === "loads" || fn === "load")) ||
         (m === "cPickle" && (fn === "loads" || fn === "load")) ||
         (m === "_pickle" && (fn === "loads" || fn === "load")) ||
         (m === "dill" && (fn === "loads" || fn === "load")) ||
         (m === "marshal" && (fn === "loads" || fn === "load")) ||
         (m === "yaml" && (fn === "load" || fn === "unsafe_load" || fn === "full_load")) ||
-        (m === "shelve" && fn === "open")
-      );
+        (m === "shelve" && fn === "open");
       if (!dangerous) return null;
       const enclosing = findEnclosingFunction(method.node);
       if (!enclosing) return null;
@@ -235,23 +237,35 @@ export const PYTHON_AST_PATTERNS: AstPattern[] = [
       if (!mod || !method || !arg) return null;
       const m = mod.node.text;
       const fn = method.node.text;
-      const dangerous = (
-        (m === "subprocess" && (
-          fn === "run" || fn === "call" || fn === "check_call" ||
-          fn === "check_output" || fn === "Popen" || fn === "getoutput" ||
-          fn === "getstatusoutput"
-        )) ||
-        (m === "os" && (
-          fn === "system" || fn === "popen" || fn === "popen2" ||
-          fn === "popen3" || fn === "popen4" ||
-          fn === "execv" || fn === "execve" || fn === "execvp" ||
-          fn === "execvpe" || fn === "execl" || fn === "execle" ||
-          fn === "execlp" || fn === "execlpe" || fn === "spawnv" ||
-          fn === "spawnve" || fn === "spawnvp" || fn === "spawnvpe" ||
-          fn === "startfile"
-        )) ||
-        (m === "commands" && (fn === "getoutput" || fn === "getstatusoutput"))
-      );
+      const dangerous =
+        (m === "subprocess" &&
+          (fn === "run" ||
+            fn === "call" ||
+            fn === "check_call" ||
+            fn === "check_output" ||
+            fn === "Popen" ||
+            fn === "getoutput" ||
+            fn === "getstatusoutput")) ||
+        (m === "os" &&
+          (fn === "system" ||
+            fn === "popen" ||
+            fn === "popen2" ||
+            fn === "popen3" ||
+            fn === "popen4" ||
+            fn === "execv" ||
+            fn === "execve" ||
+            fn === "execvp" ||
+            fn === "execvpe" ||
+            fn === "execl" ||
+            fn === "execle" ||
+            fn === "execlp" ||
+            fn === "execlpe" ||
+            fn === "spawnv" ||
+            fn === "spawnve" ||
+            fn === "spawnvp" ||
+            fn === "spawnvpe" ||
+            fn === "startfile")) ||
+        (m === "commands" && (fn === "getoutput" || fn === "getstatusoutput"));
       if (!dangerous) return null;
       const enclosing = findEnclosingFunction(method.node);
       if (!enclosing) return null;

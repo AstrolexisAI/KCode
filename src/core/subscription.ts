@@ -29,7 +29,7 @@
 // invocation or internal isPro() call. Force-refresh with
 // `invalidateSubscriptionCache()` after a /login.
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { log } from "./logger";
 import { kcodePath } from "./paths";
@@ -37,12 +37,7 @@ import { kcodePath } from "./paths";
 // ─── Types ──────────────────────────────────────────────────────
 
 export type SubscriptionTier = "free" | "pro" | "team" | "enterprise";
-export type SubscriptionStatus =
-  | "active"
-  | "past_due"
-  | "canceled"
-  | "trialing"
-  | "none";
+export type SubscriptionStatus = "active" | "past_due" | "canceled" | "trialing" | "none";
 
 export interface Subscription {
   tier: SubscriptionTier;
@@ -62,8 +57,7 @@ export interface Subscription {
 // ─── Constants ──────────────────────────────────────────────────
 
 const SUBSCRIPTION_ENDPOINT =
-  process.env.KCODE_SUBSCRIPTION_URL ??
-  "https://astrolexis.space/api/subscription";
+  process.env.KCODE_SUBSCRIPTION_URL ?? "https://astrolexis.space/api/subscription";
 
 /** How long a fetched subscription is trusted before re-querying. */
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1h
@@ -148,12 +142,10 @@ async function fetchFromServer(): Promise<Subscription> {
       // heuristic — the server's verdict is authoritative) and
       // retry once before giving up to free tier.
       log.debug("subscription", "401 from API — forcing refresh + retry");
-      const refreshed = await manager.forceRefresh("astrolexis", cfg).catch(
-        (err) => {
-          log.debug("subscription", `refresh failed: ${err}`);
-          return null;
-        },
-      );
+      const refreshed = await manager.forceRefresh("astrolexis", cfg).catch((err) => {
+        log.debug("subscription", `refresh failed: ${err}`);
+        return null;
+      });
       if (refreshed) {
         res = await doFetch(refreshed);
       }
@@ -161,10 +153,7 @@ async function fetchFromServer(): Promise<Subscription> {
 
     if (res.status === 401) {
       // Refresh also failed or returned 401. Fall through to free tier.
-      log.debug(
-        "subscription",
-        "401 persists after refresh — token revoked or expired",
-      );
+      log.debug("subscription", "401 persists after refresh — token revoked or expired");
       return {
         tier: "free",
         features: [],
@@ -220,9 +209,7 @@ async function fetchFromServer(): Promise<Subscription> {
  * cache — this keeps kcode usable when the network is flaky. The
  * cache file stores fetchedAt so we can tell callers how old it is.
  */
-export async function getSubscription(opts?: {
-  forceRefresh?: boolean;
-}): Promise<Subscription> {
+export async function getSubscription(opts?: { forceRefresh?: boolean }): Promise<Subscription> {
   const now = Date.now();
 
   // Memory cache

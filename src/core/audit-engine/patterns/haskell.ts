@@ -18,7 +18,8 @@ export const HASKELL_PATTERNS: BugPattern[] = [
       "pattern match or null/length check before it, or if the list is known non-empty " +
       "(e.g., NonEmpty type), respond FALSE_POSITIVE. If the list could be empty, respond CONFIRMED.",
     cwe: "CWE-754",
-    fix_template: "Use pattern matching: case xs of (x:_) -> x; [] -> defaultValue, or use Data.List.NonEmpty, or listToMaybe.",
+    fix_template:
+      "Use pattern matching: case xs of (x:_) -> x; [] -> defaultValue, or use Data.List.NonEmpty, or listToMaybe.",
   },
   {
     id: "hs-002-fromjust",
@@ -33,7 +34,8 @@ export const HASKELL_PATTERNS: BugPattern[] = [
       "just constructed as Just x, or if isJust was checked immediately before, respond " +
       "FALSE_POSITIVE. If the Maybe comes from a lookup, parse, or external source, respond CONFIRMED.",
     cwe: "CWE-754",
-    fix_template: "Use fromMaybe defaultValue x, or pattern match: case mx of Just x -> f x; Nothing -> handleMissing.",
+    fix_template:
+      "Use fromMaybe defaultValue x, or pattern match: case mx of Just x -> f x; Nothing -> handleMissing.",
   },
   {
     id: "hs-003-read-no-error",
@@ -48,7 +50,8 @@ export const HASKELL_PATTERNS: BugPattern[] = [
       "constant or the result of show, respond FALSE_POSITIVE. If it parses user input, " +
       "file content, or network data, respond CONFIRMED.",
     cwe: "CWE-754",
-    fix_template: "Use readMaybe from Text.Read: case readMaybe str of Just n -> use n; Nothing -> handleError.",
+    fix_template:
+      "Use readMaybe from Text.Read: case readMaybe str of Just n -> use n; Nothing -> handleError.",
   },
   {
     id: "hs-004-unsafe-perform-io",
@@ -64,14 +67,15 @@ export const HASKELL_PATTERNS: BugPattern[] = [
       "follows the established safe patterns with NOINLINE pragma, respond FALSE_POSITIVE. " +
       "If used for side effects in pure code, respond CONFIRMED.",
     cwe: "CWE-758",
-    fix_template: "Keep the computation in IO monad, or use unsafePerformIO only with {-# NOINLINE #-} for top-level refs.",
+    fix_template:
+      "Keep the computation in IO monad, or use unsafePerformIO only with {-# NOINLINE #-} for top-level refs.",
   },
   {
     id: "hs-005-space-leak",
     title: "Space leak: lazy accumulator without bang pattern",
     severity: "medium",
     languages: ["haskell"],
-    regex: /\bfoldl\s+(?!\')(?!Data\.List\.Strict)/g,
+    regex: /\bfoldl\s+(?!')(?!Data\.List\.Strict)/g,
     explanation:
       "foldl (without the strict variant foldl') builds up thunks proportional to the input size, causing O(n) memory usage instead of O(1). This is one of the most common Haskell performance bugs.",
     verify_prompt:
@@ -111,7 +115,8 @@ export const HASKELL_PATTERNS: BugPattern[] = [
       "impossible case (e.g., exhaustive pattern match that GHC can't prove), respond " +
       "FALSE_POSITIVE. If it handles user input or recoverable failures, respond CONFIRMED.",
     cwe: "CWE-754",
-    fix_template: "Return Either ErrorType ResultType or use throwError from MonadError for recoverable failures.",
+    fix_template:
+      "Return Either ErrorType ResultType or use throwError from MonadError for recoverable failures.",
   },
   {
     id: "hs-008-string-type",
@@ -126,6 +131,7 @@ export const HASKELL_PATTERNS: BugPattern[] = [
       "file processing, large text manipulation)? If it's a small internal label, " +
       "error message, or test code, respond FALSE_POSITIVE. If it processes real data, respond CONFIRMED.",
     cwe: "CWE-400",
-    fix_template: "Use Data.Text instead of String: import qualified Data.Text as T; and replace String with T.Text.",
+    fix_template:
+      "Use Data.Text instead of String: import qualified Data.Text as T; and replace String with T.Text.",
   },
 ];

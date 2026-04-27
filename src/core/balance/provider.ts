@@ -35,10 +35,7 @@ export const KNOWN_PROVIDERS: readonly BillingProvider[] = [
  *   llama-*-groq, *-groq → groq  (rare; usually via OpenRouter)
  *   openrouter/*        → openrouter
  */
-export function providerFromModel(
-  model: string,
-  baseUrl?: string,
-): BillingProvider | null {
+export function providerFromModel(model: string, baseUrl?: string): BillingProvider | null {
   const m = model.toLowerCase();
   const url = (baseUrl ?? "").toLowerCase();
 
@@ -61,11 +58,8 @@ export function providerFromModel(
   }
   if (m.startsWith("gemini-")) return "google";
   if (m.startsWith("deepseek-")) return "deepseek";
-  if (
-    url.includes("api.moonshot.cn") ||
-    m.startsWith("kimi-") ||
-    m.startsWith("moonshot-")
-  ) return "kimi";
+  if (url.includes("api.moonshot.cn") || m.startsWith("kimi-") || m.startsWith("moonshot-"))
+    return "kimi";
 
   return null;
 }

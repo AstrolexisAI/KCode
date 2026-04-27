@@ -1,11 +1,6 @@
 // Tests for MCP tool helpers — name parsing and definition factory
 import { describe, expect, test } from "bun:test";
-import {
-  buildMcpToolName,
-  isMcpTool,
-  mcpToolDefinition,
-  parseMcpToolName,
-} from "./mcp-tools";
+import { buildMcpToolName, isMcpTool, mcpToolDefinition, parseMcpToolName } from "./mcp-tools";
 
 describe("isMcpTool", () => {
   test("identifies MCP-prefixed names", () => {

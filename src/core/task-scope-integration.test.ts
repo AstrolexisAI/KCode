@@ -7,9 +7,7 @@
 // architectural level.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import {
-  checkMutationAllowed,
-} from "./audit-guards";
+import { checkMutationAllowed } from "./audit-guards";
 import {
   detectAuditIntent,
   isAuditSession,
@@ -74,9 +72,7 @@ describe("session-tracker ↔ TaskScope integration", () => {
     expect(getTaskScopeManager().current()?.type).toBe("audit");
 
     // Turn 2: user pivots to create a new project
-    recordUserText(
-      "Necesito crear un proyecto nuevo, quiero un dashboard de TUI de bitcoin",
-    );
+    recordUserText("Necesito crear un proyecto nuevo, quiero un dashboard de TUI de bitcoin");
     expect(isAuditSession()).toBe(false);
     expect(getTaskScopeManager().current()?.type).toBe("scaffold");
     // The prior audit scope is archived to history

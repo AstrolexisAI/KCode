@@ -390,13 +390,21 @@ async function downloadVerified(opts: {
     }
     await writer.end();
   } catch (err) {
-    try { unlinkSync(tmpPath); } catch { /* ignore */ }
+    try {
+      unlinkSync(tmpPath);
+    } catch {
+      /* ignore */
+    }
     throw err;
   }
 
   const actual = await computeSha256(tmpPath);
   if (actual !== expectedSha256) {
-    try { unlinkSync(tmpPath); } catch { /* ignore */ }
+    try {
+      unlinkSync(tmpPath);
+    } catch {
+      /* ignore */
+    }
     throw new Error(`Checksum mismatch. Expected: ${expectedSha256}, Got: ${actual}`);
   }
   return tmpPath;
@@ -498,8 +506,16 @@ async function tryApplyDelta(
     );
   } catch (err) {
     log.warn("auto-update", `bspatch failed: ${err}. Falling back to full.`);
-    try { unlinkSync(patchPath); } catch { /* ignore */ }
-    try { unlinkSync(outPath); } catch { /* ignore */ }
+    try {
+      unlinkSync(patchPath);
+    } catch {
+      /* ignore */
+    }
+    try {
+      unlinkSync(outPath);
+    } catch {
+      /* ignore */
+    }
     return null;
   }
 
@@ -512,12 +528,24 @@ async function tryApplyDelta(
       "auto-update",
       `Patched binary SHA mismatch (${resultSha.slice(0, 12)}… vs ${info.sha256.slice(0, 12)}…). Falling back to full.`,
     );
-    try { unlinkSync(patchPath); } catch { /* ignore */ }
-    try { unlinkSync(outPath); } catch { /* ignore */ }
+    try {
+      unlinkSync(patchPath);
+    } catch {
+      /* ignore */
+    }
+    try {
+      unlinkSync(outPath);
+    } catch {
+      /* ignore */
+    }
     return null;
   }
 
-  try { unlinkSync(patchPath); } catch { /* ignore */ }
+  try {
+    unlinkSync(patchPath);
+  } catch {
+    /* ignore */
+  }
   log.info(
     "auto-update",
     `Delta applied: ${(info.delta.size / 1024 / 1024).toFixed(1)} MB patch ` +
@@ -565,7 +593,11 @@ export async function downloadAndInstall(
 
     const binaryPaths = findBinaryPaths();
     if (binaryPaths.length === 0) {
-      try { unlinkSync(tmpPath); } catch { /* ignore */ }
+      try {
+        unlinkSync(tmpPath);
+      } catch {
+        /* ignore */
+      }
       result.error = "Could not find KCode binary path to replace.";
       return result;
     }
@@ -600,17 +632,31 @@ export async function downloadAndInstall(
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code === "EXDEV") {
           copyFileSync(tmpPath, destPath);
-          try { unlinkSync(tmpPath); } catch { /* ignore */ }
+          try {
+            unlinkSync(tmpPath);
+          } catch {
+            /* ignore */
+          }
         } else {
           throw err;
         }
       }
-      try { unlinkSync(sidecarBackup); } catch { /* may be in use */ }
+      try {
+        unlinkSync(sidecarBackup);
+      } catch {
+        /* may be in use */
+      }
     } catch (err) {
       try {
         if (existsSync(sidecarBackup)) renameSync(sidecarBackup, destPath);
-      } catch { /* best effort */ }
-      try { unlinkSync(tmpPath); } catch { /* ignore */ }
+      } catch {
+        /* best effort */
+      }
+      try {
+        unlinkSync(tmpPath);
+      } catch {
+        /* ignore */
+      }
       result.error = err instanceof Error ? err.message : "Binary replacement failed";
       return result;
     }
@@ -665,10 +711,16 @@ export async function rollback(): Promise<{ success: boolean; error?: string }> 
     } catch (err) {
       try {
         if (existsSync(sidecarBackup)) renameSync(sidecarBackup, destPath);
-      } catch { /* best effort */ }
+      } catch {
+        /* best effort */
+      }
       throw err;
     }
-    try { unlinkSync(sidecarBackup); } catch { /* may be in use */ }
+    try {
+      unlinkSync(sidecarBackup);
+    } catch {
+      /* may be in use */
+    }
 
     for (let i = 1; i < binaryPaths.length; i++) {
       try {

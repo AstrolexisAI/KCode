@@ -1,10 +1,7 @@
 // Tests for reference-extractor (v2.10.306).
 
 import { describe, expect, it } from "bun:test";
-import {
-  capturedListToRankedItems,
-  extractRepoList,
-} from "./reference-extractor";
+import { capturedListToRankedItems, extractRepoList } from "./reference-extractor";
 
 describe("extractRepoList — bullets", () => {
   it("captures a bullet list with emoji category prefix", () => {

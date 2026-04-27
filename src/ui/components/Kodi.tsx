@@ -5,9 +5,9 @@
 
 import { Box, Text } from "ink";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useModelDisplayLabel } from "../hooks/useModelDisplayLabel.js";
 import type { KodiAnimState, KodiEvent, KodiMood, KodiTier } from "../kodi-animation.js";
 import { KodiAnimEngine, SPEECH_CHIPS } from "../kodi-animation.js";
-import { useModelDisplayLabel } from "../hooks/useModelDisplayLabel.js";
 import { useTheme } from "../ThemeContext.js";
 
 // Re-export types for external consumers
@@ -291,10 +291,7 @@ async function generateReaction(context: string): Promise<KodiReaction | null> {
  * failure is routine, but 3+ in a row means the user is stuck and
  * Kodi might see a pattern.
  */
-export function shouldCallAdvisor(
-  event: KodiEvent,
-  consecutiveErrorCount: number,
-): boolean {
+export function shouldCallAdvisor(event: KodiEvent, consecutiveErrorCount: number): boolean {
   switch (event.type) {
     case "test_pass":
     case "test_fail":
@@ -377,25 +374,34 @@ function formatTime(ms: number): string {
 const MINI_TICK_MS = 150; // slightly faster than main Kodi for lively feel
 // Compact face expressions — no box, no body, just the face chars
 const MINI_FACES = {
-  local:     ["(^_^)", "(^v^)", "(^-^)", "(^.^)", "(^w^)", "(^_^)"],
+  local: ["(^_^)", "(^v^)", "(^-^)", "(^.^)", "(^w^)", "(^_^)"],
   reasoning: ["(O_O)", "(O.O)", "(@_@)", "(O_O)", "(0_0)", "(*_*)"],
-  fast:      ["(-_-)", "(o_o)", "(>_<)", "(-.-)", "(o_o)", "(^_-)"],
-  analysis:  ["(._.)","(o.o)", "(-.o)", "(o_o)", "(°.°)", "(._-)"],
-  default:   ["(o_o)", "(-.o)", "(o.o)", "(o_o)", "(*.*)", "(o_o)"],
+  fast: ["(-_-)", "(o_o)", "(>_<)", "(-.-)", "(o_o)", "(^_-)"],
+  analysis: ["(._.)", "(o.o)", "(-.o)", "(o_o)", "(°.°)", "(._-)"],
+  default: ["(o_o)", "(-.o)", "(o.o)", "(o_o)", "(*.*)", "(o_o)"],
 } satisfies Record<string, string[]>;
 const MINI_MOODS = {
-  local:     ["idle", "happy", "waving", "idle", "curious"],
+  local: ["idle", "happy", "waving", "idle", "curious"],
   reasoning: ["reasoning", "thinking", "reasoning", "curious", "reasoning"],
-  fast:      ["working", "excited", "working", "happy", "working"],
-  analysis:  ["thinking", "curious", "thinking", "reasoning", "curious"],
-  default:   ["idle", "thinking", "working", "happy", "idle"],
+  fast: ["working", "excited", "working", "happy", "working"],
+  analysis: ["thinking", "curious", "thinking", "reasoning", "curious"],
+  default: ["idle", "thinking", "working", "happy", "idle"],
 } satisfies Record<string, KodiMood[]>;
 
 function getMiniPersonality(modelName: string): string {
-  if (modelName === "mark7" || modelName.includes("mnemo") || modelName.includes("local")) return "local";
-  if (modelName.includes("reasoning") || modelName.includes("o1") || modelName.includes("o3")) return "reasoning";
-  if (modelName.includes("fast") || modelName.includes("mini") || modelName.includes("haiku") || modelName.includes("flash")) return "fast";
-  if (modelName.includes("opus") || modelName.includes("sonnet") || modelName.includes("grok-4.20")) return "analysis";
+  if (modelName === "mark7" || modelName.includes("mnemo") || modelName.includes("local"))
+    return "local";
+  if (modelName.includes("reasoning") || modelName.includes("o1") || modelName.includes("o3"))
+    return "reasoning";
+  if (
+    modelName.includes("fast") ||
+    modelName.includes("mini") ||
+    modelName.includes("haiku") ||
+    modelName.includes("flash")
+  )
+    return "fast";
+  if (modelName.includes("opus") || modelName.includes("sonnet") || modelName.includes("grok-4.20"))
+    return "analysis";
   return "default";
 }
 
@@ -418,14 +424,18 @@ function MiniKodi({ modelName, costUsd }: { modelName: string; costUsd: number }
       setFaceIdx((i) => (i + 1) % faces.length);
       if (frameCount % 7 === 0) setMoodIdx((i) => (i + 1) % moods.length);
       // Walk: drift left/right randomly within 0-3 cols
-      if (frameCount % 5 === 0) setWalkOffset((w) => Math.max(0, Math.min(3, w + (Math.random() > 0.5 ? 1 : -1))));
+      if (frameCount % 5 === 0)
+        setWalkOffset((w) => Math.max(0, Math.min(3, w + (Math.random() > 0.5 ? 1 : -1))));
     }, interval);
     return () => clearInterval(id);
   }, [faces.length, moods.length]);
 
   const faceColor: Record<string, string | undefined> = {
-    local: theme.success, reasoning: theme.accent, fast: theme.warning,
-    analysis: theme.primary, default: theme.dimmed,
+    local: theme.success,
+    reasoning: theme.accent,
+    fast: theme.warning,
+    analysis: theme.primary,
+    default: theme.dimmed,
   };
   const color = faceColor[personality] ?? theme.dimmed;
   const pad = " ".repeat(walkOffset);
@@ -436,7 +446,9 @@ function MiniKodi({ modelName, costUsd }: { modelName: string; costUsd: number }
     <Box flexDirection="column" alignItems="flex-start" width={14}>
       <Text color={color}>{pad + face}</Text>
       <Text color={theme.dimmed}>{shortName}</Text>
-      <Text color={theme.warning}>{`$${costUsd < 0.01 ? costUsd.toFixed(4) : costUsd.toFixed(3)}`}</Text>
+      <Text
+        color={theme.warning}
+      >{`$${costUsd < 0.01 ? costUsd.toFixed(4) : costUsd.toFixed(3)}`}</Text>
     </Box>
   );
 }
@@ -482,11 +494,16 @@ export default function KodiCompanion({
       try {
         const { isMultimodelEnabled } = await import("../../core/router.js");
         if (!cancelled) setMultimodelEnabled(isMultimodelEnabled());
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     };
     check();
     const id = setInterval(check, 2000);
-    return () => { cancelled = true; clearInterval(id); };
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, []);
   const [llmReaction, setLlmReaction] = useState<string | null>(null);
   // Most recent advice string from the Kodi advisor, displayed as a
@@ -618,9 +635,7 @@ export default function KodiCompanion({
       const pick = ready[0]!;
       try {
         if (pick.name === "boredom") {
-          const { askForIdleAction, pickRandomIdleAction } = await import(
-            "../kodi-autonomy.js"
-          );
+          const { askForIdleAction, pickRandomIdleAction } = await import("../kodi-autonomy.js");
           const dispatch =
             (await askForIdleAction(
               engine.personality,
@@ -629,10 +644,7 @@ export default function KodiCompanion({
             )) ?? pickRandomIdleAction(recentActionsRef.current as any);
           engine.setMood(dispatch.mood);
           engine.say(dispatch.speech, 3000);
-          recentActionsRef.current = [
-            ...recentActionsRef.current.slice(-4),
-            dispatch.action,
-          ];
+          recentActionsRef.current = [...recentActionsRef.current.slice(-4), dispatch.action];
           engine.drainUrge("boredom", 1.0);
         } else if (pick.name === "curiosity") {
           const { askForMusing } = await import("../kodi-autonomy.js");
@@ -666,9 +678,7 @@ export default function KodiCompanion({
   useEffect(() => {
     const id = setInterval(async () => {
       try {
-        const { collectObservations, renderObservation } = await import(
-          "../kodi-autonomy.js"
-        );
+        const { collectObservations, renderObservation } = await import("../kodi-autonomy.js");
         const signals = {
           idleMs: Date.now() - lastActivityRef.current,
           sessionMs: sessionStartTime ? Date.now() - sessionStartTime : 0,
@@ -752,9 +762,11 @@ export default function KodiCompanion({
           };
           const live = await fetchLiveBalance(status.provider, keyMap[status.provider] ?? "");
           if (!cancelled && live) {
-            setBalance((prev) => prev ? { ...prev, liveAvailable: live.available } : prev);
+            setBalance((prev) => (prev ? { ...prev, liveAvailable: live.available } : prev));
           }
-        } catch { /* live fetch optional */ }
+        } catch {
+          /* live fetch optional */
+        }
       } catch {
         if (!cancelled) setBalance(null);
       }
@@ -960,8 +972,7 @@ export default function KodiCompanion({
   // second half of the door frame already shows on the new side —
   // creating the "Kodi went through a door and came out on the
   // other side of the info text" effect the user asked for.
-  const panelSide: "row" | "row-reverse" =
-    frame?.side === "right" ? "row-reverse" : "row";
+  const panelSide: "row" | "row-reverse" = frame?.side === "right" ? "row-reverse" : "row";
 
   // Narrow-screen breakpoint (Termux on Android typically sits at
   // ~35–45 cols). The Kodi sprite eats 21 cols and the horizontal
@@ -1047,11 +1058,7 @@ export default function KodiCompanion({
               <Text
                 bold
                 color={
-                  tier === "enterprise"
-                    ? theme.accent
-                    : tier === "team"
-                      ? "#ffd700"
-                      : theme.warning
+                  tier === "enterprise" ? theme.accent : tier === "team" ? "#ffd700" : theme.warning
                 }
               >
                 {isNarrow
@@ -1073,7 +1080,9 @@ export default function KodiCompanion({
         <Box gap={1}>
           <Text color={theme.success}>{displayModel}</Text>
           {multimodelEnabled && (
-            <Text color={theme.accent} bold>{"🔀"}</Text>
+            <Text color={theme.accent} bold>
+              {"🔀"}
+            </Text>
           )}
           {permissionMode && (
             <>
@@ -1119,12 +1128,7 @@ export default function KodiCompanion({
                   balance.fractionRemaining != null
                     ? Math.round(balance.fractionRemaining * 100)
                     : 0;
-                const color =
-                  pct <= 5
-                    ? theme.error
-                    : pct <= 20
-                      ? theme.warning
-                      : theme.success;
+                const color = pct <= 5 ? theme.error : pct <= 20 ? theme.warning : theme.success;
                 return (
                   <>
                     <Text color={theme.dimmed}>•</Text>
@@ -1193,102 +1197,132 @@ export default function KodiCompanion({
         {/* Session economy: per-model cost breakdown + live balance */}
         {/* Unified multi-model panel: columns per model when multimodel ON,
             simple list when multimodel OFF */}
-        {sessionModelBreakdown.length > 0 && (() => {
-          const maxCost = Math.max(...sessionModelBreakdown.map(x => x.costUsd), 0.0001);
-          const totalSpent = sessionModelBreakdown.reduce((s, m) => s + m.costUsd, 0);
-          const balanceVal = balance ? (balance.liveAvailable ?? balance.remaining ?? null) : null;
+        {sessionModelBreakdown.length > 0 &&
+          (() => {
+            const maxCost = Math.max(...sessionModelBreakdown.map((x) => x.costUsd), 0.0001);
+            const totalSpent = sessionModelBreakdown.reduce((s, m) => s + m.costUsd, 0);
+            const balanceVal = balance
+              ? (balance.liveAvailable ?? balance.remaining ?? null)
+              : null;
 
-          if (multimodelEnabled && sessionModelBreakdown.length > 1) {
-            // Wide columnar layout — one column per model
-            const cols = Math.min(sessionModelBreakdown.length, 4);
-            const colW = Math.max(14, Math.floor((Math.min(cols * 80, process.stdout.columns || 80) - 4) / cols));
-            return (
-              <Box flexDirection="column" marginTop={0} marginLeft={1}>
-                <Text color={theme.accent} bold>
-                  {"─── 🔀 Multi-Model "}
-                  <Text color={theme.dimmed}>{"─".repeat(Math.max(0, (colW * cols) - 18))}</Text>
-                </Text>
-                {/* Row 1: animated faces */}
-                <Box flexDirection="row" marginLeft={1}>
-                  {sessionModelBreakdown.slice(0, cols).map((m) => (
-                    <Box key={m.model} width={colW}>
-                      <MiniKodi modelName={m.model} costUsd={m.costUsd} />
-                    </Box>
-                  ))}
-                </Box>
-                {/* Row 2: cost + bar + turns per model */}
-                <Box flexDirection="row" marginLeft={1} marginTop={0}>
-                  {sessionModelBreakdown.slice(0, cols).map((m) => {
-                    const bar = Math.round((m.costUsd / maxCost) * 4);
-                    const barStr = "█".repeat(bar) + "░".repeat(4 - bar);
-                    const cost = m.costUsd === 0 ? "local" : `$${m.costUsd < 0.01 ? m.costUsd.toFixed(4) : m.costUsd.toFixed(3)}`;
-                    return (
-                      <Box key={m.model} width={colW}>
-                        <Text color={m.costUsd === 0 ? theme.success : theme.warning}>{cost}</Text>
-                        <Text color={theme.dimmed}>{` ${barStr} ${m.turns}t`}</Text>
-                      </Box>
-                    );
-                  })}
-                </Box>
-                {/* Balance footer */}
-                <Box marginLeft={1} marginTop={0}>
-                  <Text color={theme.dimmed}>
-                    {balanceVal != null
-                      ? `Balance: $${balanceVal.toFixed(2)} · session: $${totalSpent.toFixed(4)}`
-                      : `Session total: $${totalSpent.toFixed(4)}`}
+            if (multimodelEnabled && sessionModelBreakdown.length > 1) {
+              // Wide columnar layout — one column per model
+              const cols = Math.min(sessionModelBreakdown.length, 4);
+              const colW = Math.max(
+                14,
+                Math.floor((Math.min(cols * 80, process.stdout.columns || 80) - 4) / cols),
+              );
+              return (
+                <Box flexDirection="column" marginTop={0} marginLeft={1}>
+                  <Text color={theme.accent} bold>
+                    {"─── 🔀 Multi-Model "}
+                    <Text color={theme.dimmed}>{"─".repeat(Math.max(0, colW * cols - 18))}</Text>
                   </Text>
+                  {/* Row 1: animated faces */}
+                  <Box flexDirection="row" marginLeft={1}>
+                    {sessionModelBreakdown.slice(0, cols).map((m) => (
+                      <Box key={m.model} width={colW}>
+                        <MiniKodi modelName={m.model} costUsd={m.costUsd} />
+                      </Box>
+                    ))}
+                  </Box>
+                  {/* Row 2: cost + bar + turns per model */}
+                  <Box flexDirection="row" marginLeft={1} marginTop={0}>
+                    {sessionModelBreakdown.slice(0, cols).map((m) => {
+                      const bar = Math.round((m.costUsd / maxCost) * 4);
+                      const barStr = "█".repeat(bar) + "░".repeat(4 - bar);
+                      const cost =
+                        m.costUsd === 0
+                          ? "local"
+                          : `$${m.costUsd < 0.01 ? m.costUsd.toFixed(4) : m.costUsd.toFixed(3)}`;
+                      return (
+                        <Box key={m.model} width={colW}>
+                          <Text color={m.costUsd === 0 ? theme.success : theme.warning}>
+                            {cost}
+                          </Text>
+                          <Text color={theme.dimmed}>{` ${barStr} ${m.turns}t`}</Text>
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                  {/* Balance footer */}
+                  <Box marginLeft={1} marginTop={0}>
+                    <Text color={theme.dimmed}>
+                      {balanceVal != null
+                        ? `Balance: $${balanceVal.toFixed(2)} · session: $${totalSpent.toFixed(4)}`
+                        : `Session total: $${totalSpent.toFixed(4)}`}
+                    </Text>
+                  </Box>
                 </Box>
+              );
+            }
+
+            // Single-model mode: compact list (no mini-Kodis)
+            return (
+              <Box flexDirection="column" marginTop={0} marginLeft={2}>
+                <Text color={theme.dimmed} bold>
+                  {"─ Economy ─"}
+                </Text>
+                {sessionModelBreakdown.slice(0, 5).map((m) => {
+                  const bar = Math.round((m.costUsd / maxCost) * 6);
+                  const barStr = "█".repeat(bar) + "░".repeat(6 - bar);
+                  const name = m.model.length > 20 ? m.model.slice(0, 20) : m.model.padEnd(20);
+                  const cost =
+                    m.costUsd === 0
+                      ? "local "
+                      : `$${m.costUsd < 0.01 ? m.costUsd.toFixed(4) : m.costUsd.toFixed(3)}`;
+                  return (
+                    <Box key={m.model} gap={1}>
+                      <Text color={theme.dimmed}>{name}</Text>
+                      <Text color={m.costUsd === 0 ? theme.success : theme.warning}>{cost}</Text>
+                      <Text color={theme.dimmed}>{barStr}</Text>
+                      <Text color={theme.dimmed}>{m.turns}t</Text>
+                    </Box>
+                  );
+                })}
+                {balanceVal != null && (
+                  <Text color={theme.dimmed}>
+                    {"Balance: "}
+                    <Text color={theme.success}>${balanceVal.toFixed(2)}</Text>
+                    {" · spent: "}
+                    <Text color={theme.warning}>${totalSpent.toFixed(4)}</Text>
+                  </Text>
+                )}
               </Box>
             );
-          }
-
-          // Single-model mode: compact list (no mini-Kodis)
-          return (
-            <Box flexDirection="column" marginTop={0} marginLeft={2}>
-              <Text color={theme.dimmed} bold>{"─ Economy ─"}</Text>
-              {sessionModelBreakdown.slice(0, 5).map((m) => {
-                const bar = Math.round((m.costUsd / maxCost) * 6);
-                const barStr = "█".repeat(bar) + "░".repeat(6 - bar);
-                const name = m.model.length > 20 ? m.model.slice(0, 20) : m.model.padEnd(20);
-                const cost = m.costUsd === 0 ? "local " : `$${m.costUsd < 0.01 ? m.costUsd.toFixed(4) : m.costUsd.toFixed(3)}`;
-                return (
-                  <Box key={m.model} gap={1}>
-                    <Text color={theme.dimmed}>{name}</Text>
-                    <Text color={m.costUsd === 0 ? theme.success : theme.warning}>{cost}</Text>
-                    <Text color={theme.dimmed}>{barStr}</Text>
-                    <Text color={theme.dimmed}>{m.turns}t</Text>
-                  </Box>
-                );
-              })}
-              {balanceVal != null && (
-                <Text color={theme.dimmed}>{"Balance: "}
-                  <Text color={theme.success}>${balanceVal.toFixed(2)}</Text>
-                  {" · spent: "}<Text color={theme.warning}>${totalSpent.toFixed(4)}</Text>
-                </Text>
-              )}
-            </Box>
-          );
-        })()}
+          })()}
 
         {/* Line 4: Live agent panel (when agents are running) */}
         {lastEvent?.agentStatuses && lastEvent.agentStatuses.length > 0 && (
           <Box flexDirection="column">
             <Text color={theme.warning} bold>
-              {"⚡ Agents (" + lastEvent.agentStatuses.filter(a => a.status === "running").length + " running)"}
+              {"⚡ Agents (" +
+                lastEvent.agentStatuses.filter((a) => a.status === "running").length +
+                " running)"}
             </Text>
             {lastEvent.agentStatuses.map((agent, i) => {
-              const icon = agent.status === "running" ? "⣾⣽⣻⢿⡿⣟⣯⣷"[Math.floor(Date.now() / 100) % 8]
-                : agent.status === "done" ? "✓"
-                : agent.status === "failed" ? "✗"
-                : "○";
-              const color = agent.status === "running" ? theme.warning
-                : agent.status === "done" ? theme.success
-                : agent.status === "failed" ? theme.error
-                : theme.dimmed;
+              const icon =
+                agent.status === "running"
+                  ? "⣾⣽⣻⢿⡿⣟⣯⣷"[Math.floor(Date.now() / 100) % 8]
+                  : agent.status === "done"
+                    ? "✓"
+                    : agent.status === "failed"
+                      ? "✗"
+                      : "○";
+              const color =
+                agent.status === "running"
+                  ? theme.warning
+                  : agent.status === "done"
+                    ? theme.success
+                    : agent.status === "failed"
+                      ? theme.error
+                      : theme.dimmed;
               const elapsed = agent.durationMs ? ` ${Math.round(agent.durationMs / 1000)}s` : "";
               return (
                 <Text key={i} color={color}>
-                  {"  "}{icon} {agent.name}: {agent.stepTitle.slice(0, 50)}{elapsed}
+                  {"  "}
+                  {icon} {agent.name}: {agent.stepTitle.slice(0, 50)}
+                  {elapsed}
                 </Text>
               );
             })}

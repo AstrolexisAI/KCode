@@ -10,10 +10,10 @@
 // message contains no agent-dispatch intent so the regular
 // conversation flow proceeds unchanged.
 
-import type { Agent, AgentRole } from "./types";
-import { ROLES } from "./roles";
-import { getAgentPool } from "./pool";
 import { dispatchFromInstruction } from "./factory";
+import { getAgentPool } from "./pool";
+import { ROLES } from "./roles";
+import type { Agent, AgentRole } from "./types";
 
 /**
  * Result returned to the conversation loop when agent intent is
@@ -76,10 +76,7 @@ const INTENT_KEYWORDS = /\b(?:agente|agent|worker|bot|team|grupo|group|swarm|par
  * the new agent pool state via the system-prompt fragment on its
  * next turn.
  */
-export function detectAgentIntent(
-  message: string,
-  cwd: string,
-): AgentIntentResult | null {
+export function detectAgentIntent(message: string, cwd: string): AgentIntentResult | null {
   // Fast path: skip pattern matching for messages that don't even
   // mention agents. Saves ~10 regex runs per non-agent turn.
   if (!INTENT_KEYWORDS.test(message)) return null;
@@ -106,9 +103,7 @@ export function detectAgentIntent(
 
   // Also look for explicit group names independently of the count
   if (!groupName) {
-    const groupMatch = message.match(
-      /\b(?:grupo|group|team|squad)\s+([A-Z][A-Za-z]+|\d+|\w{2,})/i,
-    );
+    const groupMatch = message.match(/\b(?:grupo|group|team|squad)\s+([A-Z][A-Za-z]+|\d+|\w{2,})/i);
     if (groupMatch) groupName = groupMatch[1];
   }
 
@@ -116,9 +111,7 @@ export function detectAgentIntent(
   if (!requestedCount && !groupName) return null;
 
   // Extract the task text: strip the "N agentes para" prefix if present.
-  const taskMatch = message.match(
-    /(?:para|to|for)\s+(.+?)(?:[.!?]|$)/i,
-  );
+  const taskMatch = message.match(/(?:para|to|for)\s+(.+?)(?:[.!?]|$)/i);
   const task = taskMatch ? taskMatch[1]!.trim() : message.trim();
 
   // Dispatch via the factory.

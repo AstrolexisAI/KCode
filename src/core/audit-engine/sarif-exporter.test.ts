@@ -109,27 +109,19 @@ describe("fingerprintFinding", () => {
 
 describe("relativize", () => {
   test("strips project root prefix", () => {
-    expect(relativize("/home/user/proj/src/a.ts", "/home/user/proj")).toBe(
-      "src/a.ts",
-    );
+    expect(relativize("/home/user/proj/src/a.ts", "/home/user/proj")).toBe("src/a.ts");
   });
 
   test("handles trailing slash on project root", () => {
-    expect(relativize("/home/user/proj/src/a.ts", "/home/user/proj/")).toBe(
-      "src/a.ts",
-    );
+    expect(relativize("/home/user/proj/src/a.ts", "/home/user/proj/")).toBe("src/a.ts");
   });
 
   test("falls back to basename when file is outside project root", () => {
-    expect(relativize("/tmp/somewhere/else.ts", "/home/user/proj")).toBe(
-      "else.ts",
-    );
+    expect(relativize("/tmp/somewhere/else.ts", "/home/user/proj")).toBe("else.ts");
   });
 
   test("normalizes Windows backslashes to forward slashes", () => {
-    expect(
-      relativize("C:\\Users\\u\\proj\\src\\a.ts", "C:\\Users\\u\\proj"),
-    ).toBe("src/a.ts");
+    expect(relativize("C:\\Users\\u\\proj\\src\\a.ts", "C:\\Users\\u\\proj")).toBe("src/a.ts");
   });
 });
 
@@ -179,8 +171,8 @@ describe("buildSarif — top-level structure", () => {
       toolVersion: "2.10.119",
       projectRoot: "/home/user/proj",
     }) as Record<string, unknown>;
-    const rules = (shared.runs as Array<{ tool: { driver: { rules: unknown[] } } }>)[0]!
-      .tool.driver.rules;
+    const rules = (shared.runs as Array<{ tool: { driver: { rules: unknown[] } } }>)[0]!.tool.driver
+      .rules;
     // 3 findings → same rule → should only appear once
     expect(rules.length).toBe(1);
   });
@@ -195,8 +187,7 @@ describe("buildSarif — results", () => {
     toolVersion: "2.10.119",
     projectRoot: "/home/user/proj",
   }) as Record<string, unknown>;
-  const results = (doc.runs as Array<{ results: Array<Record<string, unknown>> }>)[0]!
-    .results;
+  const results = (doc.runs as Array<{ results: Array<Record<string, unknown>> }>)[0]!.results;
 
   test("emits one result per finding", () => {
     expect(results.length).toBe(2);
@@ -213,9 +204,11 @@ describe("buildSarif — results", () => {
   });
 
   test("location uses a project-relative URI", () => {
-    const loc = (results[0]!.locations as Array<{
-      physicalLocation: { artifactLocation: { uri: string } };
-    }>)[0]!;
+    const loc = (
+      results[0]!.locations as Array<{
+        physicalLocation: { artifactLocation: { uri: string } };
+      }>
+    )[0]!;
     expect(loc.physicalLocation.artifactLocation.uri).toBe("src/handler.py");
   });
 
@@ -236,7 +229,9 @@ describe("buildSarif — empty audit", () => {
       toolVersion: "2.10.119",
       projectRoot: "/home/user/proj",
     }) as Record<string, unknown>;
-    const run = (doc.runs as Array<{ results: unknown[]; tool: { driver: { rules: unknown[] } } }>)[0]!;
+    const run = (
+      doc.runs as Array<{ results: unknown[]; tool: { driver: { rules: unknown[] } } }>
+    )[0]!;
     expect(run.results).toEqual([]);
     expect(run.tool.driver.rules).toEqual([]);
   });
@@ -257,10 +252,12 @@ describe("buildSarif — review_state filtering (v2.10.351 P0)", () => {
       toolVersion: "2.10.351",
       projectRoot: "/home/user/proj",
     }) as Record<string, unknown>;
-    const run = (doc.runs as Array<{
-      results: Array<{ ruleId: string }>;
-      tool: { driver: { rules: Array<{ id: string }> } };
-    }>)[0]!;
+    const run = (
+      doc.runs as Array<{
+        results: Array<{ ruleId: string }>;
+        tool: { driver: { rules: Array<{ id: string }> } };
+      }>
+    )[0]!;
     expect(run.results.length).toBe(1);
     expect(run.results[0]!.ruleId).toBe("py-002-yaml-load");
     // The rule registry must also drop the ignored pattern's rule
@@ -269,9 +266,7 @@ describe("buildSarif — review_state filtering (v2.10.351 P0)", () => {
   });
 
   test("excludes 'demoted_fp' as a defensive guard", () => {
-    const audit = makeAudit([
-      makeFinding({ pattern_id: "p1", review_state: "demoted_fp" }),
-    ]);
+    const audit = makeAudit([makeFinding({ pattern_id: "p1", review_state: "demoted_fp" })]);
     const doc = buildSarif(audit, {
       toolVersion: "2.10.351",
       projectRoot: "/home/user/proj",
@@ -281,9 +276,7 @@ describe("buildSarif — review_state filtering (v2.10.351 P0)", () => {
   });
 
   test("includes 'promoted' findings (regression for P0.5+P0.7)", () => {
-    const audit = makeAudit([
-      makeFinding({ pattern_id: "p1", review_state: "promoted" }),
-    ]);
+    const audit = makeAudit([makeFinding({ pattern_id: "p1", review_state: "promoted" })]);
     const doc = buildSarif(audit, {
       toolVersion: "2.10.351",
       projectRoot: "/home/user/proj",

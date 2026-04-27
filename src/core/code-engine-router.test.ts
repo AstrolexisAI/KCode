@@ -1,4 +1,4 @@
-import { describe, test, expect } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { detectCodeEngine } from "./code-engine-router";
 
 describe("code-engine-router", () => {

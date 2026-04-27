@@ -2,9 +2,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { render } from "ink-testing-library";
 import React from "react";
-import { KeybindingProvider } from "./KeybindingContext";
 import { ThemeProvider } from "../ThemeContext";
 import InputPrompt from "./InputPrompt";
+import { KeybindingProvider } from "./KeybindingContext";
 
 function renderWithProviders(element: React.ReactElement) {
   return render(
@@ -32,12 +32,7 @@ describe("InputPrompt render", () => {
 
   test("shows model and cwd prefix when provided", () => {
     instance = renderWithProviders(
-      <InputPrompt
-        onSubmit={() => {}}
-        isActive={true}
-        model="gpt-4o"
-        cwd="/home/user/project"
-      />,
+      <InputPrompt onSubmit={() => {}} isActive={true} model="gpt-4o" cwd="/home/user/project" />,
     );
     const out = instance.lastFrame()!;
     expect(out).toContain("gpt-4o");
@@ -45,12 +40,7 @@ describe("InputPrompt render", () => {
 
   test("shows queueing indicator when isQueuing", () => {
     instance = renderWithProviders(
-      <InputPrompt
-        onSubmit={() => {}}
-        isActive={true}
-        isQueuing={true}
-        queueSize={2}
-      />,
+      <InputPrompt onSubmit={() => {}} isActive={true} isQueuing={true} queueSize={2} />,
     );
     const out = instance.lastFrame()!;
     // Queue indicator appears somewhere
@@ -58,9 +48,7 @@ describe("InputPrompt render", () => {
   });
 
   test("types characters into input", async () => {
-    instance = renderWithProviders(
-      <InputPrompt onSubmit={() => {}} isActive={true} />,
-    );
+    instance = renderWithProviders(<InputPrompt onSubmit={() => {}} isActive={true} />);
     instance.stdin.write("hello");
     // Wait for state update
     await new Promise((r) => setTimeout(r, 50));
@@ -69,9 +57,7 @@ describe("InputPrompt render", () => {
   });
 
   test("inactive prompt doesn't respond to input", async () => {
-    instance = renderWithProviders(
-      <InputPrompt onSubmit={() => {}} isActive={false} />,
-    );
+    instance = renderWithProviders(<InputPrompt onSubmit={() => {}} isActive={false} />);
     instance.stdin.write("ignored");
     await new Promise((r) => setTimeout(r, 50));
     const out = instance.lastFrame()!;
@@ -79,9 +65,7 @@ describe("InputPrompt render", () => {
   });
 
   test("input buffer accumulates typed characters", async () => {
-    instance = renderWithProviders(
-      <InputPrompt onSubmit={() => {}} isActive={true} />,
-    );
+    instance = renderWithProviders(<InputPrompt onSubmit={() => {}} isActive={true} />);
     // Type characters one at a time, similar to real keyboard input
     for (const ch of "abc") {
       instance.stdin.write(ch);
@@ -94,9 +78,7 @@ describe("InputPrompt render", () => {
 
   // Phase 29: full multiline paste rendering
   test("multiline input renders all pasted lines (not compact summary)", async () => {
-    instance = renderWithProviders(
-      <InputPrompt onSubmit={() => {}} isActive={true} />,
-    );
+    instance = renderWithProviders(<InputPrompt onSubmit={() => {}} isActive={true} />);
     // Simulate bracketed paste via stdin with explicit \x1b[200~ / \x1b[201~
     // markers so paste-stream.ts captures it as a paste
     const content = "first line\nsecond line\nthird line";
@@ -113,9 +95,7 @@ describe("InputPrompt render", () => {
   });
 
   test("multiline input shows line numbers on each visible line", async () => {
-    instance = renderWithProviders(
-      <InputPrompt onSubmit={() => {}} isActive={true} />,
-    );
+    instance = renderWithProviders(<InputPrompt onSubmit={() => {}} isActive={true} />);
     instance.stdin.write("\x1b[200~alpha\nbeta\x1b[201~");
     await new Promise((r) => setTimeout(r, 150));
     const out = instance.lastFrame()!;
@@ -128,13 +108,9 @@ describe("InputPrompt render", () => {
   });
 
   test("very large multiline paste shows viewport with above/below markers", async () => {
-    instance = renderWithProviders(
-      <InputPrompt onSubmit={() => {}} isActive={true} />,
-    );
+    instance = renderWithProviders(<InputPrompt onSubmit={() => {}} isActive={true} />);
     // 30-line paste, viewport caps at 20 — should show truncation hints
-    const bigContent = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join(
-      "\n",
-    );
+    const bigContent = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join("\n");
     instance.stdin.write(`\x1b[200~${bigContent}\x1b[201~`);
     await new Promise((r) => setTimeout(r, 150));
     const out = instance.lastFrame()!;

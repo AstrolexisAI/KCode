@@ -82,9 +82,7 @@ function buildVerifyPrompt(candidate: Candidate): string {
     const content = readFileSync(candidate.file, "utf-8");
     const lines = content.split("\n");
     if (lines.length <= 200) {
-      extendedContext = lines
-        .map((l, i) => `${i + 1}: ${l}`)
-        .join("\n");
+      extendedContext = lines.map((l, i) => `${i + 1}: ${l}`).join("\n");
     } else {
       const start = Math.max(0, candidate.line - 30);
       const end = Math.min(lines.length, candidate.line + 30);
@@ -248,16 +246,19 @@ function coerceVerification(parsed: unknown): Verification | null {
   // qualifier word. Strict equality forces the model to pick one of
   // the three valid verdicts; degraded output goes through the
   // retry-then-degrade path instead.
-  const rawVerdict = String(obj.verdict ?? "").toLowerCase().trim();
+  const rawVerdict = String(obj.verdict ?? "")
+    .toLowerCase()
+    .trim();
   const verdict = VALID_VERDICTS.find((v) => rawVerdict === v);
   if (!verdict) return null;
 
   const reasoning = typeof obj.reasoning === "string" ? obj.reasoning.trim() : "";
   if (!reasoning) return null;
 
-  const evidenceRaw = obj.evidence && typeof obj.evidence === "object"
-    ? (obj.evidence as Record<string, unknown>)
-    : null;
+  const evidenceRaw =
+    obj.evidence && typeof obj.evidence === "object"
+      ? (obj.evidence as Record<string, unknown>)
+      : null;
 
   let evidence: VerifierEvidence | undefined;
   if (evidenceRaw) {
@@ -267,16 +268,18 @@ function coerceVerification(parsed: unknown): Verification | null {
     // false_positive at any structural level. Drop the evidence
     // block entirely if absent.
     if (sink) {
-      const fixStrategyRaw = typeof evidenceRaw.suggested_fix_strategy === "string"
-        ? evidenceRaw.suggested_fix_strategy.toLowerCase().trim()
-        : "";
+      const fixStrategyRaw =
+        typeof evidenceRaw.suggested_fix_strategy === "string"
+          ? evidenceRaw.suggested_fix_strategy.toLowerCase().trim()
+          : "";
       const fixStrategy = VALID_FIX_STRATEGIES.find((s) => fixStrategyRaw === s);
 
       evidence = {
         sink,
-        input_boundary: typeof evidenceRaw.input_boundary === "string"
-          ? evidenceRaw.input_boundary.trim() || undefined
-          : undefined,
+        input_boundary:
+          typeof evidenceRaw.input_boundary === "string"
+            ? evidenceRaw.input_boundary.trim() || undefined
+            : undefined,
         execution_path_steps: isStringArray(evidenceRaw.execution_path_steps)
           ? evidenceRaw.execution_path_steps
           : undefined,
@@ -287,12 +290,14 @@ function coerceVerification(parsed: unknown): Verification | null {
           ? evidenceRaw.mitigations_found
           : undefined,
         suggested_fix_strategy: fixStrategy,
-        suggested_fix: typeof evidenceRaw.suggested_fix === "string"
-          ? evidenceRaw.suggested_fix.trim() || undefined
-          : undefined,
-        test_suggestion: typeof evidenceRaw.test_suggestion === "string"
-          ? evidenceRaw.test_suggestion.trim() || undefined
-          : undefined,
+        suggested_fix:
+          typeof evidenceRaw.suggested_fix === "string"
+            ? evidenceRaw.suggested_fix.trim() || undefined
+            : undefined,
+        test_suggestion:
+          typeof evidenceRaw.test_suggestion === "string"
+            ? evidenceRaw.test_suggestion.trim() || undefined
+            : undefined,
       };
     }
   }
@@ -332,16 +337,16 @@ function extractAndParseJson(response: string): unknown {
 
   let depth = 0;
   let inString = false;
-  let escape = false;
+  let isEscaped = false;
   let end = -1;
   for (let i = start; i < text.length; i++) {
     const ch = text[i]!;
-    if (escape) {
-      escape = false;
+    if (isEscaped) {
+      isEscaped = false;
       continue;
     }
     if (ch === "\\") {
-      escape = true;
+      isEscaped = true;
       continue;
     }
     if (ch === '"') {
@@ -360,7 +365,8 @@ function extractAndParseJson(response: string): unknown {
   }
   if (end === -1) return null;
 
-  const candidate = text.slice(start, end + 1)
+  const candidate = text
+    .slice(start, end + 1)
     // Trailing comma before } or ] — common LLM failure mode.
     .replace(/,(\s*[}\]])/g, "$1");
 
@@ -466,9 +472,7 @@ export async function verifyAllCandidates(
   for (let i = 0; i < candidates.length; i++) {
     if (opts.signal?.aborted) {
       const { ScanCancelledError } = await import("./scan-state");
-      throw new ScanCancelledError(
-        `Scan cancelled at candidate ${i}/${candidates.length}`,
-      );
+      throw new ScanCancelledError(`Scan cancelled at candidate ${i}/${candidates.length}`);
     }
     const c = candidates[i]!;
     opts.onProgress?.(i, candidates.length, c);
@@ -486,8 +490,7 @@ export async function verifyAllCandidates(
       const isTransport =
         /Unable to connect|ECONNREFUSED|ENOTFOUND|fetch failed|timeout|EAI_AGAIN|connection refused|getaddrinfo/i.test(
           msg,
-        ) ||
-        /\bLLM 40[14]\b|\bLLM 5\d\d\b|\bAnthropic 40[14]\b|\bAnthropic 5\d\d\b/.test(msg);
+        ) || /\bLLM 40[14]\b|\bLLM 5\d\d\b|\bAnthropic 40[14]\b|\bAnthropic 5\d\d\b/.test(msg);
       if (isTransport) {
         consecutiveTransportFailures++;
         if (consecutiveTransportFailures >= TRANSPORT_FAIL_LIMIT && i + 1 >= TRANSPORT_FAIL_LIMIT) {
@@ -514,4 +517,4 @@ export async function verifyAllCandidates(
 }
 
 // Exported for tests
-export { buildVerifyPrompt, parseVerdict, extractAndParseJson, coerceVerification };
+export { buildVerifyPrompt, coerceVerification, extractAndParseJson, parseVerdict };

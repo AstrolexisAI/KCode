@@ -12,7 +12,7 @@
 // the real work.
 
 import { log } from "../logger";
-import { getModelBaseUrl, getDefaultModel } from "../models";
+import { getDefaultModel, getModelBaseUrl } from "../models";
 import { ROLES } from "./roles";
 import type { Agent, AgentExecutor, PoolEvent } from "./types";
 
@@ -191,10 +191,11 @@ export async function llmExecutor(
         content: Array<{ type: string; text?: string }>;
         usage?: { input_tokens: number; output_tokens: number };
       };
-      content = json.content
-        ?.filter((c) => c.type === "text" && typeof c.text === "string")
-        .map((c) => c.text!)
-        .join("") ?? "";
+      content =
+        json.content
+          ?.filter((c) => c.type === "text" && typeof c.text === "string")
+          .map((c) => c.text!)
+          .join("") ?? "";
       inputTokens = json.usage?.input_tokens ?? 0;
       outputTokens = json.usage?.output_tokens ?? 0;
     } else {
@@ -207,7 +208,9 @@ export async function llmExecutor(
       outputTokens = json.usage?.completion_tokens ?? 0;
     }
   } catch (err) {
-    throw new Error(`Failed to parse LLM response: ${err instanceof Error ? err.message : String(err)}`);
+    throw new Error(
+      `Failed to parse LLM response: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
   agent.tokenUsage.input = inputTokens;

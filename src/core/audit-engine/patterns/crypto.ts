@@ -55,7 +55,18 @@ export const CRYPTO_PATTERNS: BugPattern[] = [
     id: "crypto-003-md5-sha1-for-auth",
     title: "MD5 / SHA1 used for authentication / signing / passwords",
     severity: "high",
-    languages: ["c", "cpp", "python", "javascript", "typescript", "go", "java", "csharp", "php", "ruby"],
+    languages: [
+      "c",
+      "cpp",
+      "python",
+      "javascript",
+      "typescript",
+      "go",
+      "java",
+      "csharp",
+      "php",
+      "ruby",
+    ],
     regex:
       /\b(MD5|SHA1|Sha1|sha1|md5|MessageDigest\.getInstance\s*\(\s*"(?:MD5|SHA-?1)"|hashlib\.(?:md5|sha1)|createHash\s*\(\s*['"](md5|sha1)['"])\b/g,
     explanation:
@@ -89,7 +100,18 @@ export const CRYPTO_PATTERNS: BugPattern[] = [
     id: "crypto-005-timing-safe-compare-missing",
     title: "String equality (==, strcmp, ===) used on MAC / HMAC / token",
     severity: "high",
-    languages: ["c", "cpp", "python", "javascript", "typescript", "go", "java", "csharp", "php", "ruby"],
+    languages: [
+      "c",
+      "cpp",
+      "python",
+      "javascript",
+      "typescript",
+      "go",
+      "java",
+      "csharp",
+      "php",
+      "ruby",
+    ],
     regex:
       /\b(mac|hmac|signature|sig|token|digest|tag|authTag)\s*(?:==|===|!=|!==)\s*|\bstrcmp\s*\([^,]*(mac|hmac|signature|sig|token|digest|tag)\b|\bstrncmp\s*\([^,]*(mac|hmac|signature|sig|token|digest|tag)\b/gi,
     explanation:
@@ -140,13 +162,25 @@ export const CRYPTO_PATTERNS: BugPattern[] = [
     id: "crypto-008-hardcoded-key",
     title: "Hardcoded cryptographic key / IV / secret in source",
     severity: "critical",
-    languages: ["c", "cpp", "python", "javascript", "typescript", "go", "java", "csharp", "php", "ruby", "rust"],
+    languages: [
+      "c",
+      "cpp",
+      "python",
+      "javascript",
+      "typescript",
+      "go",
+      "java",
+      "csharp",
+      "php",
+      "ruby",
+      "rust",
+    ],
     regex:
       /\b(key|secret|password|token|api_?key|privat[ea]Key|jwt[_.]?secret)\s*[:=]\s*['"`][A-Za-z0-9+/=\-_]{16,}['"`]/gi,
     explanation:
       "Cryptographic keys / secrets committed to source code are extractable from any released binary, leaked via git history, and rotated only via code deploy. CVE examples: Mirai (hardcoded credentials), thousands of leaked API keys on GitHub.",
     verify_prompt:
-      "Check these before confirming. FALSE_POSITIVE if ANY is true:\n1. Is the value a TEST VECTOR (RFC standard value like RFC 3610 test keys)? → FALSE_POSITIVE\n2. Is it in a test/fixture file (path contains /test/ /spec/ /fixtures/)? → FALSE_POSITIVE\n3. Is it a placeholder / example value (\"changeme\", \"INSERT_KEY_HERE\", \"xxx...\")? → FALSE_POSITIVE\n4. Is it a PUBLIC key (intended to be embedded)? → FALSE_POSITIVE\nOnly CONFIRMED when this appears to be a real secret that was committed by accident.",
+      'Check these before confirming. FALSE_POSITIVE if ANY is true:\n1. Is the value a TEST VECTOR (RFC standard value like RFC 3610 test keys)? → FALSE_POSITIVE\n2. Is it in a test/fixture file (path contains /test/ /spec/ /fixtures/)? → FALSE_POSITIVE\n3. Is it a placeholder / example value ("changeme", "INSERT_KEY_HERE", "xxx...")? → FALSE_POSITIVE\n4. Is it a PUBLIC key (intended to be embedded)? → FALSE_POSITIVE\nOnly CONFIRMED when this appears to be a real secret that was committed by accident.',
     cwe: "CWE-798",
     fix_template:
       "Move to environment variable / secrets manager (HashiCorp Vault, AWS Secrets Manager, Doppler). Purge from git history (git filter-repo) and rotate the compromised value.",
@@ -157,7 +191,18 @@ export const CRYPTO_PATTERNS: BugPattern[] = [
     id: "crypto-009-ecb-mode",
     title: "AES-ECB or DES-ECB mode used",
     severity: "high",
-    languages: ["c", "cpp", "python", "javascript", "typescript", "go", "java", "csharp", "php", "ruby"],
+    languages: [
+      "c",
+      "cpp",
+      "python",
+      "javascript",
+      "typescript",
+      "go",
+      "java",
+      "csharp",
+      "php",
+      "ruby",
+    ],
     regex:
       /\b(AES[_.]ECB|DES[_.]ECB|MODE_ECB|\/ECB\/|aes-\d{3}-ecb|ECB_MODE|CipherMode\.ECB|BlockCipher\.ECB)\b/gi,
     explanation:
@@ -208,7 +253,18 @@ export const CRYPTO_PATTERNS: BugPattern[] = [
     id: "crypto-012-homerolled-xor",
     title: "Home-rolled XOR 'encryption' of sensitive data",
     severity: "high",
-    languages: ["c", "cpp", "python", "javascript", "typescript", "go", "java", "csharp", "php", "ruby"],
+    languages: [
+      "c",
+      "cpp",
+      "python",
+      "javascript",
+      "typescript",
+      "go",
+      "java",
+      "csharp",
+      "php",
+      "ruby",
+    ],
     regex:
       /(?:for\s*\([^)]*\)\s*\{[^}]*\^=\s*(?:key|secret|pass)|\.map\s*\(\s*\([^)]*\)\s*=>\s*[^)]*\^\s*(?:key|secret|pass))/gi,
     explanation:

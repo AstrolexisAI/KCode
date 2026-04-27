@@ -96,7 +96,10 @@ export function microcompactToolResults(messages: Message[]): number {
   }
 
   if (cleared > 0) {
-    log.info("session", `Microcompact: cleared ${cleared} old tool results (kept last ${MICROCOMPACT_KEEP_RECENT})`);
+    log.info(
+      "session",
+      `Microcompact: cleared ${cleared} old tool results (kept last ${MICROCOMPACT_KEEP_RECENT})`,
+    );
   }
   return cleared;
 }
@@ -200,9 +203,16 @@ export async function* pruneMessagesIfNeeded(
       }
     }
     if (aggressiveCleared > 0) {
-      log.info("session", `Aggressive tool_result clearing: ${aggressiveCleared} results cleared (context at ${Math.round(postCompressTokens / contextWindowSize * 100)}%)`);
+      log.info(
+        "session",
+        `Aggressive tool_result clearing: ${aggressiveCleared} results cleared (context at ${Math.round((postCompressTokens / contextWindowSize) * 100)}%)`,
+      );
       postCompressTokens = estimateContextTokens(systemPrompt, state.messages);
-      yield { type: "compaction_start", messageCount: aggressiveCleared, tokensBefore: postCompressTokens };
+      yield {
+        type: "compaction_start",
+        messageCount: aggressiveCleared,
+        tokensBefore: postCompressTokens,
+      };
       yield { type: "compaction_end", tokensAfter: postCompressTokens, method: "compressed" };
       if (postCompressTokens < threshold) {
         state.tokenCount = postCompressTokens;
@@ -240,7 +250,12 @@ export async function* pruneMessagesIfNeeded(
           "No tertiary/fallback model configured — compaction uses the primary model (may compete for GPU)",
         );
       }
-      const compactor = new CompactionManager(config.apiKey, compactModel, config.apiBase, config.customFetch);
+      const compactor = new CompactionManager(
+        config.apiKey,
+        compactModel,
+        config.apiBase,
+        config.customFetch,
+      );
       const summary = await compactor.compact(toPrune);
       if (summary) {
         messages.splice(keepFirst, pruneCount, summary);
@@ -385,7 +400,12 @@ async function buildLlmSummarizer(config: KCodeConfig): Promise<LlmSummarizer | 
   try {
     const { CompactionManager } = await import("./compaction.js");
     const compactModel = config.tertiaryModel ?? config.fallbackModel ?? config.model;
-    const compactor = new CompactionManager(config.apiKey, compactModel, config.apiBase, config.customFetch);
+    const compactor = new CompactionManager(
+      config.apiKey,
+      compactModel,
+      config.apiBase,
+      config.customFetch,
+    );
 
     return async (
       prompt: string,

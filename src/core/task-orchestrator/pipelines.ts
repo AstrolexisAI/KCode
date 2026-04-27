@@ -5,7 +5,7 @@
 // The LLM only handles what machines can't: reasoning and generation.
 
 import { execSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import type { ClassifiedTask, PipelineResult } from "./types";
 
@@ -13,7 +13,12 @@ const MAX_CONTEXT = 8000; // chars
 
 function run(cmd: string, cwd: string): string {
   try {
-    return execSync(cmd, { cwd, encoding: "utf-8", timeout: 10_000, stdio: ["pipe", "pipe", "pipe"] }).trim();
+    return execSync(cmd, {
+      cwd,
+      encoding: "utf-8",
+      timeout: 10_000,
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
   } catch {
     return "";
   }
@@ -43,17 +48,28 @@ export async function debugPipeline(task: ClassifiedTask, cwd: string): Promise<
   let grepResults = "";
   if (task.entities.error) {
     const errorKeyword = task.entities.error.split(/\s+/)[0] ?? "error";
-    grepResults = run(`grep -rn "${errorKeyword}" --include="*.py" --include="*.ts" --include="*.js" --include="*.go" --include="*.rs" --include="*.cpp" -l | head -10`, cwd);
+    grepResults = run(
+      `grep -rn "${errorKeyword}" --include="*.py" --include="*.ts" --include="*.js" --include="*.go" --include="*.rs" --include="*.cpp" -l | head -10`,
+      cwd,
+    );
   }
   if (!grepResults && files.length === 0) {
     // Grep for common error indicators
-    grepResults = run(`grep -rn "TODO\\|FIXME\\|BUG\\|HACK\\|error\\|Error\\|ERROR" --include="*.py" --include="*.ts" --include="*.js" -l | head -10`, cwd);
+    grepResults = run(
+      `grep -rn "TODO\\|FIXME\\|BUG\\|HACK\\|error\\|Error\\|ERROR" --include="*.py" --include="*.ts" --include="*.js" -l | head -10`,
+      cwd,
+    );
   }
-  steps.push({ name: "locate_files", output: grepResults || "(no matches)", durationMs: Date.now() - t0 });
+  steps.push({
+    name: "locate_files",
+    output: grepResults || "(no matches)",
+    durationMs: Date.now() - t0,
+  });
 
   // Step 2: Read the relevant files
   const t1 = Date.now();
-  const filesToRead = files.length > 0 ? files : grepResults.split("\n").filter(Boolean).slice(0, 5);
+  const filesToRead =
+    files.length > 0 ? files : grepResults.split("\n").filter(Boolean).slice(0, 5);
   let fileContents = "";
   for (const f of filesToRead) {
     const fullPath = resolve(cwd, f);
@@ -61,24 +77,35 @@ export async function debugPipeline(task: ClassifiedTask, cwd: string): Promise<
       fileContents += `\n--- ${f} ---\n${readSafe(fullPath, 80)}\n`;
     }
   }
-  steps.push({ name: "read_files", output: `${filesToRead.length} files read`, durationMs: Date.now() - t1 });
+  steps.push({
+    name: "read_files",
+    output: `${filesToRead.length} files read`,
+    durationMs: Date.now() - t1,
+  });
 
   // Step 3: Recent git changes
   const t2 = Date.now();
   const recentChanges = run("git log --oneline -5 2>/dev/null", cwd);
   const gitDiff = run("git diff --stat HEAD~3 2>/dev/null | head -20", cwd);
-  steps.push({ name: "git_history", output: recentChanges || "(no git)", durationMs: Date.now() - t2 });
+  steps.push({
+    name: "git_history",
+    output: recentChanges || "(no git)",
+    durationMs: Date.now() - t2,
+  });
 
-  const context = truncate([
-    "## Relevant files",
-    fileContents || "(none found)",
-    "",
-    "## Recent changes",
-    recentChanges,
-    gitDiff,
-    "",
-    task.entities.error ? `## Error\n${task.entities.error}` : "",
-  ].join("\n"), MAX_CONTEXT);
+  const context = truncate(
+    [
+      "## Relevant files",
+      fileContents || "(none found)",
+      "",
+      "## Recent changes",
+      recentChanges,
+      gitDiff,
+      "",
+      task.entities.error ? `## Error\n${task.entities.error}` : "",
+    ].join("\n"),
+    MAX_CONTEXT,
+  );
 
   return {
     steps,
@@ -89,49 +116,86 @@ export async function debugPipeline(task: ClassifiedTask, cwd: string): Promise<
 
 // ── Implement Pipeline ─────────────────────────────────────────
 
-export async function implementPipeline(task: ClassifiedTask, cwd: string): Promise<PipelineResult> {
+export async function implementPipeline(
+  task: ClassifiedTask,
+  cwd: string,
+): Promise<PipelineResult> {
   const steps: PipelineResult["steps"] = [];
   const t0 = Date.now();
 
   // Step 1: Detect project framework/language
-  const packageJson = existsSync(join(cwd, "package.json")) ? readSafe(join(cwd, "package.json"), 30) : "";
-  const pyproject = existsSync(join(cwd, "pyproject.toml")) ? readSafe(join(cwd, "pyproject.toml"), 30) : "";
+  const packageJson = existsSync(join(cwd, "package.json"))
+    ? readSafe(join(cwd, "package.json"), 30)
+    : "";
+  const pyproject = existsSync(join(cwd, "pyproject.toml"))
+    ? readSafe(join(cwd, "pyproject.toml"), 30)
+    : "";
   const goMod = existsSync(join(cwd, "go.mod")) ? readSafe(join(cwd, "go.mod"), 10) : "";
-  const cargoToml = existsSync(join(cwd, "Cargo.toml")) ? readSafe(join(cwd, "Cargo.toml"), 20) : "";
-  const framework = packageJson.includes("next") ? "Next.js"
-    : packageJson.includes("express") ? "Express"
-    : packageJson.includes("fastify") ? "Fastify"
-    : pyproject.includes("fastapi") ? "FastAPI"
-    : pyproject.includes("django") ? "Django"
-    : pyproject.includes("flask") ? "Flask"
-    : goMod ? "Go"
-    : cargoToml ? "Rust"
-    : "unknown";
+  const cargoToml = existsSync(join(cwd, "Cargo.toml"))
+    ? readSafe(join(cwd, "Cargo.toml"), 20)
+    : "";
+  const framework = packageJson.includes("next")
+    ? "Next.js"
+    : packageJson.includes("express")
+      ? "Express"
+      : packageJson.includes("fastify")
+        ? "Fastify"
+        : pyproject.includes("fastapi")
+          ? "FastAPI"
+          : pyproject.includes("django")
+            ? "Django"
+            : pyproject.includes("flask")
+              ? "Flask"
+              : goMod
+                ? "Go"
+                : cargoToml
+                  ? "Rust"
+                  : "unknown";
   steps.push({ name: "detect_framework", output: framework, durationMs: Date.now() - t0 });
 
   // Step 2: Scan project structure
   const t1 = Date.now();
-  const structure = run("find . -type f \\( -name '*.ts' -o -name '*.py' -o -name '*.go' -o -name '*.rs' -o -name '*.java' \\) -not -path '*/node_modules/*' -not -path '*/.git/*' | head -30", cwd);
-  steps.push({ name: "project_structure", output: structure || "(empty)", durationMs: Date.now() - t1 });
+  const structure = run(
+    "find . -type f \\( -name '*.ts' -o -name '*.py' -o -name '*.go' -o -name '*.rs' -o -name '*.java' \\) -not -path '*/node_modules/*' -not -path '*/.git/*' | head -30",
+    cwd,
+  );
+  steps.push({
+    name: "project_structure",
+    output: structure || "(empty)",
+    durationMs: Date.now() - t1,
+  });
 
   // Step 3: Find similar patterns (if adding endpoint, find existing endpoints)
   const t2 = Date.now();
   let existingPatterns = "";
   if (task.raw.match(/endpoint|route|api/i)) {
-    existingPatterns = run(`grep -rn "app\\.get\\|app\\.post\\|@app\\.route\\|router\\." --include="*.ts" --include="*.py" --include="*.js" | head -10`, cwd);
+    existingPatterns = run(
+      `grep -rn "app\\.get\\|app\\.post\\|@app\\.route\\|router\\." --include="*.ts" --include="*.py" --include="*.js" | head -10`,
+      cwd,
+    );
   } else if (task.raw.match(/component|page/i)) {
-    existingPatterns = run(`grep -rn "export default function\\|export const" --include="*.tsx" --include="*.jsx" | head -10`, cwd);
+    existingPatterns = run(
+      `grep -rn "export default function\\|export const" --include="*.tsx" --include="*.jsx" | head -10`,
+      cwd,
+    );
   }
-  steps.push({ name: "existing_patterns", output: existingPatterns || "(none)", durationMs: Date.now() - t2 });
+  steps.push({
+    name: "existing_patterns",
+    output: existingPatterns || "(none)",
+    durationMs: Date.now() - t2,
+  });
 
-  const context = truncate([
-    `## Framework: ${framework}`,
-    "",
-    "## Project structure",
-    structure,
-    "",
-    existingPatterns ? `## Existing patterns (follow this style)\n${existingPatterns}` : "",
-  ].join("\n"), MAX_CONTEXT);
+  const context = truncate(
+    [
+      `## Framework: ${framework}`,
+      "",
+      "## Project structure",
+      structure,
+      "",
+      existingPatterns ? `## Existing patterns (follow this style)\n${existingPatterns}` : "",
+    ].join("\n"),
+    MAX_CONTEXT,
+  );
 
   return {
     steps,
@@ -147,13 +211,27 @@ export async function reviewPipeline(task: ClassifiedTask, cwd: string): Promise
   const t0 = Date.now();
 
   // Step 1: Get the diff
-  const diff = run("git diff HEAD~1 2>/dev/null || git diff --cached 2>/dev/null || git diff 2>/dev/null", cwd);
-  steps.push({ name: "get_diff", output: `${diff.split("\n").length} lines`, durationMs: Date.now() - t0 });
+  const diff = run(
+    "git diff HEAD~1 2>/dev/null || git diff --cached 2>/dev/null || git diff 2>/dev/null",
+    cwd,
+  );
+  steps.push({
+    name: "get_diff",
+    output: `${diff.split("\n").length} lines`,
+    durationMs: Date.now() - t0,
+  });
 
   // Step 2: Get changed files
   const t1 = Date.now();
-  const changedFiles = run("git diff --name-only HEAD~1 2>/dev/null || git diff --name-only --cached 2>/dev/null", cwd);
-  steps.push({ name: "changed_files", output: changedFiles || "(none)", durationMs: Date.now() - t1 });
+  const changedFiles = run(
+    "git diff --name-only HEAD~1 2>/dev/null || git diff --name-only --cached 2>/dev/null",
+    cwd,
+  );
+  steps.push({
+    name: "changed_files",
+    output: changedFiles || "(none)",
+    durationMs: Date.now() - t1,
+  });
 
   // Step 3: Read the changed files in full
   const t2 = Date.now();
@@ -162,15 +240,16 @@ export async function reviewPipeline(task: ClassifiedTask, cwd: string): Promise
     const p = resolve(cwd, f);
     if (existsSync(p)) fullContent += `\n--- ${f} ---\n${readSafe(p, 150)}\n`;
   }
-  steps.push({ name: "read_changed", output: `${changedFiles.split("\n").filter(Boolean).length} files`, durationMs: Date.now() - t2 });
+  steps.push({
+    name: "read_changed",
+    output: `${changedFiles.split("\n").filter(Boolean).length} files`,
+    durationMs: Date.now() - t2,
+  });
 
-  const context = truncate([
-    "## Diff",
-    diff,
-    "",
-    "## Full file contents",
-    fullContent,
-  ].join("\n"), MAX_CONTEXT);
+  const context = truncate(
+    ["## Diff", diff, "", "## Full file contents", fullContent].join("\n"),
+    MAX_CONTEXT,
+  );
 
   return {
     steps,
@@ -193,12 +272,20 @@ export async function refactorPipeline(task: ClassifiedTask, cwd: string): Promi
       if (existsSync(p)) targets += `\n--- ${f} ---\n${readSafe(p, 200)}\n`;
     }
   }
-  steps.push({ name: "read_targets", output: `${files.length} files`, durationMs: Date.now() - t0 });
+  steps.push({
+    name: "read_targets",
+    output: `${files.length} files`,
+    durationMs: Date.now() - t0,
+  });
 
   // Find complexity indicators
   const t1 = Date.now();
   const longFunctions = files.length > 0 ? run(`wc -l ${files.join(" ")} 2>/dev/null`, cwd) : "";
-  steps.push({ name: "complexity_check", output: longFunctions || "(n/a)", durationMs: Date.now() - t1 });
+  steps.push({
+    name: "complexity_check",
+    output: longFunctions || "(n/a)",
+    durationMs: Date.now() - t1,
+  });
 
   return {
     steps,
@@ -223,9 +310,19 @@ export async function testPipeline(task: ClassifiedTask, cwd: string): Promise<P
 
   // Detect test framework
   const t1 = Date.now();
-  const existingTests = run(`find . -name "*.test.*" -o -name "*_test.*" -o -name "test_*" | head -5`, cwd);
-  const testFramework = run(`grep -l "jest\\|vitest\\|mocha\\|pytest\\|go test\\|cargo test" package.json pyproject.toml Cargo.toml go.mod 2>/dev/null | head -1`, cwd);
-  steps.push({ name: "detect_test_framework", output: testFramework || existingTests || "(none)", durationMs: Date.now() - t1 });
+  const existingTests = run(
+    `find . -name "*.test.*" -o -name "*_test.*" -o -name "test_*" | head -5`,
+    cwd,
+  );
+  const testFramework = run(
+    `grep -l "jest\\|vitest\\|mocha\\|pytest\\|go test\\|cargo test" package.json pyproject.toml Cargo.toml go.mod 2>/dev/null | head -1`,
+    cwd,
+  );
+  steps.push({
+    name: "detect_test_framework",
+    output: testFramework || existingTests || "(none)",
+    durationMs: Date.now() - t1,
+  });
 
   return {
     steps,
@@ -249,16 +346,27 @@ export async function explainPipeline(task: ClassifiedTask, cwd: string): Promis
 
   // If no specific files, try to understand what they're asking about
   if (!code) {
-    const keyword = task.raw.split(/\s+/).filter(w => w.length > 3).slice(0, 3).join("|");
+    const keyword = task.raw
+      .split(/\s+/)
+      .filter((w) => w.length > 3)
+      .slice(0, 3)
+      .join("|");
     if (keyword) {
-      const matches = run(`grep -rn "${keyword}" --include="*.ts" --include="*.py" --include="*.go" -l | head -5`, cwd);
+      const matches = run(
+        `grep -rn "${keyword}" --include="*.ts" --include="*.py" --include="*.go" -l | head -5`,
+        cwd,
+      );
       for (const f of matches.split("\n").filter(Boolean).slice(0, 3)) {
         const p = resolve(cwd, f);
         if (existsSync(p)) code += `\n--- ${f} ---\n${readSafe(p, 100)}\n`;
       }
     }
   }
-  steps.push({ name: "gather_context", output: `${code.split("---").length - 1} files`, durationMs: Date.now() - t0 });
+  steps.push({
+    name: "gather_context",
+    output: `${code.split("---").length - 1} files`,
+    durationMs: Date.now() - t0,
+  });
 
   return {
     steps,
@@ -275,7 +383,8 @@ export async function deployPipeline(task: ClassifiedTask, cwd: string): Promise
 
   // Detect deployment method
   const hasDockerfile = existsSync(join(cwd, "Dockerfile"));
-  const hasDockerCompose = existsSync(join(cwd, "docker-compose.yml")) || existsSync(join(cwd, "docker-compose.yaml"));
+  const hasDockerCompose =
+    existsSync(join(cwd, "docker-compose.yml")) || existsSync(join(cwd, "docker-compose.yaml"));
   const hasGithubActions = existsSync(join(cwd, ".github/workflows"));
   const hasVercel = existsSync(join(cwd, "vercel.json"));
   const hasNetlify = existsSync(join(cwd, "netlify.toml"));
@@ -291,19 +400,29 @@ export async function deployPipeline(task: ClassifiedTask, cwd: string): Promise
   if (hasFly) methods.push("Fly.io");
   if (hasK8s) methods.push("Kubernetes");
 
-  steps.push({ name: "detect_deploy", output: methods.join(", ") || "none detected", durationMs: Date.now() - t0 });
+  steps.push({
+    name: "detect_deploy",
+    output: methods.join(", ") || "none detected",
+    durationMs: Date.now() - t0,
+  });
 
   // Read deploy configs
   const t1 = Date.now();
   let configs = "";
   if (hasDockerfile) configs += `\n--- Dockerfile ---\n${readSafe(join(cwd, "Dockerfile"), 30)}\n`;
   if (hasDockerCompose) {
-    const f = existsSync(join(cwd, "docker-compose.yml")) ? "docker-compose.yml" : "docker-compose.yaml";
+    const f = existsSync(join(cwd, "docker-compose.yml"))
+      ? "docker-compose.yml"
+      : "docker-compose.yaml";
     configs += `\n--- ${f} ---\n${readSafe(join(cwd, f), 50)}\n`;
   }
   if (hasVercel) configs += `\n--- vercel.json ---\n${readSafe(join(cwd, "vercel.json"), 20)}\n`;
   if (hasFly) configs += `\n--- fly.toml ---\n${readSafe(join(cwd, "fly.toml"), 30)}\n`;
-  steps.push({ name: "read_configs", output: `${methods.length} configs`, durationMs: Date.now() - t1 });
+  steps.push({
+    name: "read_configs",
+    output: `${methods.length} configs`,
+    durationMs: Date.now() - t1,
+  });
 
   // Git status
   const t2 = Date.now();
@@ -311,14 +430,17 @@ export async function deployPipeline(task: ClassifiedTask, cwd: string): Promise
   const status = run("git status --short 2>/dev/null | head -10", cwd);
   steps.push({ name: "git_status", output: branch || "(no git)", durationMs: Date.now() - t2 });
 
-  const context = truncate([
-    `## Deployment methods detected: ${methods.join(", ") || "none"}`,
-    "",
-    configs,
-    "",
-    `## Git: branch=${branch}, uncommitted=${status ? "yes" : "no"}`,
-    status ? `\n${status}` : "",
-  ].join("\n"), MAX_CONTEXT);
+  const context = truncate(
+    [
+      `## Deployment methods detected: ${methods.join(", ") || "none"}`,
+      "",
+      configs,
+      "",
+      `## Git: branch=${branch}, uncommitted=${status ? "yes" : "no"}`,
+      status ? `\n${status}` : "",
+    ].join("\n"),
+    MAX_CONTEXT,
+  );
 
   return {
     steps,
@@ -329,17 +451,30 @@ export async function deployPipeline(task: ClassifiedTask, cwd: string): Promise
 
 // ── Pipeline Router ────────────────────────────────────────────
 
-export async function runPipeline(task: ClassifiedTask, cwd: string): Promise<PipelineResult | null> {
+export async function runPipeline(
+  task: ClassifiedTask,
+  cwd: string,
+): Promise<PipelineResult | null> {
   switch (task.type) {
-    case "debug": return debugPipeline(task, cwd);
-    case "implement": return implementPipeline(task, cwd);
-    case "review": return reviewPipeline(task, cwd);
-    case "refactor": return refactorPipeline(task, cwd);
-    case "test": return testPipeline(task, cwd);
-    case "explain": return explainPipeline(task, cwd);
-    case "audit": return null; // handled by /scan
-    case "deploy": return deployPipeline(task, cwd);
-    case "general": return null; // pass-through to LLM
-    default: return null;
+    case "debug":
+      return debugPipeline(task, cwd);
+    case "implement":
+      return implementPipeline(task, cwd);
+    case "review":
+      return reviewPipeline(task, cwd);
+    case "refactor":
+      return refactorPipeline(task, cwd);
+    case "test":
+      return testPipeline(task, cwd);
+    case "explain":
+      return explainPipeline(task, cwd);
+    case "audit":
+      return null; // handled by /scan
+    case "deploy":
+      return deployPipeline(task, cwd);
+    case "general":
+      return null; // pass-through to LLM
+    default:
+      return null;
   }
 }

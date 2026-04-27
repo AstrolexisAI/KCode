@@ -36,19 +36,19 @@ export function parseArgv(input: string): string[] {
   let buf = "";
   let inSingle = false;
   let inDouble = false;
-  let escape = false;
+  let isEscaped = false;
   let hasContent = false; // distinguishes empty input from `""` token
 
   for (let i = 0; i < input.length; i++) {
     const ch = input[i]!;
 
-    if (escape) {
+    if (isEscaped) {
       // Backslash inside double-quotes escapes the next char.
       // Outside quotes a backslash before whitespace also makes the
       // whitespace literal. We don't try to model bash's "in this
       // shell only these escape" rules — keep it minimal.
       buf += ch;
-      escape = false;
+      isEscaped = false;
       hasContent = true;
       continue;
     }
@@ -65,7 +65,7 @@ export function parseArgv(input: string): string[] {
 
     if (inDouble) {
       if (ch === "\\") {
-        escape = true;
+        isEscaped = true;
       } else if (ch === '"') {
         inDouble = false;
       } else {
@@ -87,7 +87,7 @@ export function parseArgv(input: string): string[] {
       continue;
     }
     if (ch === "\\") {
-      escape = true;
+      isEscaped = true;
       continue;
     }
     if (/\s/.test(ch)) {
@@ -108,7 +108,7 @@ export function parseArgv(input: string): string[] {
       `Unterminated ${inSingle ? "single" : "double"}-quoted string. Add a closing ${inSingle ? "'" : '"'}.`,
     );
   }
-  if (escape) {
+  if (isEscaped) {
     // Trailing backslash with nothing to escape — treat literally.
     buf += "\\";
     hasContent = true;

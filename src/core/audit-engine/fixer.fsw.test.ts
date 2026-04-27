@@ -1,8 +1,8 @@
 // Tests for v2.10.315 flight-software bespoke fixers.
 
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { runAudit } from "./audit-engine";
 import { applyFixes } from "./fixer";
 
@@ -25,7 +25,8 @@ async function scanAndFix(file: string, content: string) {
   writeFileSync(full, content);
   const result = await runAudit({
     projectRoot: TMP,
-    llmCallback: async () => JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+    llmCallback: async () =>
+      JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
     skipVerification: true,
   });
   applyFixes(result);

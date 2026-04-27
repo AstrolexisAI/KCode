@@ -4,12 +4,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  recordGrep,
-  recordGrepHits,
-  recordRead,
-  resetReads,
-} from "../core/session-tracker";
+import { recordGrep, recordGrepHits, recordRead, resetReads } from "../core/session-tracker";
 import { executeWrite } from "./write";
 
 describe("audit-report discipline guards", () => {
@@ -256,11 +251,7 @@ describe("audit-report discipline guards", () => {
   });
 
   test("allows audit when grep-hit files are mostly Read", async () => {
-    recordGrepHits("data\\[", [
-      "/p/UsbXBox.cpp",
-      "/p/UsbDualShock4.cpp",
-      "/p/HidDecoder.cpp",
-    ]);
+    recordGrepHits("data\\[", ["/p/UsbXBox.cpp", "/p/UsbDualShock4.cpp", "/p/HidDecoder.cpp"]);
     // Read all three
     recordRead("/p/UsbXBox.cpp");
     recordRead("/p/UsbDualShock4.cpp");
@@ -276,12 +267,7 @@ describe("audit-report discipline guards", () => {
 
   test("ignores grep hits from NON-dangerous patterns", async () => {
     // "TODO" is not in the dangerous patterns list, so hits shouldn't be recorded
-    recordGrepHits("TODO", [
-      "/p/a.cpp",
-      "/p/b.cpp",
-      "/p/c.cpp",
-      "/p/d.cpp",
-    ]);
+    recordGrepHits("TODO", ["/p/a.cpp", "/p/b.cpp", "/p/c.cpp", "/p/d.cpp"]);
 
     const result = await executeWrite({
       file_path: join(tmp, "AUDIT_REPORT.md"),
@@ -336,11 +322,7 @@ See also UsbXBox.cpp:35 for buffer indexing
     recordRead("/p/already.cpp");
     // Record grep hits on dangerous pattern
     const { recordGrepHits } = await import("../core/session-tracker");
-    recordGrepHits("data\\[", [
-      "/p/UsbXBox.cpp",
-      "/p/EthernetDevice.cpp",
-      "/p/HidDecoder.cpp",
-    ]);
+    recordGrepHits("data\\[", ["/p/UsbXBox.cpp", "/p/EthernetDevice.cpp", "/p/HidDecoder.cpp"]);
 
     const result = await executeWrite({
       file_path: join(tmp, "AUDIT_REPORT.md"),

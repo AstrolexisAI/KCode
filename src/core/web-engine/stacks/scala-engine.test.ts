@@ -1,13 +1,17 @@
-import { describe, test, expect } from "bun:test";
-import { createScalaProject } from "./scala-engine";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createScalaProject } from "./scala-engine";
 
 describe("scala-engine", () => {
   function withTmp(fn: (dir: string) => void) {
     const dir = mkdtempSync(join(tmpdir(), "kcode-scala-"));
-    try { fn(dir); } finally { rmSync(dir, { recursive: true, force: true }); }
+    try {
+      fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
 
   test("creates http4s API project", () => {
@@ -31,7 +35,7 @@ describe("scala-engine", () => {
       expect(r.config.type).toBe("spark");
       expect(r.config.framework).toBe("spark");
       expect(r.config.name).toBe("etljob");
-      expect(r.config.deps.some(d => d.includes("spark-sql"))).toBe(true);
+      expect(r.config.deps.some((d) => d.includes("spark-sql"))).toBe(true);
       expect(existsSync(join(dir, "etljob", "src/main/scala/com/etljob/Main.scala"))).toBe(true);
     });
   });
@@ -40,7 +44,7 @@ describe("scala-engine", () => {
     withTmp((dir) => {
       const r = createScalaProject("command line tool", dir);
       expect(r.config.type).toBe("cli");
-      expect(r.config.deps.some(d => d.includes("scopt"))).toBe(true);
+      expect(r.config.deps.some((d) => d.includes("scopt"))).toBe(true);
     });
   });
 
@@ -58,7 +62,7 @@ describe("scala-engine", () => {
       const r = createScalaProject("Akka HTTP API called svc", dir);
       expect(r.config.type).toBe("api");
       expect(r.config.framework).toBe("akka");
-      expect(r.config.deps.some(d => d.includes("akka-http"))).toBe(true);
+      expect(r.config.deps.some((d) => d.includes("akka-http"))).toBe(true);
     });
   });
 
@@ -67,7 +71,7 @@ describe("scala-engine", () => {
       const r = createScalaProject("fs2 streaming app", dir);
       expect(r.config.type).toBe("stream");
       expect(r.config.framework).toBe("fs2");
-      expect(r.config.deps.some(d => d.includes("fs2-core"))).toBe(true);
+      expect(r.config.deps.some((d) => d.includes("fs2-core"))).toBe(true);
     });
   });
 
@@ -82,14 +86,14 @@ describe("scala-engine", () => {
   test("adds doobie for database keyword", () => {
     withTmp((dir) => {
       const r = createScalaProject("API with database", dir);
-      expect(r.config.deps.some(d => d.includes("doobie"))).toBe(true);
+      expect(r.config.deps.some((d) => d.includes("doobie"))).toBe(true);
     });
   });
 
   test("adds ZIO deps", () => {
     withTmp((dir) => {
       const r = createScalaProject("CLI tool with zio", dir);
-      expect(r.config.deps.some(d => d.includes("zio"))).toBe(true);
+      expect(r.config.deps.some((d) => d.includes("zio"))).toBe(true);
     });
   });
 

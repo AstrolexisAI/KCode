@@ -5,7 +5,12 @@ import { dirname, join } from "node:path";
 
 export type SwiftProjectType = "ios" | "macos" | "cli" | "server" | "package" | "custom";
 
-interface SwiftConfig { name: string; type: SwiftProjectType; dependencies: Array<{ url: string; from: string }>; framework?: string; }
+interface SwiftConfig {
+  name: string;
+  type: SwiftProjectType;
+  dependencies: Array<{ url: string; from: string }>;
+  framework?: string;
+}
 
 function detectSwiftProject(msg: string): SwiftConfig {
   const lower = msg.toLowerCase();
@@ -13,22 +18,32 @@ function detectSwiftProject(msg: string): SwiftConfig {
   let framework: string | undefined;
   const deps: Array<{ url: string; from: string }> = [];
 
-  if (/\b(?:ios|iphone|ipad|swiftui|uikit)\b/i.test(lower)) { type = "ios"; }
-  else if (/\b(?:macos|mac\s*app|desktop|appkit)\b/i.test(lower)) { type = "macos"; }
-  else if (/\b(?:cli|command|terminal|tool)\b/i.test(lower)) {
+  if (/\b(?:ios|iphone|ipad|swiftui|uikit)\b/i.test(lower)) {
+    type = "ios";
+  } else if (/\b(?:macos|mac\s*app|desktop|appkit)\b/i.test(lower)) {
+    type = "macos";
+  } else if (/\b(?:cli|command|terminal|tool)\b/i.test(lower)) {
     type = "cli";
     deps.push({ url: "https://github.com/apple/swift-argument-parser", from: "1.5.0" });
-  }
-  else if (/\b(?:server|vapor|hummingbird|api|backend)\b/i.test(lower)) {
+  } else if (/\b(?:server|vapor|hummingbird|api|backend)\b/i.test(lower)) {
     type = "server";
-    if (/\bhummingbird\b/i.test(lower)) { framework = "hummingbird"; deps.push({ url: "https://github.com/hummingbird-project/hummingbird", from: "2.0.0" }); }
-    else { framework = "vapor"; deps.push({ url: "https://github.com/vapor/vapor", from: "4.100.0" }); }
+    if (/\bhummingbird\b/i.test(lower)) {
+      framework = "hummingbird";
+      deps.push({ url: "https://github.com/hummingbird-project/hummingbird", from: "2.0.0" });
+    } else {
+      framework = "vapor";
+      deps.push({ url: "https://github.com/vapor/vapor", from: "4.100.0" });
+    }
+  } else if (/\b(?:package|library|lib|spm)\b/i.test(lower)) {
+    type = "package";
   }
-  else if (/\b(?:package|library|lib|spm)\b/i.test(lower)) { type = "package"; }
 
-  if (/\b(?:alamofire|network|http)\b/i.test(lower)) deps.push({ url: "https://github.com/Alamofire/Alamofire", from: "5.10.0" });
-  if (/\b(?:realm|database|db)\b/i.test(lower)) deps.push({ url: "https://github.com/realm/realm-swift", from: "10.50.0" });
-  if (/\b(?:keychain|security)\b/i.test(lower)) deps.push({ url: "https://github.com/kishikawakatsumi/KeychainAccess", from: "4.2.2" });
+  if (/\b(?:alamofire|network|http)\b/i.test(lower))
+    deps.push({ url: "https://github.com/Alamofire/Alamofire", from: "5.10.0" });
+  if (/\b(?:realm|database|db)\b/i.test(lower))
+    deps.push({ url: "https://github.com/realm/realm-swift", from: "10.50.0" });
+  if (/\b(?:keychain|security)\b/i.test(lower))
+    deps.push({ url: "https://github.com/kishikawakatsumi/KeychainAccess", from: "4.2.2" });
 
   const nameMatch = msg.match(/(?:called|named|nombre)\s+(\w[\w-]*)/i);
   const name = nameMatch?.[1] ?? (type === "package" ? "MyLib" : "MyApp");
@@ -36,8 +51,17 @@ function detectSwiftProject(msg: string): SwiftConfig {
   return { name, type, dependencies: deps, framework };
 }
 
-interface GenFile { path: string; content: string; needsLlm: boolean; }
-export interface SwiftProjectResult { config: SwiftConfig; files: GenFile[]; projectPath: string; prompt: string; }
+interface GenFile {
+  path: string;
+  content: string;
+  needsLlm: boolean;
+}
+export interface SwiftProjectResult {
+  config: SwiftConfig;
+  files: GenFile[];
+  projectPath: string;
+  prompt: string;
+}
 
 export function createSwiftProject(userRequest: string, cwd: string): SwiftProjectResult {
   const cfg = detectSwiftProject(userRequest);
@@ -45,25 +69,31 @@ export function createSwiftProject(userRequest: string, cwd: string): SwiftProje
 
   if (cfg.type === "ios" || cfg.type === "macos") {
     // SwiftUI App
-    files.push({ path: "Package.swift", content: `// swift-tools-version: 6.0
+    files.push({
+      path: "Package.swift",
+      content: `// swift-tools-version: 6.0
 import PackageDescription
 
 let package = Package(
     name: "${cfg.name}",
     platforms: [${cfg.type === "ios" ? ".iOS(.v17)" : ".macOS(.v14)"}],
     dependencies: [
-${cfg.dependencies.map(d => `        .package(url: "${d.url}", from: "${d.from}"),`).join("\n")}
+${cfg.dependencies.map((d) => `        .package(url: "${d.url}", from: "${d.from}"),`).join("\n")}
     ],
     targets: [
         .executableTarget(name: "${cfg.name}", dependencies: [
-${cfg.dependencies.map(d => `            .product(name: "${d.url.split("/").pop()!.replace(".git", "")}", package: "${d.url.split("/").pop()!.replace(".git", "")}"),`).join("\n")}
+${cfg.dependencies.map((d) => `            .product(name: "${d.url.split("/").pop()!.replace(".git", "")}", package: "${d.url.split("/").pop()!.replace(".git", "")}"),`).join("\n")}
         ]),
         .testTarget(name: "${cfg.name}Tests", dependencies: ["${cfg.name}"]),
     ]
 )
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
 
-    files.push({ path: `Sources/${cfg.name}App.swift`, content: `import SwiftUI
+    files.push({
+      path: `Sources/${cfg.name}App.swift`,
+      content: `import SwiftUI
 
 @main
 struct ${cfg.name}App: App {
@@ -73,9 +103,13 @@ struct ${cfg.name}App: App {
         }
     }
 }
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
 
-    files.push({ path: `Sources/ContentView.swift`, content: `import SwiftUI
+    files.push({
+      path: `Sources/ContentView.swift`,
+      content: `import SwiftUI
 
 struct ContentView: View {
     @State private var count = 0
@@ -106,9 +140,13 @@ struct ContentView: View {
 #Preview {
     ContentView()
 }
-`, needsLlm: true });
+`,
+      needsLlm: true,
+    });
 
-    files.push({ path: `Sources/Models/Item.swift`, content: `import Foundation
+    files.push({
+      path: `Sources/Models/Item.swift`,
+      content: `import Foundation
 
 struct Item: Identifiable, Codable {
     let id: UUID
@@ -123,9 +161,13 @@ struct Item: Identifiable, Codable {
         self.createdAt = Date()
     }
 }
-`, needsLlm: true });
+`,
+      needsLlm: true,
+    });
 
-    files.push({ path: `Sources/ViewModels/AppViewModel.swift`, content: `import SwiftUI
+    files.push({
+      path: `Sources/ViewModels/AppViewModel.swift`,
+      content: `import SwiftUI
 
 @Observable
 class AppViewModel {
@@ -153,16 +195,19 @@ class AppViewModel {
         // TODO: persist
     }
 }
-`, needsLlm: true });
-
+`,
+      needsLlm: true,
+    });
   } else if (cfg.type === "cli") {
-    files.push({ path: "Package.swift", content: `// swift-tools-version: 6.0
+    files.push({
+      path: "Package.swift",
+      content: `// swift-tools-version: 6.0
 import PackageDescription
 
 let package = Package(
     name: "${cfg.name}",
     dependencies: [
-${cfg.dependencies.map(d => `        .package(url: "${d.url}", from: "${d.from}"),`).join("\n")}
+${cfg.dependencies.map((d) => `        .package(url: "${d.url}", from: "${d.from}"),`).join("\n")}
     ],
     targets: [
         .executableTarget(name: "${cfg.name}", dependencies: [
@@ -171,9 +216,13 @@ ${cfg.dependencies.map(d => `        .package(url: "${d.url}", from: "${d.from}"
         .testTarget(name: "${cfg.name}Tests", dependencies: ["${cfg.name}"]),
     ]
 )
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
 
-    files.push({ path: `Sources/${cfg.name}.swift`, content: `import ArgumentParser
+    files.push({
+      path: `Sources/${cfg.name}.swift`,
+      content: `import ArgumentParser
 
 @main
 struct ${cfg.name}: ParsableCommand {
@@ -201,17 +250,20 @@ struct ${cfg.name}: ParsableCommand {
         print("Done!")
     }
 }
-`, needsLlm: true });
-
+`,
+      needsLlm: true,
+    });
   } else if (cfg.type === "server") {
-    files.push({ path: "Package.swift", content: `// swift-tools-version: 6.0
+    files.push({
+      path: "Package.swift",
+      content: `// swift-tools-version: 6.0
 import PackageDescription
 
 let package = Package(
     name: "${cfg.name}",
     platforms: [.macOS(.v14)],
     dependencies: [
-${cfg.dependencies.map(d => `        .package(url: "${d.url}", from: "${d.from}"),`).join("\n")}
+${cfg.dependencies.map((d) => `        .package(url: "${d.url}", from: "${d.from}"),`).join("\n")}
     ],
     targets: [
         .executableTarget(name: "${cfg.name}", dependencies: [
@@ -223,9 +275,13 @@ ${cfg.dependencies.map(d => `        .package(url: "${d.url}", from: "${d.from}"
         ]),
     ]
 )
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
 
-    files.push({ path: `Sources/Models/Item.swift`, content: `import Vapor
+    files.push({
+      path: `Sources/Models/Item.swift`,
+      content: `import Vapor
 
 struct Item: Content, Sendable {
     let id: String
@@ -251,9 +307,13 @@ struct UpdateItemRequest: Content, Validatable {
         validations.add("name", as: String.self, is: !.empty && .count(1...200))
     }
 }
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
 
-    files.push({ path: `Sources/Services/ItemStore.swift`, content: `import Foundation
+    files.push({
+      path: `Sources/Services/ItemStore.swift`,
+      content: `import Foundation
 
 actor ItemStore {
     static let shared = ItemStore()
@@ -261,7 +321,7 @@ actor ItemStore {
     private var items: [String: Item] = [:]
 
     func getAll() -> [Item] {
-        items.values.sorted { \$0.createdAt > \$1.createdAt }
+        items.values.sorted { $0.createdAt > $1.createdAt }
     }
 
     func get(_ id: String) -> Item? {
@@ -291,9 +351,13 @@ actor ItemStore {
         items.removeValue(forKey: id) != nil
     }
 }
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
 
-    files.push({ path: `Sources/Routes/ItemRoutes.swift`, content: `import Vapor
+    files.push({
+      path: `Sources/Routes/ItemRoutes.swift`,
+      content: `import Vapor
 
 func registerItemRoutes(_ app: Application) {
     let items = app.grouped("api", "items")
@@ -349,9 +413,13 @@ func registerItemRoutes(_ app: Application) {
         return .noContent
     }
 }
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
 
-    files.push({ path: `Sources/main.swift`, content: `import Vapor
+    files.push({
+      path: `Sources/main.swift`,
+      content: `import Vapor
 
 let app = try Application(.detect())
 defer { app.shutdown() }
@@ -368,10 +436,14 @@ app.logger.info("${cfg.name} starting on port 10080")
 app.http.server.configuration.port = 10080
 
 try app.run()
-`, needsLlm: false });
-
-  } else { // package
-    files.push({ path: "Package.swift", content: `// swift-tools-version: 6.0
+`,
+      needsLlm: false,
+    });
+  } else {
+    // package
+    files.push({
+      path: "Package.swift",
+      content: `// swift-tools-version: 6.0
 import PackageDescription
 
 let package = Package(
@@ -382,9 +454,13 @@ let package = Package(
         .testTarget(name: "${cfg.name}Tests", dependencies: ["${cfg.name}"]),
     ]
 )
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
 
-    files.push({ path: `Sources/${cfg.name}.swift`, content: `/// ${cfg.name} — A Swift library
+    files.push({
+      path: `Sources/${cfg.name}.swift`,
+      content: `/// ${cfg.name} — A Swift library
 public struct ${cfg.name} {
     private var initialized = false
 
@@ -409,12 +485,16 @@ public enum ${cfg.name}Error: Error, CustomStringConvertible {
         }
     }
 }
-`, needsLlm: true });
+`,
+      needsLlm: true,
+    });
   }
 
   // Tests
   if (cfg.type === "server") {
-    files.push({ path: `Tests/${cfg.name}Tests.swift`, content: `import XCTVapor
+    files.push({
+      path: `Tests/${cfg.name}Tests.swift`,
+      content: `import XCTVapor
 @testable import ${cfg.name}
 
 final class ${cfg.name}Tests: XCTestCase {
@@ -469,9 +549,13 @@ final class ${cfg.name}Tests: XCTestCase {
         }
     }
 }
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
   } else {
-    files.push({ path: `Tests/${cfg.name}Tests.swift`, content: `import Testing
+    files.push({
+      path: `Tests/${cfg.name}Tests.swift`,
+      content: `import Testing
 @testable import ${cfg.name}
 
 @Suite("${cfg.name} Tests")
@@ -481,18 +565,41 @@ struct ${cfg.name}Tests {
         #expect(true)
     }
 }
-`, needsLlm: true });
+`,
+      needsLlm: true,
+    });
   }
 
   // Extras
-  files.push({ path: ".gitignore", content: ".build/\n.swiftpm/\nPackage.resolved\n*.xcodeproj\nDerivedData/\n", needsLlm: false });
-  files.push({ path: ".github/workflows/ci.yml", content: `name: CI\non: [push, pull_request]\njobs:\n  test:\n    runs-on: macos-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: swift build\n      - run: swift test\n`, needsLlm: false });
-  files.push({ path: "README.md", content: `# ${cfg.name}\n\nBuilt with KCode.\n\n\`\`\`bash\nswift build\nswift run\nswift test\n\`\`\`\n\n*Astrolexis.space — Kulvex Code*\n`, needsLlm: false });
+  files.push({
+    path: ".gitignore",
+    content: ".build/\n.swiftpm/\nPackage.resolved\n*.xcodeproj\nDerivedData/\n",
+    needsLlm: false,
+  });
+  files.push({
+    path: ".github/workflows/ci.yml",
+    content: `name: CI\non: [push, pull_request]\njobs:\n  test:\n    runs-on: macos-latest\n    steps:\n      - uses: actions/checkout@v4\n      - run: swift build\n      - run: swift test\n`,
+    needsLlm: false,
+  });
+  files.push({
+    path: "README.md",
+    content: `# ${cfg.name}\n\nBuilt with KCode.\n\n\`\`\`bash\nswift build\nswift run\nswift test\n\`\`\`\n\n*Astrolexis.space — Kulvex Code*\n`,
+    needsLlm: false,
+  });
 
   const projectPath = join(cwd, cfg.name);
-  for (const f of files) { const p = join(projectPath, f.path); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, f.content); }
+  for (const f of files) {
+    const p = join(projectPath, f.path);
+    mkdirSync(dirname(p), { recursive: true });
+    writeFileSync(p, f.content);
+  }
 
-  const m = files.filter(f => !f.needsLlm).length;
-  const l = files.filter(f => f.needsLlm).length;
-  return { config: cfg, files, projectPath, prompt: `Implement a Swift ${cfg.type}. ${m} files machine, ${l} for LLM. USER: "${userRequest}"` };
+  const m = files.filter((f) => !f.needsLlm).length;
+  const l = files.filter((f) => f.needsLlm).length;
+  return {
+    config: cfg,
+    files,
+    projectPath,
+    prompt: `Implement a Swift ${cfg.type}. ${m} files machine, ${l} for LLM. USER: "${userRequest}"`,
+  };
 }

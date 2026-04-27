@@ -5,7 +5,8 @@ import { extractSentenceLikeSnippet } from "./grounding-gate";
 
 describe("extractSentenceLikeSnippet", () => {
   it("expands to sentence boundaries instead of raw character offsets", () => {
-    const text = "Primera oración normal. Aquí está el claim fuerte: está completo y listo para producción. Siguiente oración.";
+    const text =
+      "Primera oración normal. Aquí está el claim fuerte: está completo y listo para producción. Siguiente oración.";
     const idx = text.indexOf("listo para producción");
     const snippet = extractSentenceLikeSnippet(text, idx, "listo para producción".length);
     expect(snippet).toContain("listo para producción");
@@ -31,8 +32,7 @@ Más texto.`;
   });
 
   it("never starts or ends mid-word", () => {
-    const text =
-      "Aquí está el bullet con **nasa/deep-space-navigation** — herramientas listas";
+    const text = "Aquí está el bullet con **nasa/deep-space-navigation** — herramientas listas";
     const idx = text.indexOf("listas");
     const snippet = extractSentenceLikeSnippet(text, idx, "listas".length);
     // The snippet must not start with a partial word like "rk de observación"

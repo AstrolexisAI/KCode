@@ -36,9 +36,7 @@ price ticker panel. NON-GOALS: no wallet, no trading.`;
   test("photo portfolio website does NOT pick trading-dashboard", () => {
     // Pre-fix, 'portfolio' alone matched. Post-fix it needs "portfolio
     // tracker" / "portfolio dashboard" / "portfolio manager".
-    const intent = detectWebIntent(
-      "Build a photo portfolio website to showcase my work",
-    );
+    const intent = detectWebIntent("Build a photo portfolio website to showcase my work");
     expect(intent.siteType).not.toBe("trading-dashboard");
   });
 });
@@ -52,16 +50,12 @@ describe("detectWebIntent — actual trading apps still match", () => {
   });
 
   test("stock ticker web app matches trading-dashboard", () => {
-    const intent = detectWebIntent(
-      "Build a web app with a stock ticker and portfolio tracker",
-    );
+    const intent = detectWebIntent("Build a web app with a stock ticker and portfolio tracker");
     expect(intent.siteType).toBe("trading-dashboard");
   });
 
   test("spanish bolsa/acciones still matches", () => {
-    const intent = detectWebIntent(
-      "Un sitio web para la bolsa con gráficos de acciones",
-    );
+    const intent = detectWebIntent("Un sitio web para la bolsa con gráficos de acciones");
     expect(intent.siteType).toBe("trading-dashboard");
   });
 
@@ -73,9 +67,7 @@ describe("detectWebIntent — actual trading apps still match", () => {
   });
 
   test("portfolio tracker matches", () => {
-    const intent = detectWebIntent(
-      "Build a portfolio tracker for my stocks",
-    );
+    const intent = detectWebIntent("Build a portfolio tracker for my stocks");
     expect(intent.siteType).toBe("trading-dashboard");
   });
 });

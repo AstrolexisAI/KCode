@@ -13,8 +13,7 @@ describe("secret-redactor", () => {
   });
 
   test("masks Anthropic API keys", () => {
-    const input =
-      "ANTHROPIC_API_KEY=sk-ant-api03-abcd1234efgh5678ijkl9012mnop3456qrst7890uvwxyz";
+    const input = "ANTHROPIC_API_KEY=sk-ant-api03-abcd1234efgh5678ijkl9012mnop3456qrst7890uvwxyz";
     const { redacted, rulesFired } = redact(input);
     expect(redacted).not.toContain("sk-ant-api03");
     expect(rulesFired).toContain("anthropic_key");
@@ -29,8 +28,7 @@ describe("secret-redactor", () => {
 
   test("masks Stripe webhook secrets", () => {
     // Synthetic fixture — NEVER paste real whsec_ values into tests.
-    const input =
-      "STRIPE_WEBHOOK_SECRET=whsec_FAKE" + "0".repeat(28);
+    const input = "STRIPE_WEBHOOK_SECRET=whsec_FAKE" + "0".repeat(28);
     const { redacted } = redact(input);
     expect(redacted).not.toContain("whsec_FAKE");
     expect(redacted).toContain("***REDACTED***");
@@ -88,8 +86,7 @@ describe("secret-redactor", () => {
   test("masks the 2026-04-23 #111 prose-whitespace leak 'password tronco'", () => {
     // Real model output: "using the credentials from your bitcoin.conf:
     //                     user curly, password tronco"
-    const input =
-      "using the credentials from your bitcoin.conf: user curly, password tronco";
+    const input = "using the credentials from your bitcoin.conf: user curly, password tronco";
     const { redacted, rulesFired } = redact(input);
     expect(redacted).not.toContain("tronco");
     expect(rulesFired).toContain("password_prose");

@@ -61,8 +61,7 @@ const CORRECTION_PATTERNS: CorrectionPattern[] = [
   },
   // Spanish: "no es X, (es|sino) Y"
   {
-    regex:
-      /\bno\s+(?:es|son|era|eran)\s+([^.,;\n]{3,60}),?\s+(?:sino|es|son)\s+([^.,;\n]{3,60})/i,
+    regex: /\bno\s+(?:es|son|era|eran)\s+([^.,;\n]{3,60}),?\s+(?:sino|es|son)\s+([^.,;\n]{3,60})/i,
     wrongGroup: 1,
     rightGroup: 2,
   },
@@ -88,15 +87,13 @@ const CORRECTION_PATTERNS: CorrectionPattern[] = [
   },
   // English: "not X, (but|it's) Y"
   {
-    regex:
-      /\bnot\s+([^.,;\n]{3,60}),?\s+(?:but|it'?s|the\s+issue\s+is)\s+([^.,;\n]{3,60})/i,
+    regex: /\bnot\s+([^.,;\n]{3,60}),?\s+(?:but|it'?s|the\s+issue\s+is)\s+([^.,;\n]{3,60})/i,
     wrongGroup: 1,
     rightGroup: 2,
   },
   // English: "instead of X, (look at|it's|use) Y"
   {
-    regex:
-      /\binstead\s+of\s+([^.,;\n]{3,60}),?\s+(?:look\s+at|it'?s|use|try)\s+([^.,;\n]{3,60})/i,
+    regex: /\binstead\s+of\s+([^.,;\n]{3,60}),?\s+(?:look\s+at|it'?s|use|try)\s+([^.,;\n]{3,60})/i,
     wrongGroup: 1,
     rightGroup: 2,
   },
@@ -193,15 +190,11 @@ export function checkSemanticCorrection(
 
 // ─── Reminder formatter ──────────────────────────────────────────
 
-export function buildSemanticCorrectionReminder(
-  verdict: SemanticCorrectionVerdict,
-): string {
+export function buildSemanticCorrectionReminder(verdict: SemanticCorrectionVerdict): string {
   const lines: string[] = [];
   lines.push("[SEMANTIC CORRECTION — USER IS RE-TARGETING YOU]");
   lines.push("");
-  lines.push(
-    `The user just told you EXPLICITLY that your previous fix target`,
-  );
+  lines.push(`The user just told you EXPLICITLY that your previous fix target`);
   lines.push(`was wrong. Quoting their exact words:`);
   lines.push("");
   lines.push(`  "${verdict.fullMatch}"`);
@@ -210,51 +203,23 @@ export function buildSemanticCorrectionReminder(
   lines.push(`  ❌ NOT this:  "${verdict.wrongTarget}"`);
   lines.push(`  ✅ BUT this:  "${verdict.rightTarget}"`);
   lines.push("");
-  lines.push(
-    `This is a HARD REDIRECTION. Your previous edits were likely`,
-  );
-  lines.push(
-    `working on "${verdict.wrongTarget}" and leaving "${verdict.rightTarget}"`,
-  );
-  lines.push(
-    `untouched — that's why the bug persists. The fix is NOT in the`,
-  );
+  lines.push(`This is a HARD REDIRECTION. Your previous edits were likely`);
+  lines.push(`working on "${verdict.wrongTarget}" and leaving "${verdict.rightTarget}"`);
+  lines.push(`untouched — that's why the bug persists. The fix is NOT in the`);
   lines.push(`region you've been editing.`);
   lines.push("");
   lines.push(`Before your next tool call you MUST:`);
-  lines.push(
-    `  1. Stop iterating on "${verdict.wrongTarget}". Any edit to that`,
-  );
-  lines.push(
-    `     region is probably wasted work now.`,
-  );
-  lines.push(
-    `  2. Grep or Read the code region that holds "${verdict.rightTarget}"`,
-  );
-  lines.push(
-    `     so you see the actual structure before editing.`,
-  );
-  lines.push(
-    `  3. Propose a fix SPECIFIC to "${verdict.rightTarget}" — not a`,
-  );
-  lines.push(
-    `     generic chart-responsive / layout-fix template.`,
-  );
-  lines.push(
-    `  4. Do NOT write "✅ Entendido" followed by another edit to`,
-  );
-  lines.push(
-    `     "${verdict.wrongTarget}". The user will notice and lose trust.`,
-  );
+  lines.push(`  1. Stop iterating on "${verdict.wrongTarget}". Any edit to that`);
+  lines.push(`     region is probably wasted work now.`);
+  lines.push(`  2. Grep or Read the code region that holds "${verdict.rightTarget}"`);
+  lines.push(`     so you see the actual structure before editing.`);
+  lines.push(`  3. Propose a fix SPECIFIC to "${verdict.rightTarget}" — not a`);
+  lines.push(`     generic chart-responsive / layout-fix template.`);
+  lines.push(`  4. Do NOT write "✅ Entendido" followed by another edit to`);
+  lines.push(`     "${verdict.wrongTarget}". The user will notice and lose trust.`);
   lines.push("");
-  lines.push(
-    `If "${verdict.rightTarget}" is ambiguous or you don't know what`,
-  );
-  lines.push(
-    `element in the code corresponds to it, ASK the user to point`,
-  );
-  lines.push(
-    `at a specific class name, function, or line — do not guess.`,
-  );
+  lines.push(`If "${verdict.rightTarget}" is ambiguous or you don't know what`);
+  lines.push(`element in the code corresponds to it, ASK the user to point`);
+  lines.push(`at a specific class name, function, or line — do not guess.`);
   return lines.join("\n");
 }

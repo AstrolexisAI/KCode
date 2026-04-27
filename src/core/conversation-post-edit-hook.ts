@@ -3,9 +3,9 @@
 // build check and related tests. Injects failures back into the conversation
 // so the model must fix them before proceeding.
 
+import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { dirname, extname, join } from "node:path";
-import { spawnSync } from "node:child_process";
 import { log } from "./logger";
 import type { ToolUseBlock } from "./types";
 
@@ -81,7 +81,11 @@ export function findRelatedTests(files: string[], cwd: string): string[] {
       }
     }
     // Also look in __tests__ subdirectory
-    const basename = file.split("/").pop()?.replace(/\.(ts|tsx|js|jsx)$/, "") ?? "";
+    const basename =
+      file
+        .split("/")
+        .pop()
+        ?.replace(/\.(ts|tsx|js|jsx)$/, "") ?? "";
     if (basename) {
       const inTestsDir = join(dir, "__tests__", basename + ".test.ts");
       if (existsSync(inTestsDir)) tests.push(inTestsDir);
@@ -150,20 +154,20 @@ export function runRelatedTests(
 // ─── Error pattern detection ────────────────────────────────────
 
 const COMPILE_ERROR_PATTERNS: RegExp[] = [
-  /error TS\d+:/,              // TypeScript: error TS2304: ...
-  /error\[E\d+\]/,             // Rust: error[E0308]: ...
-  /\b[1-9]\d* errors?\b/,      // tsc summary: "3 errors" / "Found 3 errors in..."
-  /^error:/m,                  // Go / cargo: error: ...
-  /BUILD FAILED/i,             // Maven/Gradle
-  /compilation failed/i,       // generic
-  /SyntaxError:/,              // JS/Python syntax
-  /Cannot find module/,        // JS missing module
+  /error TS\d+:/, // TypeScript: error TS2304: ...
+  /error\[E\d+\]/, // Rust: error[E0308]: ...
+  /\b[1-9]\d* errors?\b/, // tsc summary: "3 errors" / "Found 3 errors in..."
+  /^error:/m, // Go / cargo: error: ...
+  /BUILD FAILED/i, // Maven/Gradle
+  /compilation failed/i, // generic
+  /SyntaxError:/, // JS/Python syntax
+  /Cannot find module/, // JS missing module
 ];
 
 const TEST_FAILURE_PATTERNS: RegExp[] = [
   /\b[1-9]\d* fail(s|ed)?\b/i, // "3 fail", "3 fails", "3 failed" — NOT "0 fail"
-  /\bFAILED\b/,                // bun test: "FAILED src/..."
-  /\d+ tests? failed/i,        // jest-style: "3 tests failed"
+  /\bFAILED\b/, // bun test: "FAILED src/..."
+  /\d+ tests? failed/i, // jest-style: "3 tests failed"
   /assertion.*failed/i,
   /AssertionError/,
 ];
@@ -171,7 +175,7 @@ const TEST_FAILURE_PATTERNS: RegExp[] = [
 /** Extract first N lines of error output, stripping ANSI codes. */
 function summarizeOutput(output: string, maxLines = 15): string {
   return output
-    .replace(/\x1B\[[0-9;]*m/g, "")   // strip ANSI
+    .replace(/\x1B\[[0-9;]*m/g, "") // strip ANSI
     .split("\n")
     .filter((l) => l.trim())
     .slice(0, maxLines)
@@ -242,8 +246,8 @@ export async function runPostEditFeedback(
   cwd: string,
   opts: PostEditOptions = {},
 ): Promise<string | null> {
-  const editCalls = toolCalls.filter((tc) =>
-    tc.name === "Write" || tc.name === "Edit" || tc.name === "MultiEdit",
+  const editCalls = toolCalls.filter(
+    (tc) => tc.name === "Write" || tc.name === "Edit" || tc.name === "MultiEdit",
   );
   if (editCalls.length === 0) return null;
 
@@ -260,7 +264,9 @@ export async function runPostEditFeedback(
       const tests = runRelatedTests(testFiles, cwd, opts.testTimeoutMs ?? 20_000);
       if (tests && !tests.success) {
         log.warn("post-edit", `Tests failed:\n${tests.output.slice(0, 500)}`);
-        errors.push(`TESTS FAILED (${testFiles.map((t) => t.split("/").pop()).join(", ")}):\n${summarizeOutput(tests.output, 20)}`);
+        errors.push(
+          `TESTS FAILED (${testFiles.map((t) => t.split("/").pop()).join(", ")}):\n${summarizeOutput(tests.output, 20)}`,
+        );
       }
     }
   }

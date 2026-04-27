@@ -14,8 +14,8 @@
 // trigger an immediate rotate.
 
 import { describe, expect, test } from "bun:test";
-import { AI_ML_PATTERNS } from "./ai-ml";
 import { ALL_PATTERNS } from "../patterns";
+import { AI_ML_PATTERNS } from "./ai-ml";
 
 function regexHits(re: RegExp, text: string): RegExpMatchArray[] {
   // Reset lastIndex; module-level `g` regexes accumulate state.

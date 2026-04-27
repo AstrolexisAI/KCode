@@ -33,12 +33,12 @@
  * silently mutated.
  */
 export type TaskType =
-  | "audit"       // read-only security/code review, produces AUDIT_REPORT.md
-  | "analyze"     // general exploration / explain / inspect, no mutation expected
-  | "scaffold"    // create a new project from scratch
-  | "implement"   // add features to an existing project
-  | "configure"   // tweak settings / config files, no code writing
-  | "operate";    // run, deploy, debug an existing system
+  | "audit" // read-only security/code review, produces AUDIT_REPORT.md
+  | "analyze" // general exploration / explain / inspect, no mutation expected
+  | "scaffold" // create a new project from scratch
+  | "implement" // add features to an existing project
+  | "configure" // tweak settings / config files, no code writing
+  | "operate"; // run, deploy, debug an existing system
 
 /**
  * Where we are in the task lifecycle. Certain phases preclude
@@ -46,26 +46,26 @@ export type TaskType =
  * phase="partial" cannot close with "ready / complete" wording.
  */
 export type TaskPhase =
-  | "planning"    // scope opened, no tool calls yet
-  | "writing"     // at least one mutation in flight
-  | "verifying"   // runtime checks in progress
-  | "blocked"     // a tool call was refused by policy; repair needed
-  | "partial"     // tools succeeded but scope isn't met yet
-  | "done"        // all verification passed
-  | "failed";     // runtime/verification demonstrably failed
+  | "planning" // scope opened, no tool calls yet
+  | "writing" // at least one mutation in flight
+  | "verifying" // runtime checks in progress
+  | "blocked" // a tool call was refused by policy; repair needed
+  | "partial" // tools succeeded but scope isn't met yet
+  | "done" // all verification passed
+  | "failed"; // runtime/verification demonstrably failed
 
 export interface MutationEvent {
-  tool: string;           // "Write" | "Edit" | "MultiEdit" | "GrepReplace" | "Bash"
-  path: string;           // absolute file path that was mutated
-  at: number;             // Date.now() when the mutation was recorded
+  tool: string; // "Write" | "Edit" | "MultiEdit" | "GrepReplace" | "Bash"
+  path: string; // absolute file path that was mutated
+  at: number; // Date.now() when the mutation was recorded
 }
 
 export interface RuntimeCommandEvent {
-  command: string;        // the full bash command
+  command: string; // the full bash command
   exitCode: number | null; // null if the process timed out or was killed
-  output: string;         // stdout + stderr combined (truncated to 2KB)
+  output: string; // stdout + stderr combined (truncated to 2KB)
   runtimeFailed: boolean; // true when output contains a traceback / error signature
-                          // even if exitCode === 0 (see issue #106)
+  // even if exitCode === 0 (see issue #106)
   /**
    * Fine-grained classification. Populated by tool-executor via
    * classifyRuntimeStatus(); defaults to inferring from runtimeFailed
@@ -87,7 +87,7 @@ export interface RuntimeCommandEvent {
 }
 
 export interface SecretFinding {
-  kind: string;   // "rpcpassword" | "api_key" | "jwt" | etc. (matches redactor rules)
+  kind: string; // "rpcpassword" | "api_key" | "jwt" | etc. (matches redactor rules)
   source: string; // where it was detected — path or "assistant-prose"
 }
 
@@ -243,16 +243,16 @@ export interface TaskScopeManager {
   reset(): void;
 }
 
-type DeepPartial<T> = T extends object
-  ? { [K in keyof T]?: DeepPartial<T[K]> }
-  : T;
+type DeepPartial<T> = T extends object ? { [K in keyof T]?: DeepPartial<T[K]> } : T;
 
 // ─── Default scope builder ──────────────────────────────────────
 
 function uuid(): string {
   // Cheap UUIDv4 without crypto import for this synchronous hot path.
   const hex = Array.from({ length: 16 }, () =>
-    Math.floor(Math.random() * 256).toString(16).padStart(2, "0"),
+    Math.floor(Math.random() * 256)
+      .toString(16)
+      .padStart(2, "0"),
   ).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
@@ -318,7 +318,12 @@ function makeEmptyScope(opts: {
 // ─── Deep merge helper ──────────────────────────────────────────
 
 function isPlainObject(x: unknown): x is Record<string, unknown> {
-  return typeof x === "object" && x !== null && !Array.isArray(x) && Object.getPrototypeOf(x) === Object.prototype;
+  return (
+    typeof x === "object" &&
+    x !== null &&
+    !Array.isArray(x) &&
+    Object.getPrototypeOf(x) === Object.prototype
+  );
 }
 
 function deepMerge<T>(target: T, patch: DeepPartial<T>): T {
@@ -390,8 +395,7 @@ export function createTaskScopeManager(): TaskScopeManager {
         const failure = _current.verification.lastRuntimeFailure;
         const CMD_FILE_RE =
           /(?:^|[\s=])([./\w-]+\.(?:py|js|ts|tsx|jsx|mjs|cjs|rb|go|rs|java|sh|php|pl|lua))(?=[\s&|;<>]|$)/gi;
-        const OUT_FILE_RE =
-          /(?:File\s+"([^"]+)"|at\s+([\w./]+\.(?:py|js|ts|rb|go|rs))\b)/g;
+        const OUT_FILE_RE = /(?:File\s+"([^"]+)"|at\s+([\w./]+\.(?:py|js|ts|rb|go|rs))\b)/g;
         const relevant = new Set<string>();
         for (const m of failure.command.matchAll(CMD_FILE_RE)) {
           if (m[1]) {
@@ -419,8 +423,7 @@ export function createTaskScopeManager(): TaskScopeManager {
         const isCode = CODE_EXT.test(evBase);
         // arm if relevant has no paths (nothing to narrow), OR direct
         // basename hit, OR the edit is to a code file (plausible fix).
-        const relevantHit =
-          relevant.size === 0 || directHit || (isCode && !isDoc);
+        const relevantHit = relevant.size === 0 || directHit || (isCode && !isDoc);
         if (relevantHit) {
           _current.verification.patchAppliedAfterFailure = true;
           _current.verification.rerunPassedAfterPatch = false;
@@ -667,7 +670,7 @@ export function getTaskScopeManager(): TaskScopeManager {
 // NB: these are broad-ish by design — a spurious match here only opens
 // a new scope, it doesn't destroy state.
 const B = "(?<![\\w])"; // left boundary (non-word to the left)
-const E = "(?![\\w])";  // right boundary (non-word to the right)
+const E = "(?![\\w])"; // right boundary (non-word to the right)
 
 const INTENT_PATTERNS: Array<{ type: TaskType; patterns: RegExp[] }> = [
   {
@@ -695,10 +698,7 @@ const INTENT_PATTERNS: Array<{ type: TaskType; patterns: RegExp[] }> = [
   {
     type: "operate",
     patterns: [
-      new RegExp(
-        `${B}(?:ejecut[aá][rs]?|corr[eé][rs]?|deploya[rs]?|despleg[aá][rs]?)${E}`,
-        "i",
-      ),
+      new RegExp(`${B}(?:ejecut[aá][rs]?|corr[eé][rs]?|deploya[rs]?|despleg[aá][rs]?)${E}`, "i"),
       /\brun\s+the\b|\bstart\s+the\b|\bdebug\s+the\b/i,
       /\b(?:diagnostic|troubleshoot)\b/i,
     ],
@@ -722,10 +722,7 @@ const INTENT_PATTERNS: Array<{ type: TaskType; patterns: RegExp[] }> = [
   {
     type: "implement",
     patterns: [
-      new RegExp(
-        `${B}(?:implement[aá][rs]?|agreg[aá][rs]?|a[nñ]ad[ií][rs]?)${E}`,
-        "i",
-      ),
+      new RegExp(`${B}(?:implement[aá][rs]?|agreg[aá][rs]?|a[nñ]ad[ií][rs]?)${E}`, "i"),
       /\b(?:implement|add\s+feature)\b/i,
     ],
   },
@@ -743,10 +740,7 @@ export function classifyIntent(userPrompt: string): TaskType {
  * intent differs from the current scope's type. The caller is
  * responsible for actually calling beginNewScope() on this signal.
  */
-export function shouldOpenNewScope(
-  current: TaskScope | null,
-  nextIntent: TaskType,
-): boolean {
+export function shouldOpenNewScope(current: TaskScope | null, nextIntent: TaskType): boolean {
   if (current === null) return true;
   return current.type !== nextIntent;
 }

@@ -30,21 +30,14 @@ function safeReadFile(path: string): string {
 
 /** Look for Bitcoin-RPC shapes in any file the scope has touched. */
 function detectBitcoinRpcUsage(scope: TaskScope): boolean {
-  const touchedFiles = [
-    ...scope.verification.filesWritten,
-    ...scope.verification.filesEdited,
-  ];
+  const touchedFiles = [...scope.verification.filesWritten, ...scope.verification.filesEdited];
   for (const path of touchedFiles) {
     if (!/\.(?:ts|tsx|js|jsx|mjs|cjs|py)$/.test(path)) continue;
     const content = safeReadFile(path);
     if (!content) continue;
     if (
-      /\bbitcoin-core\b|\bAuthServiceProxy\b|\bbitcoinrpc\b|\bBitcoinCore\b/.test(
-        content,
-      ) ||
-      /getblockcount|getblockchaininfo|getrawmempool|getmempoolinfo|getblockhash/.test(
-        content,
-      )
+      /\bbitcoin-core\b|\bAuthServiceProxy\b|\bbitcoinrpc\b|\bBitcoinCore\b/.test(content) ||
+      /getblockcount|getblockchaininfo|getrawmempool|getmempoolinfo|getblockhash/.test(content)
     ) {
       return true;
     }
@@ -69,18 +62,13 @@ function extractBitcoinRpcConfig(scope: TaskScope): BitcoinRpcConfig | null {
   let username = "";
   let password = "";
 
-  const touchedFiles = [
-    ...scope.verification.filesWritten,
-    ...scope.verification.filesEdited,
-  ];
+  const touchedFiles = [...scope.verification.filesWritten, ...scope.verification.filesEdited];
   for (const path of touchedFiles) {
     const content = safeReadFile(path);
     if (!content) continue;
 
     // host + port
-    const hostMatch = content.match(
-      /\bhost\s*[:=]\s*['"]([^'"]+)['"]/,
-    );
+    const hostMatch = content.match(/\bhost\s*[:=]\s*['"]([^'"]+)['"]/);
     if (hostMatch?.[1]) host = hostMatch[1];
     const portMatch = content.match(/\bport\s*[:=]\s*['"]?(\d{2,5})['"]?/);
     if (portMatch?.[1]) port = parseInt(portMatch[1], 10);
@@ -147,9 +135,7 @@ export const bitcoinRpcProbe: VerificationProbe = {
     }
 
     const url = `http://${cfg.host}:${cfg.port}/`;
-    const auth = Buffer.from(`${cfg.username}:${cfg.password}`).toString(
-      "base64",
-    );
+    const auth = Buffer.from(`${cfg.username}:${cfg.password}`).toString("base64");
     const body = JSON.stringify({
       jsonrpc: "1.0",
       id: "kcode-probe",

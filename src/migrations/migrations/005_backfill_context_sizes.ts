@@ -56,15 +56,12 @@ export const migration: Migration = {
       if (existsSync(settingsPath)) {
         const s = JSON.parse(readFileSync(settingsPath, "utf-8")) as Record<string, unknown>;
         apiKeys = {
-          anthropic:
-            (s.anthropicApiKey as string | undefined) ?? process.env.ANTHROPIC_API_KEY,
+          anthropic: (s.anthropicApiKey as string | undefined) ?? process.env.ANTHROPIC_API_KEY,
           openai: (s.openaiApiKey as string | undefined) ?? process.env.OPENAI_API_KEY,
           groq: (s.groqApiKey as string | undefined) ?? process.env.GROQ_API_KEY,
-          deepseek:
-            (s.deepseekApiKey as string | undefined) ?? process.env.DEEPSEEK_API_KEY,
+          deepseek: (s.deepseekApiKey as string | undefined) ?? process.env.DEEPSEEK_API_KEY,
           xai: (s.xaiApiKey as string | undefined) ?? process.env.XAI_API_KEY,
-          together:
-            (s.togetherApiKey as string | undefined) ?? process.env.TOGETHER_API_KEY,
+          together: (s.togetherApiKey as string | undefined) ?? process.env.TOGETHER_API_KEY,
           gemini: (s.geminiApiKey as string | undefined) ?? process.env.GEMINI_API_KEY,
         };
       }

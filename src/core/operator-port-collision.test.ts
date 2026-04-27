@@ -3,11 +3,7 @@
 // from "occupant is a different project (kill or pick another port)".
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import {
-  cwdsAreSameProject,
-  getProcessCwd,
-  runSpawnPreflight,
-} from "./bash-spawn-preflight";
+import { cwdsAreSameProject, getProcessCwd, runSpawnPreflight } from "./bash-spawn-preflight";
 
 describe("getProcessCwd", () => {
   test("returns the cwd of the current process", () => {

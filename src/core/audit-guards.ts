@@ -4,7 +4,7 @@
 // "ONE report file" discipline. Without this, the model can bypass Write's
 // guards by using `cat > AUDIT_REPORT.md << EOF` via Bash.
 
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { isAuditSession } from "./session-tracker";
 
@@ -176,10 +176,33 @@ export function extractBashFileMutations(command: string): string[] {
 
 // File extensions that count as "source code" for the audit-edit guard.
 const SOURCE_EXTS = new Set([
-  ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx",
-  ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
-  ".py", ".go", ".rs", ".java", ".kt", ".swift",
-  ".rb", ".php", ".cs", ".scala", ".m", ".mm", ".zig",
+  ".c",
+  ".cc",
+  ".cpp",
+  ".cxx",
+  ".h",
+  ".hh",
+  ".hpp",
+  ".hxx",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".py",
+  ".go",
+  ".rs",
+  ".java",
+  ".kt",
+  ".swift",
+  ".rb",
+  ".php",
+  ".cs",
+  ".scala",
+  ".m",
+  ".mm",
+  ".zig",
 ]);
 
 function isSourceFile(path: string): boolean {
@@ -220,10 +243,14 @@ function findAuditReportForFile(startPath: string): string | null {
           const full = resolve(dir, entry);
           try {
             if (statSync(full).isFile()) return full;
-          } catch { /* skip */ }
+          } catch {
+            /* skip */
+          }
         }
       }
-    } catch { /* dir not readable */ }
+    } catch {
+      /* dir not readable */
+    }
 
     // Don't walk above cwd if we started under it
     if (isUnderCwd && dir === cwd) break;
@@ -259,7 +286,9 @@ function reportCitesFile(reportPath: string, targetFile: string): boolean {
       const rel = parts.slice(i).join("/");
       if (rel.length > 15 && content.includes(rel)) return true;
     }
-  } catch { /* report unreadable */ }
+  } catch {
+    /* report unreadable */
+  }
   return false;
 }
 
@@ -291,8 +320,10 @@ export function extractBashReadTargets(command: string): string[] {
       if (/^\d+$/.test(tok)) continue;
       // Strip quotes
       let path = tok;
-      if ((path.startsWith("'") && path.endsWith("'")) ||
-          (path.startsWith('"') && path.endsWith('"'))) {
+      if (
+        (path.startsWith("'") && path.endsWith("'")) ||
+        (path.startsWith('"') && path.endsWith('"'))
+      ) {
         path = path.slice(1, -1);
       }
       // Only accept things that look like file paths (contain . or /)
@@ -322,8 +353,10 @@ export function extractBashGrepPattern(command: string): string | null {
     if (tok.startsWith("-")) continue;
     // Strip quotes
     let pattern = tok;
-    if ((pattern.startsWith("'") && pattern.endsWith("'")) ||
-        (pattern.startsWith('"') && pattern.endsWith('"'))) {
+    if (
+      (pattern.startsWith("'") && pattern.endsWith("'")) ||
+      (pattern.startsWith('"') && pattern.endsWith('"'))
+    ) {
       pattern = pattern.slice(1, -1);
     }
     return pattern;

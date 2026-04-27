@@ -140,10 +140,7 @@ async function runNvidiaSmi(): Promise<string | null> {
  * Applies a 10% safety margin on top — even if nvidia-smi says 12GB
  * is free, we reserve some for KV cache + runtime overhead.
  */
-export function effectiveUsableVramMB(
-  availability: GpuAvailability,
-  totalVramMB: number,
-): number {
+export function effectiveUsableVramMB(availability: GpuAvailability, totalVramMB: number): number {
   const SAFETY = 0.9;
   if (availability.freeMB !== null) {
     // Live detection: use actual free with safety margin

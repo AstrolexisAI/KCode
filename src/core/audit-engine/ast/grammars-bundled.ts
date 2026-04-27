@@ -16,17 +16,17 @@
 //   2. Append it to BUNDLED_GRAMMARS below
 //   3. Add a tsLangFor() entry in runner.ts if the language id differs
 
-import pythonWasm from "./grammars/tree-sitter-python.wasm" with { type: "file" };
-import javascriptWasm from "./grammars/tree-sitter-javascript.wasm" with { type: "file" };
-import goWasm from "./grammars/tree-sitter-go.wasm" with { type: "file" };
-import typescriptWasm from "./grammars/tree-sitter-typescript.wasm" with { type: "file" };
-import tsxWasm from "./grammars/tree-sitter-tsx.wasm" with { type: "file" };
-import javaWasm from "./grammars/tree-sitter-java.wasm" with { type: "file" };
 import cWasm from "./grammars/tree-sitter-c.wasm" with { type: "file" };
 import cppWasm from "./grammars/tree-sitter-cpp.wasm" with { type: "file" };
-import rustWasm from "./grammars/tree-sitter-rust.wasm" with { type: "file" };
-import rubyWasm from "./grammars/tree-sitter-ruby.wasm" with { type: "file" };
+import goWasm from "./grammars/tree-sitter-go.wasm" with { type: "file" };
+import javaWasm from "./grammars/tree-sitter-java.wasm" with { type: "file" };
+import javascriptWasm from "./grammars/tree-sitter-javascript.wasm" with { type: "file" };
 import phpWasm from "./grammars/tree-sitter-php.wasm" with { type: "file" };
+import pythonWasm from "./grammars/tree-sitter-python.wasm" with { type: "file" };
+import rubyWasm from "./grammars/tree-sitter-ruby.wasm" with { type: "file" };
+import rustWasm from "./grammars/tree-sitter-rust.wasm" with { type: "file" };
+import tsxWasm from "./grammars/tree-sitter-tsx.wasm" with { type: "file" };
+import typescriptWasm from "./grammars/tree-sitter-typescript.wasm" with { type: "file" };
 
 export interface BundledGrammar {
   /** tree-sitter language key (matches tsLangFor in runner.ts) */

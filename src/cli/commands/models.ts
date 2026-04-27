@@ -287,7 +287,10 @@ export function registerModelsCommand(program: Command): void {
     .action(async (opts: { provider?: string }) => {
       const { runModelDiscovery } = await import("../../core/model-discovery");
       const providerFilter = opts.provider
-        ? opts.provider.split(",").map((s) => s.trim()).filter(Boolean)
+        ? opts.provider
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
         : undefined;
 
       console.log("Discovering models from cloud providers...\n");

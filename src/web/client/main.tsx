@@ -143,10 +143,7 @@ function App() {
             ];
           }
           // Unknown id — create the message as a new assistant block
-          return [
-            ...prev,
-            { id, role: "assistant", content: delta, timestamp: Date.now() },
-          ];
+          return [...prev, { id, role: "assistant", content: delta, timestamp: Date.now() }];
         });
         break;
       }

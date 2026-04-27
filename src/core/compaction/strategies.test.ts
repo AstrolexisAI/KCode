@@ -33,10 +33,7 @@ function makeImageMsg(text: string, alt?: string): Message {
 function makeDocMsg(text: string): Message {
   return {
     role: "user" as const,
-    content: [
-      { type: "document", data: "pdfdata" } as any,
-      { type: "text" as const, text },
-    ],
+    content: [{ type: "document", data: "pdfdata" } as any, { type: "text" as const, text }],
   };
 }
 

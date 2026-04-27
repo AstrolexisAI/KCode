@@ -48,10 +48,7 @@ function parameterNames(func: AstNode): Set<string> {
     for (let j = 0; j < child.namedChildCount; j++) {
       const decl = child.namedChild(j);
       if (!decl) continue;
-      if (
-        decl.type !== "parameter_declaration" &&
-        decl.type !== "variadic_parameter_declaration"
-      ) {
+      if (decl.type !== "parameter_declaration" && decl.type !== "variadic_parameter_declaration") {
         continue;
       }
       // Each declaration is `name1, name2, ... <type>`. We collect
@@ -148,7 +145,8 @@ export const GO_AST_PATTERNS: AstPattern[] = [
 
   {
     id: "go-ast-002-os-open-of-parameter",
-    title: "os.Open / os.ReadFile / ioutil.ReadFile of a function parameter (path traversal via AST)",
+    title:
+      "os.Open / os.ReadFile / ioutil.ReadFile of a function parameter (path traversal via AST)",
     severity: "high",
     languages: ["go"],
     /**
@@ -169,8 +167,7 @@ export const GO_AST_PATTERNS: AstPattern[] = [
       const arg = captures.arg?.[0];
       if (!pkg || !method || !arg) return null;
       const isOs = pkg.node.text === "os" && GO_FILE_OPEN_METHODS.has(method.node.text);
-      const isIoutil =
-        pkg.node.text === "ioutil" && GO_IOUTIL_FILE_METHODS.has(method.node.text);
+      const isIoutil = pkg.node.text === "ioutil" && GO_IOUTIL_FILE_METHODS.has(method.node.text);
       if (!isOs && !isIoutil) return null;
       const enclosing = findEnclosingFunction(method.node);
       if (!enclosing) return null;

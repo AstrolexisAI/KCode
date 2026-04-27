@@ -4,8 +4,8 @@
 // — the suite stays green on hosts without the bundled wasm.
 
 import { describe, expect, it } from "bun:test";
-import { _resetAstRunnerForTest, runAstPatterns } from "./runner";
 import { JAVASCRIPT_AST_PATTERNS } from "./javascript-patterns";
+import { _resetAstRunnerForTest, runAstPatterns } from "./runner";
 
 function gateOnGrammar<T>(stats: { grammar_loaded: boolean }[], thunk: () => T): T | undefined {
   if (stats.every((s) => !s.grammar_loaded)) return undefined;
@@ -205,7 +205,9 @@ function handler(userInput) { cp.exec(userInput); }
 `;
     const r = await runAstPatterns(JAVASCRIPT_AST_PATTERNS, "/tmp/a.js", code);
     gateOnGrammar(r.stats, () => {
-      const ast002 = r.candidates.filter((c) => c.pattern_id === "js-ast-002-child-process-exec-of-parameter");
+      const ast002 = r.candidates.filter(
+        (c) => c.pattern_id === "js-ast-002-child-process-exec-of-parameter",
+      );
       expect(ast002.length).toBe(1);
       expect(ast002[0]!.matched_text).toBe(".exec(userInput)");
     });
@@ -221,7 +223,9 @@ function e(x) { cp.execFileSync(x); }
 `;
     const r = await runAstPatterns(JAVASCRIPT_AST_PATTERNS, "/tmp/a.js", code);
     gateOnGrammar(r.stats, () => {
-      const ast002 = r.candidates.filter((c) => c.pattern_id === "js-ast-002-child-process-exec-of-parameter");
+      const ast002 = r.candidates.filter(
+        (c) => c.pattern_id === "js-ast-002-child-process-exec-of-parameter",
+      );
       expect(ast002.length).toBe(5);
     });
   });
@@ -231,7 +235,9 @@ function e(x) { cp.execFileSync(x); }
     const code = `function f() { cp.exec("ls -la"); }\n`;
     const r = await runAstPatterns(JAVASCRIPT_AST_PATTERNS, "/tmp/a.js", code);
     gateOnGrammar(r.stats, () => {
-      const ast002 = r.candidates.filter((c) => c.pattern_id === "js-ast-002-child-process-exec-of-parameter");
+      const ast002 = r.candidates.filter(
+        (c) => c.pattern_id === "js-ast-002-child-process-exec-of-parameter",
+      );
       expect(ast002.length).toBe(0);
     });
   });
@@ -245,7 +251,9 @@ function e(x) { cp.execFileSync(x); }
 `;
     const r = await runAstPatterns(JAVASCRIPT_AST_PATTERNS, "/tmp/a.js", code);
     gateOnGrammar(r.stats, () => {
-      const ast002 = r.candidates.filter((c) => c.pattern_id === "js-ast-002-child-process-exec-of-parameter");
+      const ast002 = r.candidates.filter(
+        (c) => c.pattern_id === "js-ast-002-child-process-exec-of-parameter",
+      );
       expect(ast002.length).toBe(0);
     });
   });
@@ -255,7 +263,9 @@ function e(x) { cp.execFileSync(x); }
     const code = `function f(x) { return arr.map(x); }\n`;
     const r = await runAstPatterns(JAVASCRIPT_AST_PATTERNS, "/tmp/a.js", code);
     gateOnGrammar(r.stats, () => {
-      const ast002 = r.candidates.filter((c) => c.pattern_id === "js-ast-002-child-process-exec-of-parameter");
+      const ast002 = r.candidates.filter(
+        (c) => c.pattern_id === "js-ast-002-child-process-exec-of-parameter",
+      );
       expect(ast002.length).toBe(0);
     });
   });
@@ -270,7 +280,9 @@ describe("js-ast-003 regexp-construction-of-parameter", () => {
       `function f(p) { return new RegExp(p); }\n`,
     );
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "js-ast-003-regexp-construction-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "js-ast-003-regexp-construction-of-parameter",
+      );
       expect(hits.length).toBe(1);
       expect(hits[0]!.matched_text).toBe("new RegExp(p)");
     });
@@ -284,7 +296,9 @@ describe("js-ast-003 regexp-construction-of-parameter", () => {
       `function f(p) { return RegExp(p); }\n`,
     );
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "js-ast-003-regexp-construction-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "js-ast-003-regexp-construction-of-parameter",
+      );
       expect(hits.length).toBe(1);
     });
   });
@@ -297,7 +311,9 @@ describe("js-ast-003 regexp-construction-of-parameter", () => {
       `function f() { return new RegExp("[a-z]+"); }\n`,
     );
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "js-ast-003-regexp-construction-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "js-ast-003-regexp-construction-of-parameter",
+      );
       expect(hits.length).toBe(0);
     });
   });
@@ -310,7 +326,9 @@ describe("js-ast-003 regexp-construction-of-parameter", () => {
       `function f() { const pat = "[a-z]"; return new RegExp(pat); }\n`,
     );
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "js-ast-003-regexp-construction-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "js-ast-003-regexp-construction-of-parameter",
+      );
       expect(hits.length).toBe(0);
     });
   });
@@ -323,7 +341,9 @@ describe("js-ast-003 regexp-construction-of-parameter", () => {
       `function f(p) { return new Date(p); }\n`,
     );
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "js-ast-003-regexp-construction-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "js-ast-003-regexp-construction-of-parameter",
+      );
       expect(hits.length).toBe(0);
     });
   });
@@ -336,7 +356,9 @@ describe("js-ast-003 regexp-construction-of-parameter", () => {
       `function f(p) { return new RegExp(p, "g"); }\n`,
     );
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "js-ast-003-regexp-construction-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "js-ast-003-regexp-construction-of-parameter",
+      );
       expect(hits.length).toBe(1);
     });
   });
@@ -359,6 +381,9 @@ describe("javascript-patterns shape", () => {
       expect(typeof p.match).toBe("function");
       expect(typeof p.query).toBe("string");
     }
-    expect(JAVASCRIPT_AST_PATTERNS.find((p) => p.id === "js-ast-003-regexp-construction-of-parameter")!.cwe).toBe("CWE-1333");
+    expect(
+      JAVASCRIPT_AST_PATTERNS.find((p) => p.id === "js-ast-003-regexp-construction-of-parameter")!
+        .cwe,
+    ).toBe("CWE-1333");
   });
 });

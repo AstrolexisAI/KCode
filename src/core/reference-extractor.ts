@@ -48,7 +48,7 @@ export interface CapturedList {
 
 /** owner/repo shape. Owner: 1-39 chars, alnum + hyphen. Repo: 1-100 chars. */
 const OWNER_REPO_RE =
-  /(?<![./\w-])([A-Za-z0-9][A-Za-z0-9-]{0,38})\/([A-Za-z0-9_.-]{1,100})(?![\/\w])/g;
+  /(?<![./\w-])([A-Za-z0-9][A-Za-z0-9-]{0,38})\/([A-Za-z0-9_.-]{1,100})(?![/\w])/g;
 
 /** Markdown link [label](url) */
 const MD_LINK_RE = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
@@ -63,12 +63,7 @@ const NUMBERED_LINE_RE = /^\s*(?:\[#?(\d{1,3})\]|(\d{1,3})[.)])\s+/;
 const TABLE_ROW_RE = /^\s*\|.*\|.*\|.*$/;
 
 // Common tokens that look like owner/repo but aren't (paths, globs, regex fragments).
-const STOP_LIST = new Set([
-  "and/or",
-  "i/o",
-  "his/her",
-  "he/she",
-]);
+const STOP_LIST = new Set(["and/or", "i/o", "his/her", "he/she"]);
 
 // ─── Main extractor ──────────────────────────────────────────────
 
@@ -95,15 +90,12 @@ export function extractRepoList(text: string): CapturedList | null {
     const repos = extractReposFromLine(raw);
     if (repos.length === 0) continue;
 
-    let shape: typeof candidates[number]["shape"] = "plain";
+    let shape: (typeof candidates)[number]["shape"] = "plain";
     let explicitOrdinal: number | undefined;
 
     if (numberedMatch) {
       shape = "numbered";
-      explicitOrdinal = parseInt(
-        numberedMatch[1] ?? numberedMatch[2] ?? "0",
-        10,
-      );
+      explicitOrdinal = parseInt(numberedMatch[1] ?? numberedMatch[2] ?? "0", 10);
     } else if (isBullet) {
       shape = "bullet";
     } else if (isTable) {
@@ -135,9 +127,7 @@ export function extractRepoList(text: string): CapturedList | null {
   }
   if (currentBlock.length > 0) blocks.push(currentBlock);
 
-  const block = blocks
-    .filter((b) => b.length >= 3)
-    .sort((a, b) => b.length - a.length)[0];
+  const block = blocks.filter((b) => b.length >= 3).sort((a, b) => b.length - a.length)[0];
   if (!block) return null;
 
   // Phase 3: flatten the block into GithubRepoListItem[].
@@ -178,9 +168,7 @@ export function extractRepoList(text: string): CapturedList | null {
  * Pull every owner/repo token from a line, including ones that come
  * from a markdown link. Preserves URL context when present.
  */
-function extractReposFromLine(
-  line: string,
-): Array<{ repo: string; url?: string; title?: string }> {
+function extractReposFromLine(line: string): Array<{ repo: string; url?: string; title?: string }> {
   const out: Array<{ repo: string; url?: string; title?: string }> = [];
   const seen = new Set<string>();
 
@@ -232,7 +220,9 @@ function firstRepo(text: string): string | null {
 }
 
 function extractRepoFromGithubUrl(url: string): string | null {
-  const m = url.match(/github\.com\/([A-Za-z0-9][A-Za-z0-9-]{0,38})\/([A-Za-z0-9_.-]{1,100})(?:[/?#]|$)/);
+  const m = url.match(
+    /github\.com\/([A-Za-z0-9][A-Za-z0-9-]{0,38})\/([A-Za-z0-9_.-]{1,100})(?:[/?#]|$)/,
+  );
   if (!m) return null;
   return `${m[1]}/${m[2]}`;
 }

@@ -140,18 +140,7 @@ const EYES: Record<KodiMood, string[]> = {
   // Idle is now a richer cycle: open, half-open, looking left, looking
   // right, open again — gives Kodi a "looking around the room" feel
   // instead of a static stare when nothing is happening.
-  idle: [
-    "o  .o",
-    "o  _o",
-    "o  .o",
-    "o   o",
-    "<   o",
-    "o   >",
-    "o  .o",
-    "O  .o",
-    "o  .O",
-    "-  _-",
-  ],
+  idle: ["o  .o", "o  _o", "o  .o", "o   o", "<   o", "o   >", "o  .o", "O  .o", "o  .O", "-  _-"],
   happy: ["^  .^", "^  _^", "^  -^", "^ _ ^", "^  v^", "^  .^"],
   excited: ["* . *", "* v *", "o . o", "* o *", "* _ *", "o v o"],
   thinking: ["o  _ o", "o  -o", "o  -o", "o . o", "O   o"],
@@ -196,14 +185,7 @@ const BODY: Record<KodiMood, string[]> = {
   working: ["    /|\\ |", "    /|\\ |", "    /|\\  ", "    /|> |", "    <|\\ |"],
   worried: ["    /|\\  ", "   .-|-. ", "    \\|   ", "    /|~  "],
   sleeping: ["    /|\\  ", "    \\|   ", "   __|__ "],
-  celebrating: [
-    "   \\(|)/ ",
-    "   \\(|)/ ",
-    "   \\(|)/ ",
-    "   *(|)* ",
-    "   \\(|)- ",
-    "   -(|)/ ",
-  ],
+  celebrating: ["   \\(|)/ ", "   \\(|)/ ", "   \\(|)/ ", "   *(|)* ", "   \\(|)- ", "   -(|)/ "],
   curious: ["    /|   ", "     |\\  ", "    /|   ", "    /|?  "],
   mischievous: ["    /|-- ", "   .-|/  ", "   _/|\\  ", "    /|~~ "],
   crazy: ["  ~\\(|)/~", "   /(|)\\ ", "  ~\\(|)/~", "  *\\(|)/*"],
@@ -213,14 +195,7 @@ const BODY: Record<KodiMood, string[]> = {
   // chest. Works as a short burst on pro/team/enterprise flexes.
   flex: ["   <(|)> ", "   <(|)/ ", "   \\(|)> ", "   <(|)> ", "   *<|>* "],
   // Dance: a Lindy-hop-ish sway — left-right-left-right with arms up.
-  dance: [
-    "    \\|/  ",
-    "   <(|)> ",
-    "    /|\\  ",
-    "   /(|)\\ ",
-    "   \\(|)/ ",
-    "   <(|)> ",
-  ],
+  dance: ["    \\|/  ", "   <(|)> ", "    /|\\  ", "   /(|)\\ ", "   \\(|)/ ", "   <(|)> "],
   // Waving — one arm stuck up, the other bouncing side-to-side.
   waving: ["    /|\\\\ ", "    /|/  ", "    /|\\\\ ", "    /|/  "],
 };
@@ -360,10 +335,7 @@ export const TIER_SPEECH: Record<KodiTier, { entrance: string[]; flex: string[] 
  *
  * Each chip still respects the ≤12-char soft budget of the bubble.
  */
-export const PERSONALITY_CHIPS: Record<
-  KodiPersonality,
-  Partial<Record<string, string[]>>
-> = {
+export const PERSONALITY_CHIPS: Record<KodiPersonality, Partial<Record<string, string[]>>> = {
   sarcastic: {
     tool_start: ["fine.", "ok...", "sure"],
     tool_done: ["obv", "wow", "shocking", "no way"],
@@ -861,11 +833,7 @@ export class KodiAnimEngine {
     // mid-activity. Curiosity and wanderlust only nudge slightly
     // (the user being active makes Kodi less restless, but Kodi is
     // always a bit curious and sometimes wants to wander).
-    if (
-      event.type !== "idle" &&
-      event.type !== "tier_entrance" &&
-      event.type !== "tier_flex"
-    ) {
+    if (event.type !== "idle" && event.type !== "tier_entrance" && event.type !== "tier_flex") {
       this.drainUrge("boredom", 0.4);
       this.drainUrge("curiosity", 0.05);
       this.drainUrge("wanderlust", 0.02);

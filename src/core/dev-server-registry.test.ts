@@ -173,11 +173,7 @@ describe("cleanupStaleDevServers", () => {
     // using the same format the module uses.
     const { writeFileSync } = require("node:fs");
     const { kcodePath } = require("./paths");
-    writeFileSync(
-      kcodePath("dev-servers.json"),
-      JSON.stringify(entries, null, 2),
-      "utf-8",
-    );
+    writeFileSync(kcodePath("dev-servers.json"), JSON.stringify(entries, null, 2), "utf-8");
 
     // Run cleanup targeting a DIFFERENT cwd
     const result = cleanupStaleDevServers("/tmp/proj");
@@ -234,11 +230,7 @@ describe("registry corruption recovery", () => {
   test("non-array JSON is reset to empty array", () => {
     const { writeFileSync } = require("node:fs");
     const { kcodePath } = require("./paths");
-    writeFileSync(
-      kcodePath("dev-servers.json"),
-      JSON.stringify({ not: "an array" }),
-      "utf-8",
-    );
+    writeFileSync(kcodePath("dev-servers.json"), JSON.stringify({ not: "an array" }), "utf-8");
     expect(readRegistry()).toEqual([]);
   });
 

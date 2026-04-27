@@ -75,9 +75,7 @@ describe("ModelToggle render", () => {
   });
 
   test("renders without crashing", () => {
-    instance = renderWithTheme(
-      <ModelToggle isActive={true} currentModel="x" onDone={() => {}} />,
-    );
+    instance = renderWithTheme(<ModelToggle isActive={true} currentModel="x" onDone={() => {}} />);
     expect(typeof instance.lastFrame()).toBe("string");
   });
 });

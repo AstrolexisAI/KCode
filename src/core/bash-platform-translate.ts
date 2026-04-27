@@ -140,9 +140,9 @@ export function extractFirstExecutable(command: string): {
   let cursor = 0;
   // Skip env-var assignments and privilege wrappers
   while (true) {
-    const match = trimmed.slice(cursor).match(
-      /^([A-Z_][A-Z0-9_]*=[^\s]*|sudo|nohup|exec|time|\s+)\s*/,
-    );
+    const match = trimmed
+      .slice(cursor)
+      .match(/^([A-Z_][A-Z0-9_]*=[^\s]*|sudo|nohup|exec|time|\s+)\s*/);
     if (!match) break;
     cursor += match[0].length;
   }
@@ -203,8 +203,7 @@ export function translateBashCommand(
     // Rewrite the command: replace the executable token with `t.to`.
     // Preserves everything else (quoting, env vars, arguments).
     const translated = command.slice(0, start) + t.to + command.slice(start + length);
-    const note =
-      `[platform] translated \`${t.from}\` → \`${toFirstToken}\`: ${t.reason}`;
+    const note = `[platform] translated \`${t.from}\` → \`${toFirstToken}\`: ${t.reason}`;
     log.info("bash-translate", note);
     return { translated: true, command: translated, original, note };
   }

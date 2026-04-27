@@ -80,7 +80,9 @@ describe("SessionSync", () => {
       const result = sync.sanitizeMessage(msg);
 
       expect((result.content as Array<{ text: string }>)[0]!.text).toEndWith("[truncated]");
-      expect((result.content as Array<{ text: string }>)[0]!.text.length).toBeLessThanOrEqual(2048 + " [truncated]".length);
+      expect((result.content as Array<{ text: string }>)[0]!.text.length).toBeLessThanOrEqual(
+        2048 + " [truncated]".length,
+      );
       expect((result.content as Array<{ text: string }>)[1]!.text).toBe("short");
     });
 
@@ -122,8 +124,12 @@ describe("SessionSync", () => {
     });
 
     test("handles null/undefined input gracefully", () => {
-      expect(sync.sanitizeMessage(null as unknown as Parameters<typeof sync.sanitizeMessage>[0])).toBeNull();
-      expect(sync.sanitizeMessage(undefined as unknown as Parameters<typeof sync.sanitizeMessage>[0])).toBeUndefined();
+      expect(
+        sync.sanitizeMessage(null as unknown as Parameters<typeof sync.sanitizeMessage>[0]),
+      ).toBeNull();
+      expect(
+        sync.sanitizeMessage(undefined as unknown as Parameters<typeof sync.sanitizeMessage>[0]),
+      ).toBeUndefined();
     });
 
     test("preserves role and metadata fields", () => {

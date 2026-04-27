@@ -15,8 +15,11 @@
 // patterns themselves still carry their NASA-IDF provenance in
 // their explanation/verify_prompt text.
 
-import type { BugPattern } from "./types";
-import type { AstPattern } from "./ast/types";
+import { C_CPP_AST_PATTERNS } from "./ast/c-cpp-patterns";
+import { GO_AST_PATTERNS } from "./ast/go-patterns";
+import { JAVA_AST_PATTERNS } from "./ast/java-patterns";
+import { JAVASCRIPT_AST_PATTERNS } from "./ast/javascript-patterns";
+import { PHP_AST_PATTERNS } from "./ast/php-patterns";
 // v2.10.351 — AST pattern aggregator. The verifier looks up
 // patterns by id via getPatternById(); without registering AST
 // patterns here, every AST candidate ended up in needs_context with
@@ -26,96 +29,93 @@ import type { AstPattern } from "./ast/types";
 // verifier consumes — only the runtime shape (regex vs query+match)
 // differs.
 import { PYTHON_AST_PATTERNS } from "./ast/python-patterns";
-import { JAVASCRIPT_AST_PATTERNS } from "./ast/javascript-patterns";
-import { TYPESCRIPT_AST_PATTERNS } from "./ast/typescript-patterns";
-import { GO_AST_PATTERNS } from "./ast/go-patterns";
-import { JAVA_AST_PATTERNS } from "./ast/java-patterns";
-import { C_CPP_AST_PATTERNS } from "./ast/c-cpp-patterns";
-import { RUST_AST_PATTERNS } from "./ast/rust-patterns";
 import { RUBY_AST_PATTERNS } from "./ast/ruby-patterns";
-import { PHP_AST_PATTERNS } from "./ast/php-patterns";
-import { CPP_PATTERNS } from "./patterns/cpp";
-import { PYTHON_PATTERNS } from "./patterns/python";
-import { JS_PATTERNS } from "./patterns/js";
-import { GO_PATTERNS } from "./patterns/go";
-import { RUST_PATTERNS } from "./patterns/rust";
-import { JAVA_PATTERNS } from "./patterns/java";
-import { SWIFT_PATTERNS } from "./patterns/swift";
-import { KOTLIN_PATTERNS } from "./patterns/kotlin";
-import { CSHARP_PATTERNS } from "./patterns/csharp";
-import { PHP_PATTERNS } from "./patterns/php";
-import { RUBY_PATTERNS } from "./patterns/ruby";
-import { DART_PATTERNS } from "./patterns/dart";
-import { ELIXIR_PATTERNS } from "./patterns/elixir";
-import { LUA_PATTERNS } from "./patterns/lua";
-import { SQL_PATTERNS } from "./patterns/sql";
-import { SCALA_PATTERNS } from "./patterns/scala";
-import { HASKELL_PATTERNS } from "./patterns/haskell";
-import { ZIG_PATTERNS } from "./patterns/zig";
-import { FRAMEWORK_PATTERNS } from "./patterns/framework";
-import { UNIVERSAL_PATTERNS } from "./patterns/universal";
-// v2.10.314 expansion packs
-import { CRYPTO_PATTERNS } from "./patterns/crypto";
-import { INJECTION_PATTERNS } from "./patterns/injection";
-import { DESERIALIZE_PATTERNS } from "./patterns/deserialize";
-import { FLIGHT_SOFTWARE_PATTERNS } from "./patterns/flight-software";
+import { RUST_AST_PATTERNS } from "./ast/rust-patterns";
+import type { AstPattern } from "./ast/types";
+import { TYPESCRIPT_AST_PATTERNS } from "./ast/typescript-patterns";
 // v2.10.370 — F9 vendible packs
 import { AI_ML_PATTERNS } from "./patterns/ai-ml";
 // P2.1 (v2.10.389) — Cloud / IaC at-rest pack.
 import { CLOUD_PATTERNS } from "./patterns/cloud";
-// P2.2 (v2.10.389) — Supply-chain pack.
-import { SUPPLY_CHAIN_PATTERNS } from "./patterns/supply-chain";
-// P2.3 (v2.10.391) — Next.js framework starter (web pack).
-import { NEXTJS_PATTERNS } from "./patterns/nextjs";
-// P2.3 (v2.10.391) — FastAPI framework pack.
-import { FASTAPI_PATTERNS } from "./patterns/fastapi";
-// P2.3 (v2.10.391) — Express framework pack.
-import { EXPRESS_PATTERNS } from "./patterns/express";
+import { CPP_PATTERNS } from "./patterns/cpp";
+// v2.10.314 expansion packs
+import { CRYPTO_PATTERNS } from "./patterns/crypto";
+import { CSHARP_PATTERNS } from "./patterns/csharp";
+import { DART_PATTERNS } from "./patterns/dart";
+import { DESERIALIZE_PATTERNS } from "./patterns/deserialize";
 // P2.3 (v2.10.391) — Django framework pack.
 import { DJANGO_PATTERNS } from "./patterns/django";
-// P2.3 (v2.10.391) — Rails framework pack.
-import { RAILS_PATTERNS } from "./patterns/rails";
-// P2.3 (v2.10.391) — Spring framework pack.
-import { SPRING_PATTERNS } from "./patterns/spring";
+import { ELIXIR_PATTERNS } from "./patterns/elixir";
+// P2.3 (v2.10.391) — Express framework pack.
+import { EXPRESS_PATTERNS } from "./patterns/express";
+// P2.3 (v2.10.391) — FastAPI framework pack.
+import { FASTAPI_PATTERNS } from "./patterns/fastapi";
+import { FLIGHT_SOFTWARE_PATTERNS } from "./patterns/flight-software";
+import { FRAMEWORK_PATTERNS } from "./patterns/framework";
+import { GO_PATTERNS } from "./patterns/go";
+import { HASKELL_PATTERNS } from "./patterns/haskell";
+import { INJECTION_PATTERNS } from "./patterns/injection";
+import { JAVA_PATTERNS } from "./patterns/java";
+import { JS_PATTERNS } from "./patterns/js";
+import { KOTLIN_PATTERNS } from "./patterns/kotlin";
 // P2.3 (v2.10.391) — Laravel framework pack.
 import { LARAVEL_PATTERNS } from "./patterns/laravel";
+import { LUA_PATTERNS } from "./patterns/lua";
+// P2.3 (v2.10.391) — Next.js framework starter (web pack).
+import { NEXTJS_PATTERNS } from "./patterns/nextjs";
+import { PHP_PATTERNS } from "./patterns/php";
+import { PYTHON_PATTERNS } from "./patterns/python";
+// P2.3 (v2.10.391) — Rails framework pack.
+import { RAILS_PATTERNS } from "./patterns/rails";
+import { RUBY_PATTERNS } from "./patterns/ruby";
+import { RUST_PATTERNS } from "./patterns/rust";
+import { SCALA_PATTERNS } from "./patterns/scala";
+// P2.3 (v2.10.391) — Spring framework pack.
+import { SPRING_PATTERNS } from "./patterns/spring";
+import { SQL_PATTERNS } from "./patterns/sql";
+// P2.2 (v2.10.389) — Supply-chain pack.
+import { SUPPLY_CHAIN_PATTERNS } from "./patterns/supply-chain";
+import { SWIFT_PATTERNS } from "./patterns/swift";
+import { UNIVERSAL_PATTERNS } from "./patterns/universal";
+import { ZIG_PATTERNS } from "./patterns/zig";
+import type { BugPattern } from "./types";
 
 // Re-export every per-language array so existing imports keep working.
 export {
-  CPP_PATTERNS,
-  PYTHON_PATTERNS,
-  JS_PATTERNS,
-  GO_PATTERNS,
-  RUST_PATTERNS,
-  JAVA_PATTERNS,
-  SWIFT_PATTERNS,
-  KOTLIN_PATTERNS,
-  CSHARP_PATTERNS,
-  PHP_PATTERNS,
-  RUBY_PATTERNS,
-  DART_PATTERNS,
-  ELIXIR_PATTERNS,
-  LUA_PATTERNS,
-  SQL_PATTERNS,
-  SCALA_PATTERNS,
-  HASKELL_PATTERNS,
-  ZIG_PATTERNS,
-  FRAMEWORK_PATTERNS,
-  UNIVERSAL_PATTERNS,
-  CRYPTO_PATTERNS,
-  INJECTION_PATTERNS,
-  DESERIALIZE_PATTERNS,
-  FLIGHT_SOFTWARE_PATTERNS,
   AI_ML_PATTERNS,
   CLOUD_PATTERNS,
-  SUPPLY_CHAIN_PATTERNS,
-  NEXTJS_PATTERNS,
-  FASTAPI_PATTERNS,
-  EXPRESS_PATTERNS,
+  CPP_PATTERNS,
+  CRYPTO_PATTERNS,
+  CSHARP_PATTERNS,
+  DART_PATTERNS,
+  DESERIALIZE_PATTERNS,
   DJANGO_PATTERNS,
-  RAILS_PATTERNS,
-  SPRING_PATTERNS,
+  ELIXIR_PATTERNS,
+  EXPRESS_PATTERNS,
+  FASTAPI_PATTERNS,
+  FLIGHT_SOFTWARE_PATTERNS,
+  FRAMEWORK_PATTERNS,
+  GO_PATTERNS,
+  HASKELL_PATTERNS,
+  INJECTION_PATTERNS,
+  JAVA_PATTERNS,
+  JS_PATTERNS,
+  KOTLIN_PATTERNS,
   LARAVEL_PATTERNS,
+  LUA_PATTERNS,
+  NEXTJS_PATTERNS,
+  PHP_PATTERNS,
+  PYTHON_PATTERNS,
+  RAILS_PATTERNS,
+  RUBY_PATTERNS,
+  RUST_PATTERNS,
+  SCALA_PATTERNS,
+  SPRING_PATTERNS,
+  SQL_PATTERNS,
+  SUPPLY_CHAIN_PATTERNS,
+  SWIFT_PATTERNS,
+  UNIVERSAL_PATTERNS,
+  ZIG_PATTERNS,
 };
 
 export const ALL_PATTERNS: BugPattern[] = [
@@ -184,7 +184,14 @@ const ALL_AST_PATTERNS: AstPattern[] = [
  */
 export type LookupPattern = Pick<
   BugPattern,
-  "id" | "title" | "severity" | "explanation" | "verify_prompt" | "cwe" | "fix_template" | "languages"
+  | "id"
+  | "title"
+  | "severity"
+  | "explanation"
+  | "verify_prompt"
+  | "cwe"
+  | "fix_template"
+  | "languages"
 >;
 
 /** Look up a pattern by ID — searches both regex and AST registries. */

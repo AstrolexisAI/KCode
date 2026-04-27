@@ -4,7 +4,7 @@
 // calls), validate the text against the schema. On rejection, inject
 // a SYSTEM retry message and signal the caller to restart the turn.
 
-import { validateModelOutput, type LoopGuardState } from "./agent-loop-guards";
+import { type LoopGuardState, validateModelOutput } from "./agent-loop-guards";
 import type { ConversationState, KCodeConfig, StreamEvent, ToolUseBlock } from "./types";
 
 export interface SchemaValidationArgs {

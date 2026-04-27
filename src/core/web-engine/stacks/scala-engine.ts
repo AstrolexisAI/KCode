@@ -5,7 +5,13 @@ import { dirname, join } from "node:path";
 
 export type ScalaProjectType = "api" | "cli" | "library" | "spark" | "stream" | "custom";
 
-interface ScalaConfig { name: string; type: ScalaProjectType; framework?: string; deps: string[]; pkg: string; }
+interface ScalaConfig {
+  name: string;
+  type: ScalaProjectType;
+  framework?: string;
+  deps: string[];
+  pkg: string;
+}
 
 function detectScalaProject(msg: string): ScalaConfig {
   const lower = msg.toLowerCase();
@@ -14,30 +20,73 @@ function detectScalaProject(msg: string): ScalaConfig {
   const deps: string[] = [];
 
   if (/\b(?:spark|data\s*eng|etl|dataframe|hadoop)\b/i.test(lower)) {
-    type = "spark"; framework = "spark";
+    type = "spark";
+    framework = "spark";
     deps.push("org.apache.spark::spark-sql:3.5.1", "org.apache.spark::spark-core:3.5.1");
-  }
-  else if (/\b(?:stream|akka.?stream|fs2|reactive)\b/i.test(lower)) {
+  } else if (/\b(?:stream|akka.?stream|fs2|reactive)\b/i.test(lower)) {
     type = "stream";
-    if (/\b(?:fs2)\b/i.test(lower)) { framework = "fs2"; deps.push("co.fs2::fs2-core:3.10.2", "co.fs2::fs2-io:3.10.2"); }
-    else { framework = "akka-streams"; deps.push("com.typesafe.akka::akka-stream:2.9.3", "com.typesafe.akka::akka-actor-typed:2.9.3"); }
-  }
-  else if (/\b(?:api|server|rest|http|web|endpoint)\b/i.test(lower)) {
+    if (/\b(?:fs2)\b/i.test(lower)) {
+      framework = "fs2";
+      deps.push("co.fs2::fs2-core:3.10.2", "co.fs2::fs2-io:3.10.2");
+    } else {
+      framework = "akka-streams";
+      deps.push(
+        "com.typesafe.akka::akka-stream:2.9.3",
+        "com.typesafe.akka::akka-actor-typed:2.9.3",
+      );
+    }
+  } else if (/\b(?:api|server|rest|http|web|endpoint)\b/i.test(lower)) {
     type = "api";
-    if (/\b(?:akka)\b/i.test(lower)) { framework = "akka"; deps.push("com.typesafe.akka::akka-http:10.6.3", "com.typesafe.akka::akka-actor-typed:2.9.3", "com.typesafe.akka::akka-stream:2.9.3"); }
-    else if (/\b(?:play)\b/i.test(lower)) { framework = "play"; }
-    else { framework = "http4s"; deps.push("org.http4s::http4s-ember-server:0.23.27", "org.http4s::http4s-dsl:0.23.27", "org.http4s::http4s-circe:0.23.27", "io.circe::circe-core:0.14.9", "io.circe::circe-generic:0.14.9", "org.typelevel::cats-effect:3.5.4", "org.typelevel::log4cats-slf4j:2.7.0"); }
+    if (/\b(?:akka)\b/i.test(lower)) {
+      framework = "akka";
+      deps.push(
+        "com.typesafe.akka::akka-http:10.6.3",
+        "com.typesafe.akka::akka-actor-typed:2.9.3",
+        "com.typesafe.akka::akka-stream:2.9.3",
+      );
+    } else if (/\b(?:play)\b/i.test(lower)) {
+      framework = "play";
+    } else {
+      framework = "http4s";
+      deps.push(
+        "org.http4s::http4s-ember-server:0.23.27",
+        "org.http4s::http4s-dsl:0.23.27",
+        "org.http4s::http4s-circe:0.23.27",
+        "io.circe::circe-core:0.14.9",
+        "io.circe::circe-generic:0.14.9",
+        "org.typelevel::cats-effect:3.5.4",
+        "org.typelevel::log4cats-slf4j:2.7.0",
+      );
+    }
+  } else if (/\b(?:cli|console|command|tool)\b/i.test(lower)) {
+    type = "cli";
+    deps.push("com.github.scopt::scopt:4.1.0");
+  } else if (/\b(?:lib|library|package)\b/i.test(lower)) {
+    type = "library";
   }
-  else if (/\b(?:cli|console|command|tool)\b/i.test(lower)) { type = "cli"; deps.push("com.github.scopt::scopt:4.1.0"); }
-  else if (/\b(?:lib|library|package)\b/i.test(lower)) { type = "library"; }
 
-  if (/\b(?:circe|json)\b/i.test(lower) && !deps.some(d => d.includes("circe"))) deps.push("io.circe::circe-core:0.14.9", "io.circe::circe-generic:0.14.9", "io.circe::circe-parser:0.14.9");
-  if (/\b(?:doobie|jdbc|postgres|sql|database|db)\b/i.test(lower)) deps.push("org.tpolecat::doobie-core:1.0.0-RC5", "org.tpolecat::doobie-hikari:1.0.0-RC5");
-  if (/\b(?:fs2)\b/i.test(lower) && !deps.some(d => d.includes("fs2"))) deps.push("co.fs2::fs2-core:3.10.2");
-  if (/\b(?:cats)\b/i.test(lower) && !deps.some(d => d.includes("cats"))) deps.push("org.typelevel::cats-core:2.12.0");
-  if (/\b(?:zio)\b/i.test(lower)) { framework = framework ?? "zio"; deps.push("dev.zio::zio:2.1.6", "dev.zio::zio-streams:2.1.6"); }
-  if (/\b(?:cats.?effect)\b/i.test(lower) && !deps.some(d => d.includes("cats-effect"))) { framework = framework ?? "cats-effect"; deps.push("org.typelevel::cats-effect:3.5.4"); }
-  if (/\b(?:pureconfig|config)\b/i.test(lower)) deps.push("com.github.pureconfig::pureconfig-core:0.17.7");
+  if (/\b(?:circe|json)\b/i.test(lower) && !deps.some((d) => d.includes("circe")))
+    deps.push(
+      "io.circe::circe-core:0.14.9",
+      "io.circe::circe-generic:0.14.9",
+      "io.circe::circe-parser:0.14.9",
+    );
+  if (/\b(?:doobie|jdbc|postgres|sql|database|db)\b/i.test(lower))
+    deps.push("org.tpolecat::doobie-core:1.0.0-RC5", "org.tpolecat::doobie-hikari:1.0.0-RC5");
+  if (/\b(?:fs2)\b/i.test(lower) && !deps.some((d) => d.includes("fs2")))
+    deps.push("co.fs2::fs2-core:3.10.2");
+  if (/\b(?:cats)\b/i.test(lower) && !deps.some((d) => d.includes("cats")))
+    deps.push("org.typelevel::cats-core:2.12.0");
+  if (/\b(?:zio)\b/i.test(lower)) {
+    framework = framework ?? "zio";
+    deps.push("dev.zio::zio:2.1.6", "dev.zio::zio-streams:2.1.6");
+  }
+  if (/\b(?:cats.?effect)\b/i.test(lower) && !deps.some((d) => d.includes("cats-effect"))) {
+    framework = framework ?? "cats-effect";
+    deps.push("org.typelevel::cats-effect:3.5.4");
+  }
+  if (/\b(?:pureconfig|config)\b/i.test(lower))
+    deps.push("com.github.pureconfig::pureconfig-core:0.17.7");
   if (/\b(?:scalatest)\b/i.test(lower)) deps.push("org.scalatest::scalatest:3.2.19");
   if (/\b(?:specs2)\b/i.test(lower)) deps.push("org.specs2::specs2-core:5.5.1");
 
@@ -48,8 +97,17 @@ function detectScalaProject(msg: string): ScalaConfig {
   return { name, type, framework, deps: [...new Set(deps)], pkg };
 }
 
-interface GenFile { path: string; content: string; needsLlm: boolean; }
-export interface ScalaProjectResult { config: ScalaConfig; files: GenFile[]; projectPath: string; prompt: string; }
+interface GenFile {
+  path: string;
+  content: string;
+  needsLlm: boolean;
+}
+export interface ScalaProjectResult {
+  config: ScalaConfig;
+  files: GenFile[];
+  projectPath: string;
+  prompt: string;
+}
 
 export function createScalaProject(userRequest: string, cwd: string): ScalaProjectResult {
   const cfg = detectScalaProject(userRequest);
@@ -57,22 +115,25 @@ export function createScalaProject(userRequest: string, cwd: string): ScalaProje
   const pkgPath = cfg.pkg.replace(/\./g, "/");
 
   // build.sbt
-  const depsStr = cfg.deps.map(d => {
-    const parts = d.split("::");
-    const [org, rest] = [parts[0], parts[1]];
-    const [artifact, ver] = rest!.split(":");
-    return `    "${org}" %% "${artifact}" % "${ver}"`;
-  }).join(",\n");
+  const depsStr = cfg.deps
+    .map((d) => {
+      const parts = d.split("::");
+      const [org, rest] = [parts[0], parts[1]];
+      const [artifact, ver] = rest!.split(":");
+      return `    "${org}" %% "${artifact}" % "${ver}"`;
+    })
+    .join(",\n");
 
-  const testDeps = cfg.deps.some(d => d.includes("scalatest"))
+  const testDeps = cfg.deps.some((d) => d.includes("scalatest"))
     ? ""
     : ',\n    "org.scalatest" %% "scalatest" % "3.2.19" % Test';
 
-  const logbackDep = cfg.framework === "http4s"
-    ? ',\n    "ch.qos.logback" % "logback-classic" % "1.5.0"'
-    : "";
+  const logbackDep =
+    cfg.framework === "http4s" ? ',\n    "ch.qos.logback" % "logback-classic" % "1.5.0"' : "";
 
-  files.push({ path: "build.sbt", content: `ThisBuild / version := "0.1.0"
+  files.push({
+    path: "build.sbt",
+    content: `ThisBuild / version := "0.1.0"
 ThisBuild / scalaVersion := "3.4.2"
 ThisBuild / organization := "${cfg.pkg}"
 
@@ -83,17 +144,29 @@ lazy val root = (project in file("."))
 ${depsStr}${logbackDep}${testDeps}
     )
   )
-`, needsLlm: false });
+`,
+    needsLlm: false,
+  });
 
-  files.push({ path: "project/build.properties", content: `sbt.version=1.10.1\n`, needsLlm: false });
-  files.push({ path: "project/plugins.sbt", content: `addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.5.2")
+  files.push({
+    path: "project/build.properties",
+    content: `sbt.version=1.10.1\n`,
+    needsLlm: false,
+  });
+  files.push({
+    path: "project/plugins.sbt",
+    content: `addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.5.2")
 addSbtPlugin("com.github.sbt" % "sbt-native-packager" % "1.10.0")
-`, needsLlm: false });
+`,
+    needsLlm: false,
+  });
 
   // Main code
   if (cfg.type === "api" && cfg.framework === "http4s") {
     // Item model with circe codecs
-    files.push({ path: `src/main/scala/${pkgPath}/model/Item.scala`, content: `package ${cfg.pkg}.model
+    files.push({
+      path: `src/main/scala/${pkgPath}/model/Item.scala`,
+      content: `package ${cfg.pkg}.model
 
 import io.circe.*
 import io.circe.generic.semiauto.*
@@ -128,10 +201,14 @@ case class ErrorResponse(status: Int, message: String)
 
 object ErrorResponse:
   given Encoder[ErrorResponse] = deriveEncoder[ErrorResponse]
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
 
     // Item routes with full CRUD
-    files.push({ path: `src/main/scala/${pkgPath}/routes/ItemRoutes.scala`, content: `package ${cfg.pkg}.routes
+    files.push({
+      path: `src/main/scala/${pkgPath}/routes/ItemRoutes.scala`,
+      content: `package ${cfg.pkg}.routes
 
 import cats.effect.*
 import cats.syntax.all.*
@@ -207,10 +284,14 @@ object ItemRoutes:
         resp <- if removed then NoContent()
           else NotFound(ErrorResponse(404, s"Item not found: $id").asJson)
       yield resp
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
 
     // Main with logging middleware
-    files.push({ path: `src/main/scala/${pkgPath}/Main.scala`, content: `package ${cfg.pkg}
+    files.push({
+      path: `src/main/scala/${pkgPath}/Main.scala`,
+      content: `package ${cfg.pkg}
 
 import cats.effect.*
 import ${cfg.pkg}.model.Item
@@ -244,10 +325,13 @@ object Main extends IOApp.Simple:
         .build
         .useForever
     yield ()
-`, needsLlm: false });
-
+`,
+      needsLlm: false,
+    });
   } else if (cfg.type === "api" && cfg.framework === "akka") {
-    files.push({ path: `src/main/scala/${pkgPath}/Main.scala`, content: `package ${cfg.pkg}
+    files.push({
+      path: `src/main/scala/${pkgPath}/Main.scala`,
+      content: `package ${cfg.pkg}
 
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
@@ -271,10 +355,13 @@ object Main:
 
     Http().newServerAt("0.0.0.0", 10080).bind(routes)
     println(s"Server running at http://0.0.0.0:10080/")
-`, needsLlm: true });
-
+`,
+      needsLlm: true,
+    });
   } else if (cfg.type === "spark") {
-    files.push({ path: `src/main/scala/${pkgPath}/Main.scala`, content: `package ${cfg.pkg}
+    files.push({
+      path: `src/main/scala/${pkgPath}/Main.scala`,
+      content: `package ${cfg.pkg}
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.*
@@ -301,12 +388,17 @@ object Main:
     df.groupBy("department").agg(avg("age").as("avg_age")).show()
 
     spark.stop()
-`, needsLlm: true });
-
+`,
+      needsLlm: true,
+    });
   } else if (cfg.type === "stream") {
-    files.push({ path: `src/main/scala/${pkgPath}/Main.scala`, content: `package ${cfg.pkg}
+    files.push({
+      path: `src/main/scala/${pkgPath}/Main.scala`,
+      content: `package ${cfg.pkg}
 
-${cfg.framework === "fs2" ? `import cats.effect.*
+${
+  cfg.framework === "fs2"
+    ? `import cats.effect.*
 import fs2.*
 
 object Main extends IOApp.Simple:
@@ -318,7 +410,8 @@ object Main extends IOApp.Simple:
       .evalMap(n => IO.println(s"Processing item $n"))
 
   override def run: IO[Unit] =
-    pipeline.compile.drain` : `import akka.actor.typed.ActorSystem
+    pipeline.compile.drain`
+    : `import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
 import akka.stream.scaladsl.*
 
@@ -330,11 +423,15 @@ object Main:
     Source(1 to 100)
       .map(n => s"Processing item $n")
       .runForeach(println)
-      .onComplete(_ => system.terminate())(using system.executionContext)`}
-`, needsLlm: true });
-
+      .onComplete(_ => system.terminate())(using system.executionContext)`
+}
+`,
+      needsLlm: true,
+    });
   } else if (cfg.type === "cli") {
-    files.push({ path: `src/main/scala/${pkgPath}/Main.scala`, content: `package ${cfg.pkg}
+    files.push({
+      path: `src/main/scala/${pkgPath}/Main.scala`,
+      content: `package ${cfg.pkg}
 
 import scopt.OParser
 
@@ -368,10 +465,13 @@ object Main:
         println("Done!")
       case None =>
         System.exit(1)
-`, needsLlm: true });
-
+`,
+      needsLlm: true,
+    });
   } else if (cfg.type === "library") {
-    files.push({ path: `src/main/scala/${pkgPath}/${cap(cfg.name)}.scala`, content: `package ${cfg.pkg}
+    files.push({
+      path: `src/main/scala/${pkgPath}/${cap(cfg.name)}.scala`,
+      content: `package ${cfg.pkg}
 
 trait ${cap(cfg.name)}[F[_]]:
   def initialize: F[Unit]
@@ -394,20 +494,27 @@ object ${cap(cfg.name)}:
 
   extension (s: String)
     def transform: String = s.trim.toLowerCase
-`, needsLlm: true });
-
+`,
+      needsLlm: true,
+    });
   } else {
-    files.push({ path: `src/main/scala/${pkgPath}/Main.scala`, content: `package ${cfg.pkg}
+    files.push({
+      path: `src/main/scala/${pkgPath}/Main.scala`,
+      content: `package ${cfg.pkg}
 
 @main def run(): Unit =
   println("${cfg.name} started")
   // TODO: implement
-`, needsLlm: true });
+`,
+      needsLlm: true,
+    });
   }
 
   // Test — http4s API gets full CRUD tests, others get basic tests
   if (cfg.type === "api" && cfg.framework === "http4s") {
-    files.push({ path: `src/test/scala/${pkgPath}/MainSpec.scala`, content: `package ${cfg.pkg}
+    files.push({
+      path: `src/test/scala/${pkgPath}/MainSpec.scala`,
+      content: `package ${cfg.pkg}
 
 import cats.effect.*
 import cats.effect.unsafe.implicits.global
@@ -499,9 +606,13 @@ class MainSpec extends AnyFlatSpec with Matchers:
     yield
       delResp.status shouldBe Status.NoContent
       getResp.status shouldBe Status.NotFound
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
   } else {
-    files.push({ path: `src/test/scala/${pkgPath}/MainSpec.scala`, content: `package ${cfg.pkg}
+    files.push({
+      path: `src/test/scala/${pkgPath}/MainSpec.scala`,
+      content: `package ${cfg.pkg}
 
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -510,19 +621,32 @@ class MainSpec extends AnyFlatSpec with Matchers:
 
   "${cfg.name}" should "run basic test" in:
     1 + 1 shouldBe 2
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
   }
 
   // Extras
-  files.push({ path: ".gitignore", content: "target/\nproject/target/\nproject/project/\n.bsp/\n.idea/\n*.class\n.env\nmetals.sbt\n.bloop/\n.metals/\n", needsLlm: false });
-  files.push({ path: ".scalafmt.conf", content: `version = "3.8.1"
+  files.push({
+    path: ".gitignore",
+    content:
+      "target/\nproject/target/\nproject/project/\n.bsp/\n.idea/\n*.class\n.env\nmetals.sbt\n.bloop/\n.metals/\n",
+    needsLlm: false,
+  });
+  files.push({
+    path: ".scalafmt.conf",
+    content: `version = "3.8.1"
 runner.dialect = scala3
 maxColumn = 100
 indent.main = 2
 indent.callSite = 2
 rewrite.rules = [SortImports, RedundantBraces, RedundantParens]
-`, needsLlm: false });
-  files.push({ path: "Dockerfile", content: `FROM sbtscala/scala-sbt:eclipse-temurin-jammy-21.0.2_13_1.10.1_3.4.2 AS builder
+`,
+    needsLlm: false,
+  });
+  files.push({
+    path: "Dockerfile",
+    content: `FROM sbtscala/scala-sbt:eclipse-temurin-jammy-21.0.2_13_1.10.1_3.4.2 AS builder
 WORKDIR /app
 COPY . .
 RUN sbt assembly
@@ -531,8 +655,12 @@ FROM eclipse-temurin:21-jre
 COPY --from=builder /app/target/scala-3.4.2/*.jar /app/app.jar
 EXPOSE 10080
 CMD ["java", "-jar", "/app/app.jar"]
-`, needsLlm: false });
-  files.push({ path: ".github/workflows/ci.yml", content: `name: CI
+`,
+    needsLlm: false,
+  });
+  files.push({
+    path: ".github/workflows/ci.yml",
+    content: `name: CI
 on: [push, pull_request]
 jobs:
   test:
@@ -543,14 +671,34 @@ jobs:
         with: { distribution: temurin, java-version: 21 }
       - uses: sbt/setup-sbt@v1
       - run: sbt test
-`, needsLlm: false });
-  files.push({ path: "README.md", content: `# ${cfg.name}\n\nScala 3 ${cfg.type}${cfg.framework ? " (" + cfg.framework + ")" : ""}. Built with KCode.\n\n\`\`\`bash\nsbt run\nsbt test\n\`\`\`\n\n*Astrolexis.space --- Kulvex Code*\n`, needsLlm: false });
+`,
+    needsLlm: false,
+  });
+  files.push({
+    path: "README.md",
+    content: `# ${cfg.name}\n\nScala 3 ${cfg.type}${cfg.framework ? " (" + cfg.framework + ")" : ""}. Built with KCode.\n\n\`\`\`bash\nsbt run\nsbt test\n\`\`\`\n\n*Astrolexis.space --- Kulvex Code*\n`,
+    needsLlm: false,
+  });
 
   const projectPath = join(cwd, cfg.name);
-  for (const f of files) { const p = join(projectPath, f.path); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, f.content); }
+  for (const f of files) {
+    const p = join(projectPath, f.path);
+    mkdirSync(dirname(p), { recursive: true });
+    writeFileSync(p, f.content);
+  }
 
-  const m = files.filter(f => !f.needsLlm).length;
-  return { config: cfg, files, projectPath, prompt: `Implement Scala 3 ${cfg.type}${cfg.framework ? " (" + cfg.framework + ")" : ""}. ${m} files machine. USER: "${userRequest}"` };
+  const m = files.filter((f) => !f.needsLlm).length;
+  return {
+    config: cfg,
+    files,
+    projectPath,
+    prompt: `Implement Scala 3 ${cfg.type}${cfg.framework ? " (" + cfg.framework + ")" : ""}. ${m} files machine. USER: "${userRequest}"`,
+  };
 }
 
-function cap(s: string): string { return s.split(/[-_]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(""); }
+function cap(s: string): string {
+  return s
+    .split(/[-_]/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join("");
+}

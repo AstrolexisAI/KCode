@@ -1,5 +1,5 @@
-import { describe, test, expect } from "bun:test";
-import { matchDebugPatterns, extractSearchKeywords } from "./debug-patterns";
+import { describe, expect, test } from "bun:test";
+import { extractSearchKeywords, matchDebugPatterns } from "./debug-patterns";
 
 describe("debug-patterns", () => {
   // ── Pattern matching ──

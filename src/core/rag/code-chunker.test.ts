@@ -1,7 +1,7 @@
 // KCode - Code Chunker Tests
 
 import { describe, expect, test } from "bun:test";
-import { chunkFile, type CodeChunk } from "./code-chunker";
+import { type CodeChunk, chunkFile } from "./code-chunker";
 
 // ─── TypeScript / JavaScript ──────────────────────────────────
 
@@ -176,7 +176,10 @@ describe("code-chunker: fallback chunking for unknown languages", () => {
 describe("code-chunker: max chunk size enforcement", () => {
   test("large function bodies are truncated to ~2000 chars", () => {
     // Create a function with a very large body
-    const bodyLines = Array.from({ length: 200 }, (_, i) => `  const x${i} = "${i.toString().repeat(20)}";`);
+    const bodyLines = Array.from(
+      { length: 200 },
+      (_, i) => `  const x${i} = "${i.toString().repeat(20)}";`,
+    );
     const content = `function bigFunc() {\n${bodyLines.join("\n")}\n}`;
     const chunks = chunkFile("big.ts", content);
 

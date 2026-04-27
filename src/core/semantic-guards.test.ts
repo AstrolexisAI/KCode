@@ -9,10 +9,8 @@ describe("detectStrcmpInversion", () => {
   });
 
   test("blocks adding ! before wcscmp (the NASA IDF false positive)", () => {
-    const old_string =
-      `if (!serialNumber.empty() && wcscmp(serialNumber.c_str(), deviceInfo.serial_number)) {`;
-    const new_string =
-      `if (!serialNumber.empty() && !wcscmp(serialNumber.c_str(), deviceInfo.serial_number)) {`;
+    const old_string = `if (!serialNumber.empty() && wcscmp(serialNumber.c_str(), deviceInfo.serial_number)) {`;
+    const new_string = `if (!serialNumber.empty() && !wcscmp(serialNumber.c_str(), deviceInfo.serial_number)) {`;
     const result = detectStrcmpInversion(old_string, new_string);
     expect(result).not.toBeNull();
     expect(result).toContain("SEMANTIC INVERSION");

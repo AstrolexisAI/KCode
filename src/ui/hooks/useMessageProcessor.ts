@@ -536,8 +536,7 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
             {
               kind: "text",
               role: "system",
-              text:
-                "\n  \u26A1 Opening browser for Astrolexis login...\n  A tab will open at astrolexis.space. Authorize the request there and the TUI will pick up the session automatically.\n",
+              text: "\n  \u26A1 Opening browser for Astrolexis login...\n  A tab will open at astrolexis.space. Authorize the request there and the TUI will pick up the session automatically.\n",
             },
           ]);
           const result = await loginProvider("astrolexis", {
@@ -606,9 +605,7 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
         setCompleted((prev) => [...prev, { kind: "text", role: "user", text: userInput }]);
         try {
           const { getAuthSessionManager } = await import("../../core/auth/session");
-          const { invalidateSubscriptionCache } = await import(
-            "../../core/subscription"
-          );
+          const { invalidateSubscriptionCache } = await import("../../core/subscription");
           const manager = getAuthSessionManager();
           await manager.logout("astrolexis");
           invalidateSubscriptionCache();
@@ -649,15 +646,12 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
                 {
                   kind: "text",
                   role: "system",
-                  text:
-                    "\n  Usage:\n    /license activate <path>                — from a .jwt file\n    /license activate eyJhbGci...xyz        — paste the JWT directly\n",
+                  text: "\n  Usage:\n    /license activate <path>                — from a .jwt file\n    /license activate eyJhbGci...xyz        — paste the JWT directly\n",
                 },
               ]);
               return;
             }
-            const { existsSync, readFileSync, mkdirSync, writeFileSync } = await import(
-              "node:fs"
-            );
+            const { existsSync, readFileSync, mkdirSync, writeFileSync } = await import("node:fs");
             const { resolve, dirname } = await import("node:path");
             const { kcodePath } = await import("../../core/paths");
             const { verifyLicenseJwt } = await import("../../core/license");
@@ -688,7 +682,7 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
                   {
                     kind: "text",
                     role: "system",
-                    text: `\n  \u2717 File not found: ${absPath}\n  (If you meant to paste the JWT directly, make sure it starts with \"eyJ\" and has no spaces.)\n`,
+                    text: `\n  \u2717 File not found: ${absPath}\n  (If you meant to paste the JWT directly, make sure it starts with "eyJ" and has no spaces.)\n`,
                   },
                 ]);
                 return;
@@ -713,9 +707,7 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
             writeFileSync(targetPath, token, "utf-8");
 
             const c = result.claims;
-            const daysLeft = Math.floor(
-              (c.exp - Math.floor(Date.now() / 1000)) / 86400,
-            );
+            const daysLeft = Math.floor((c.exp - Math.floor(Date.now() / 1000)) / 86400);
             const lines = [
               "\n  \u2713 License activated.",
               `  Subject:  ${c.sub}`,
@@ -747,7 +739,11 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
             unlinkSync(path);
             setCompleted((prev) => [
               ...prev,
-              { kind: "text", role: "system", text: "\n  \u2713 License removed from this machine.\n" },
+              {
+                kind: "text",
+                role: "system",
+                text: "\n  \u2713 License removed from this machine.\n",
+              },
             ]);
             return;
           }
@@ -1665,7 +1661,9 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
           prompt: userInput,
           model: conversationManager.getConfig().model,
         });
-      } catch { /* non-fatal */ }
+      } catch {
+        /* non-fatal */
+      }
 
       // Multi-model routing: if enabled, auto-select best model for this task
       // Orchestrator path: try DAG decomposition for > 60 char prompts.
@@ -1682,8 +1680,9 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
       setSpinnerPhase("thinking");
       setLoadingMessage("Routing...");
       try {
-        const { isMultimodelEnabled, classifyBenchmarkTask, selectBenchmarkModel } =
-          await import("../../core/router.js");
+        const { isMultimodelEnabled, classifyBenchmarkTask, selectBenchmarkModel } = await import(
+          "../../core/router.js"
+        );
         if (isMultimodelEnabled()) {
           if (userInput.length > 60) {
             try {
@@ -1691,8 +1690,9 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
               const { decomposePrompt } = await import("../../core/router-conductor.js");
               const plan = await decomposePrompt(userInput);
               if (plan && plan.sub_tasks.length > 1) {
-                const { orchestratePlan, formatOrchestrationOutput } =
-                  await import("../../core/router-orchestrator.js");
+                const { orchestratePlan, formatOrchestrationOutput } = await import(
+                  "../../core/router-orchestrator.js"
+                );
                 const cfg = conversationManager.getConfig();
                 setCompleted((prev) => [
                   ...prev,
@@ -1706,32 +1706,54 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
                 // Live progress: each orchestrator event updates the loading message
                 // and appends a visible status line so the user sees what's running.
                 const running = new Map<string, { model: string; startMs: number }>();
-                const result = await orchestratePlan(plan, cfg, cfg.model, (ev) => {
-                  if (ev.type === "wave-start") {
-                    setLoadingMessage(`Wave ${ev.wave}: running [${ev.taskIds.join(",")}] in parallel`);
-                  } else if (ev.type === "task-start") {
-                    running.set(ev.id, { model: ev.model, startMs: Date.now() });
-                    const labels = [...running.entries()].map(([id, v]) => `${id}:${v.model}`).join(" ");
-                    setLoadingMessage(`⟳ ${labels}`);
-                    setCompleted((prev) => [
-                      ...prev,
-                      { kind: "text", role: "assistant", text: `  \x1b[2m▶ ${ev.id} (${ev.intent}) → ${ev.model}\x1b[0m` },
-                    ]);
-                  } else if (ev.type === "task-done") {
-                    running.delete(ev.id);
-                    const s = (ev.elapsedMs / 1000).toFixed(1);
-                    setCompleted((prev) => [
-                      ...prev,
-                      { kind: "text", role: "assistant", text: `  \x1b[2m✓ ${ev.id} done in ${s}s · ${ev.tokens} tok\x1b[0m` },
-                    ]);
-                  } else if (ev.type === "task-error") {
-                    running.delete(ev.id);
-                    setCompleted((prev) => [
-                      ...prev,
-                      { kind: "text", role: "assistant", text: `  \x1b[31m✗ ${ev.id} failed: ${ev.error}\x1b[0m` },
-                    ]);
-                  }
-                }, conversationManager);
+                const result = await orchestratePlan(
+                  plan,
+                  cfg,
+                  cfg.model,
+                  (ev) => {
+                    if (ev.type === "wave-start") {
+                      setLoadingMessage(
+                        `Wave ${ev.wave}: running [${ev.taskIds.join(",")}] in parallel`,
+                      );
+                    } else if (ev.type === "task-start") {
+                      running.set(ev.id, { model: ev.model, startMs: Date.now() });
+                      const labels = [...running.entries()]
+                        .map(([id, v]) => `${id}:${v.model}`)
+                        .join(" ");
+                      setLoadingMessage(`⟳ ${labels}`);
+                      setCompleted((prev) => [
+                        ...prev,
+                        {
+                          kind: "text",
+                          role: "assistant",
+                          text: `  \x1b[2m▶ ${ev.id} (${ev.intent}) → ${ev.model}\x1b[0m`,
+                        },
+                      ]);
+                    } else if (ev.type === "task-done") {
+                      running.delete(ev.id);
+                      const s = (ev.elapsedMs / 1000).toFixed(1);
+                      setCompleted((prev) => [
+                        ...prev,
+                        {
+                          kind: "text",
+                          role: "assistant",
+                          text: `  \x1b[2m✓ ${ev.id} done in ${s}s · ${ev.tokens} tok\x1b[0m`,
+                        },
+                      ]);
+                    } else if (ev.type === "task-error") {
+                      running.delete(ev.id);
+                      setCompleted((prev) => [
+                        ...prev,
+                        {
+                          kind: "text",
+                          role: "assistant",
+                          text: `  \x1b[31m✗ ${ev.id} failed: ${ev.error}\x1b[0m`,
+                        },
+                      ]);
+                    }
+                  },
+                  conversationManager,
+                );
                 const combined = formatOrchestrationOutput(result);
                 // Clear any plan that the sub-task's Plan tool might have
                 // created. Even though we excluded Plan from sub-task tools,
@@ -1739,7 +1761,9 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
                 try {
                   const { clearActivePlan } = await import("../../tools/plan.js");
                   clearActivePlan();
-                } catch { /* module absent */ }
+                } catch {
+                  /* module absent */
+                }
                 // Record per-model costs so Kodi's session economy reflects
                 // orchestrator usage (bypasses recordTurnCost in sendMessage)
                 let orchestratorTokensTotal = 0;
@@ -1758,10 +1782,12 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
                 // next normal turn.
                 setTokenCount((prev) => prev + orchestratorTokensTotal);
                 // Inject into conversation history so next turn has context
-                conversationManager.getState().messages.push(
-                  { role: "user", content: userInput },
-                  { role: "assistant", content: combined },
-                );
+                conversationManager
+                  .getState()
+                  .messages.push(
+                    { role: "user", content: userInput },
+                    { role: "assistant", content: combined },
+                  );
                 setCompleted((prev) => [
                   ...prev,
                   { kind: "text", role: "assistant", text: combined },
@@ -1791,7 +1817,9 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
                 const { getModelContextSize } = await import("../../core/models.js");
                 const ctxSize = await getModelContextSize(route.model);
                 if (ctxSize) cfg.contextWindowSize = ctxSize;
-              } catch { /* non-fatal */ }
+              } catch {
+                /* non-fatal */
+              }
               setCompleted((prev) => [
                 ...prev,
                 {
@@ -1803,7 +1831,9 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
             }
           }
         }
-      } catch { /* non-fatal — routing failure falls back to current model */ }
+      } catch {
+        /* non-fatal — routing failure falls back to current model */
+      }
 
       // Skip sendMessage if orchestrator already injected the response
       if (orchestratorHandled) {

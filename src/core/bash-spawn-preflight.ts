@@ -61,8 +61,8 @@ const STALE_WATCHER_COMMS = new Set([
   "next-server",
   "vite",
   "nodemon",
-  "node",  // bare node — common for dev tools, filtered by elapsed time
-  "bun",   // bun --watch
+  "node", // bare node — common for dev tools, filtered by elapsed time
+  "bun", // bun --watch
 ]);
 
 interface StaleWatcher {
@@ -249,10 +249,7 @@ export function checkInotifyState(): InotifyState | null {
     // Walk /proc/*/fd looking for symlinks to anon_inode:inotify
     const result = spawnSync(
       "sh",
-      [
-        "-c",
-        "find /proc/*/fd -lname 'anon_inode:inotify' 2>/dev/null | wc -l",
-      ],
+      ["-c", "find /proc/*/fd -lname 'anon_inode:inotify' 2>/dev/null | wc -l"],
       { encoding: "utf-8", timeout: 3000 },
     );
     if (result.status !== 0) return null;
@@ -288,10 +285,7 @@ export interface PreflightRefusal {
  * This is intentionally conservative: only fires for commands that
  * match the server-spawn pattern set, leaving normal Bash calls alone.
  */
-export function runSpawnPreflight(
-  command: string,
-  cwd: string,
-): PreflightRefusal | null {
+export function runSpawnPreflight(command: string, cwd: string): PreflightRefusal | null {
   const detection = detectServerSpawn(command);
   if (!detection) return null;
 
@@ -437,14 +431,18 @@ export function runSpawnPreflight(
         return null;
       }
 
-      lines.push(`✗ inotify is saturated: ${ino.used}/${ino.limit} instances used (${Math.round(ino.ratio * 100)}%).`);
+      lines.push(
+        `✗ inotify is saturated: ${ino.used}/${ino.limit} instances used (${Math.round(ino.ratio * 100)}%).`,
+      );
       lines.push(`  Spawning a watch-mode dev server right now would EMFILE on boot`);
       lines.push(`  and you'd see "Watchpack Error (watcher): EMFILE: too many open files".`);
       if (recovery.killed > 0) {
         lines.push(``);
         lines.push(`  KCode already attempted self-heal: killed ${recovery.killed} stale watchers`);
         lines.push(`  (PIDs ${recovery.killedPids.join(", ")}), but inotify is still`);
-        lines.push(`  ${recovery.afterRatio !== null ? Math.round(recovery.afterRatio * 100) + "%" : "saturated"}.`);
+        lines.push(
+          `  ${recovery.afterRatio !== null ? Math.round(recovery.afterRatio * 100) + "%" : "saturated"}.`,
+        );
         lines.push(`  This means the remaining leaked watchers are either active dev sessions`);
         lines.push(`  the user is using, or owned by another UID.`);
       } else {

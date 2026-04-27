@@ -197,8 +197,8 @@ const JAVA_FILE_TYPES = new Set([
   "JarFile",
 ]);
 const JAVA_REFLECTION_METHODS = new Set([
-  "forName",     // Class.forName
-  "loadClass",   // ClassLoader.loadClass
+  "forName", // Class.forName
+  "loadClass", // ClassLoader.loadClass
 ]);
 
 export const JAVA_AST_PATTERNS: AstPattern[] = [
@@ -280,7 +280,8 @@ export const JAVA_AST_PATTERNS: AstPattern[] = [
 
   {
     id: "java-ast-002-file-construction-of-parameter",
-    title: "new File / FileInputStream / FileReader of a function parameter (CWE-22 path traversal)",
+    title:
+      "new File / FileInputStream / FileReader of a function parameter (CWE-22 path traversal)",
     severity: "high",
     languages: ["java"],
     query: `

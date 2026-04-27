@@ -3,8 +3,8 @@
 
 import {
   closeSync,
-  constants as fsConstants,
   existsSync,
+  constants as fsConstants,
   lstatSync,
   mkdirSync,
   openSync,
@@ -104,10 +104,7 @@ function extractCitedFiles(content: string): string[] {
   const seen = new Set<string>();
 
   // Pattern 1: "file.ext:NNN" or "file.ext#NNN"
-  const reLine = new RegExp(
-    `\\b([\\w./\\\\-]*[\\w-]+\\.(?:${SOURCE_EXT}))[:#]\\s*\\d+`,
-    "g",
-  );
+  const reLine = new RegExp(`\\b([\\w./\\\\-]*[\\w-]+\\.(?:${SOURCE_EXT}))[:#]\\s*\\d+`, "g");
   let m: RegExpExecArray | null;
   m = reLine.exec(content);
   while (m !== null) {
@@ -118,9 +115,7 @@ function extractCitedFiles(content: string): string[] {
   // Pattern 2: \`file.ext\` followed by colon and inline-code content claim
   //   matches: \`HidDevice.cpp\`: \`code...\`  OR  \`HidDevice.cpp\` — \`code...\`
   const reBacktickClaim = new RegExp(
-    "`([\\w./\\\\-]*[\\w-]+\\.(?:" +
-      SOURCE_EXT +
-      "))`\\s*[:\\-—–]\\s*`[^`]+`",
+    "`([\\w./\\\\-]*[\\w-]+\\.(?:" + SOURCE_EXT + "))`\\s*[:\\-—–]\\s*`[^`]+`",
     "g",
   );
   m = reBacktickClaim.exec(content);
@@ -172,7 +167,7 @@ function extractProofOfWorkFiles(content: string): string[] | null {
     if (/^#{1,3}\s+\S/.test(line) && !/files\s*(read|analyzed|examined)/i.test(line)) break;
     // Match numbered entries with a file path (must contain a slash or a file extension)
     const m = line.match(
-      /^\s*\d+\.\s*[`*_]*([A-Za-z0-9._/\\-]+\.(?:cpp|hh|h|c|ts|tsx|js|jsx|py|go|rs|java|rb|md|txt|cmake|CMakeLists\.txt))[`*_]*/,
+      /^\s*\d+\.\s*[`*_]*([A-Za-z0-9._/-]+\.(?:cpp|hh|h|c|ts|tsx|js|jsx|py|go|rs|java|rb|md|txt|cmake|CMakeLists\.txt))[`*_]*/,
     );
     if (m?.[1]) {
       files.push(m[1]);
@@ -287,7 +282,10 @@ async function _executeWriteInner(input: Record<string, unknown>): Promise<ToolR
     const readHits = totalHits - unread.length;
     const required = Math.min(Math.ceil(totalHits / 2), 5);
     if (totalHits >= 3 && readHits < required) {
-      const examples = unread.slice(0, 6).map((f) => `    - ${f}`).join("\n");
+      const examples = unread
+        .slice(0, 6)
+        .map((f) => `    - ${f}`)
+        .join("\n");
       problems.push(
         `your Grep calls flagged ${totalHits} high-risk file(s) for dangerous ` +
           `patterns (buffer indexing, I/O, resource lifecycle). You have Read ` +
@@ -347,7 +345,10 @@ async function _executeWriteInner(input: Record<string, unknown>): Promise<ToolR
     const citedFiles = extractCitedFiles(content);
     const uncitedUnread = citedFiles.filter((f) => !wasRead(f));
     if (uncitedUnread.length > 0) {
-      const listed = uncitedUnread.slice(0, 8).map((f) => `    - ${f}`).join("\n");
+      const listed = uncitedUnread
+        .slice(0, 8)
+        .map((f) => `    - ${f}`)
+        .join("\n");
       return {
         tool_use_id: "",
         content:
@@ -470,9 +471,7 @@ async function _executeWriteInner(input: Record<string, unknown>): Promise<ToolR
     // credential that isn't a known placeholder. Docs, .env.example,
     // and README.md are exempt. See write-content-scanner.ts.
     try {
-      const { detectSecrets, buildSecretReport } = await import(
-        "../core/write-content-scanner.js"
-      );
+      const { detectSecrets, buildSecretReport } = await import("../core/write-content-scanner.js");
       const secrets = detectSecrets(file_path, content);
       if (secrets.hasSecret) {
         return {
@@ -549,8 +548,7 @@ async function _executeWriteInner(input: Record<string, unknown>): Promise<ToolR
     let oldContentForDeclCheck: string | null = null;
     if (existsSync(file_path)) {
       try {
-        const { readFileSync } =
-          require("node:fs") as typeof import("node:fs");
+        const { readFileSync } = require("node:fs") as typeof import("node:fs");
         oldContentForDeclCheck = readFileSync(file_path, "utf-8");
       } catch {
         /* can't read — skip declaration loss check */
@@ -616,11 +614,7 @@ async function _executeWriteInner(input: Record<string, unknown>): Promise<ToolR
         warning += buildDebugWarning(debug);
       }
       if (oldContentForDeclCheck !== null) {
-        const decl = detectDeclarationLoss(
-          oldContentForDeclCheck,
-          content,
-          file_path,
-        );
+        const decl = detectDeclarationLoss(oldContentForDeclCheck, content, file_path);
         if (decl.hasLoss) {
           warning += buildDeclarationLossWarning(decl);
         }

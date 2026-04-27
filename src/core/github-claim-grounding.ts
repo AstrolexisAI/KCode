@@ -23,8 +23,8 @@
 export type RepoVerifyStatus = "verified" | "missing" | "unknown";
 
 export interface RepoClaim {
-  repo: string;   // owner/repo
-  start: number;  // byte offset in source text
+  repo: string; // owner/repo
+  start: number; // byte offset in source text
   end: number;
 }
 
@@ -38,9 +38,10 @@ export interface VerifiedRepoClaim extends RepoClaim {
 // Capture owner/repo only when it looks like a GitHub-style slug,
 // NOT when it's a file path or a URL.
 const CLAIM_RE =
-  /(?<![./\w-])`?([A-Za-z0-9][A-Za-z0-9-]{0,38})\/([A-Za-z0-9][A-Za-z0-9_.-]{0,98}[A-Za-z0-9_-]|[A-Za-z0-9])`?(?![\/\w])/g;
+  /(?<![./\w-])`?([A-Za-z0-9][A-Za-z0-9-]{0,38})\/([A-Za-z0-9][A-Za-z0-9_.-]{0,98}[A-Za-z0-9_-]|[A-Za-z0-9])`?(?![/\w])/g;
 
-const FILE_EXT_RE = /\.(md|ts|tsx|js|jsx|py|rs|go|java|rb|sh|txt|json|yml|yaml|toml|lock|xml|html|css|svg)$/i;
+const FILE_EXT_RE =
+  /\.(md|ts|tsx|js|jsx|py|rs|go|java|rb|sh|txt|json|yml|yaml|toml|lock|xml|html|css|svg)$/i;
 
 const STOP_OWNERS = new Set(["src", "bin", "docs", "node_modules", "dist"]);
 
@@ -176,10 +177,7 @@ export function rewriteUnverifiedRepoClaims(
     // preceded by `/` (URL path char) or `.` (file path), and NOT
     // followed by `/` + word char (continued path).
     const esc = claim.repo.replace(/[-/.*+?^${}()|[\]\\]/g, "\\$&");
-    const re = new RegExp(
-      `(?<![./\\w-])(\`?)${esc}(\`?)(?![\\w/])`,
-      "g",
-    );
+    const re = new RegExp(`(?<![./\\w-])(\`?)${esc}(\`?)(?![\\w/])`, "g");
     const before = out;
     out = out.replace(re, (_m, bt1, bt2) => {
       rewritten++;

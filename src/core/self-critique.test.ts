@@ -37,8 +37,7 @@ describe("parseCritiqueResponse", () => {
   });
 
   test("tolerates leading prose before JSON", () => {
-    const raw =
-      'Here is the audit:\n{"contradictions":[],"verdict":"ok"}\n\nThank you.';
+    const raw = 'Here is the audit:\n{"contradictions":[],"verdict":"ok"}\n\nThank you.';
     const parsed = parseCritiqueResponse(raw);
     expect(parsed).not.toBeNull();
     expect(parsed?.verdict).toBe("ok");
@@ -92,9 +91,7 @@ describe("parseCritiqueResponse", () => {
 
 describe("formatCritiqueBanner", () => {
   test("empty for no contradictions", () => {
-    expect(
-      formatCritiqueBanner({ contradictions: [], verdict: "ok", skipped: false }),
-    ).toBe("");
+    expect(formatCritiqueBanner({ contradictions: [], verdict: "ok", skipped: false })).toBe("");
   });
 
   test("renders the #103 scenario readably", () => {
@@ -139,9 +136,7 @@ describe("formatCritiqueBanner", () => {
     const longClaim = "a".repeat(200);
     const longEvidence = "b".repeat(200);
     const banner = formatCritiqueBanner({
-      contradictions: [
-        { claim: longClaim, evidence: longEvidence, severity: "medium" },
-      ],
+      contradictions: [{ claim: longClaim, evidence: longEvidence, severity: "medium" }],
       verdict: "downgrade",
       skipped: false,
     });

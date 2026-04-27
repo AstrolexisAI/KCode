@@ -31,7 +31,9 @@ export function registerUpdateCommand(program: Command, VERSION: string): void {
           console.log("\n  Rolling back to previous binary...");
           const r = await rollback();
           if (r.success) {
-            console.log("  \x1b[32m✓\x1b[0m Rolled back. Restart KCode to use the previous version.\n");
+            console.log(
+              "  \x1b[32m✓\x1b[0m Rolled back. Restart KCode to use the previous version.\n",
+            );
           } else {
             console.error(`\n  \x1b[31m✗ Rollback failed: ${r.error}\x1b[0m\n`);
             process.exit(1);

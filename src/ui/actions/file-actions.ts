@@ -9,10 +9,7 @@ import { handleFormatAction } from "./file-actions-formats.js";
 import { handleGitAction } from "./file-actions-git.js";
 import { handleStackAction } from "./file-actions-stacks.js";
 
-export async function handleFileAction(
-  action: string,
-  ctx: ActionContext,
-): Promise<string | null> {
+export async function handleFileAction(action: string, ctx: ActionContext): Promise<string | null> {
   const handlers = [
     handleAuditAction,
     handleGitAction,

@@ -36,8 +36,16 @@ afterEach(() => {
   } else {
     delete process.env.KCODE_HOME;
   }
-  try { rmSync(TMP, { recursive: true, force: true }); } catch { /* */ }
-  try { rmSync(HOME_TMP, { recursive: true, force: true }); } catch { /* */ }
+  try {
+    rmSync(TMP, { recursive: true, force: true });
+  } catch {
+    /* */
+  }
+  try {
+    rmSync(HOME_TMP, { recursive: true, force: true });
+  } catch {
+    /* */
+  }
 });
 
 const llmConfirm = async () =>
@@ -75,14 +83,10 @@ describe("learning loop — end-to-end", () => {
     // per-line. What matters is that THIS pattern was demoted to
     // needs_context.
     expect(result.learning_loop_suppressed).toBeGreaterThanOrEqual(1);
-    const evalConfirmed = result.findings.find(
-      (f) => f.pattern_id === "js-001-eval",
-    );
+    const evalConfirmed = result.findings.find((f) => f.pattern_id === "js-001-eval");
     expect(evalConfirmed).toBeUndefined();
 
-    const ncEntry = result.needs_context_detail.find(
-      (d) => d.pattern_id === "js-001-eval",
-    );
+    const ncEntry = result.needs_context_detail.find((d) => d.pattern_id === "js-001-eval");
     expect(ncEntry).toBeDefined();
     expect(ncEntry?.verification.reasoning).toContain("learning loop");
     expect(ncEntry?.verification.reasoning).toContain("/review promote");

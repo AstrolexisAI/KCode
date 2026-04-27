@@ -26,10 +26,7 @@ import { useTheme } from "../ThemeContext.js";
  * `col` is measured in UTF-16 code units matching JavaScript's
  * String.length semantics — same basis as the cursor state.
  */
-export function offsetToRowCol(
-  text: string,
-  offset: number,
-): { row: number; col: number } {
+export function offsetToRowCol(text: string, offset: number): { row: number; col: number } {
   const clamped = Math.max(0, Math.min(offset, text.length));
   let row = 0;
   let lineStart = 0;
@@ -132,16 +129,8 @@ function getFileCompletions(partial: string, dirsOnly = false): string[] {
 
     // If partial is empty or just a bare word, complete from cwd
     const hasPath = partial.includes("/") || partial.startsWith("~") || partial.startsWith(".");
-    const dir = hasPath
-      ? partial.endsWith("/")
-        ? expanded
-        : dirname(expanded)
-      : ".";
-    const prefix = hasPath
-      ? partial.endsWith("/")
-        ? ""
-        : basename(expanded)
-      : partial;
+    const dir = hasPath ? (partial.endsWith("/") ? expanded : dirname(expanded)) : ".";
+    const prefix = hasPath ? (partial.endsWith("/") ? "" : basename(expanded)) : partial;
     const resolvedDir = resolve(dir);
 
     const entries = readdirSync(resolvedDir, { withFileTypes: true });
@@ -170,7 +159,18 @@ function getFileCompletions(partial: string, dirsOnly = false): string[] {
 }
 
 /** Slash commands that take a directory path as first argument. */
-const DIR_ARG_COMMANDS = new Set(["scan", "audit-scan", "static-audit", "review", "fix", "autofix", "patch", "pr", "pull-request", "submit"]);
+const DIR_ARG_COMMANDS = new Set([
+  "scan",
+  "audit-scan",
+  "static-audit",
+  "review",
+  "fix",
+  "autofix",
+  "patch",
+  "pr",
+  "pull-request",
+  "submit",
+]);
 
 /**
  * Find the longest common prefix among an array of strings.
@@ -462,8 +462,10 @@ export default function InputPrompt({
         // existing tests that mock InputPrompt without an audit engine
         // continue to typecheck.
         // biome-ignore lint/style/noNonNullAssertion: require'd module is always present at runtime
-        const scanState = require("../../core/audit-engine/scan-state.js")
-          .scanState as { active: boolean; cancelled: boolean };
+        const scanState = require("../../core/audit-engine/scan-state.js").scanState as {
+          active: boolean;
+          cancelled: boolean;
+        };
         if (scanState.active && !scanState.cancelled) {
           scanState.cancelled = true;
           return;
@@ -745,8 +747,11 @@ export default function InputPrompt({
       // Home key: move cursor to beginning
       // Terminal sends \x1b[H, \x1b[1~, or \x1bOH depending on terminal
       if (
-        input === "\x1b[H" || input === "\x1b[1~" || input === "\x1bOH" ||
-        input === "\x1b[7~" || input === "\x1b[1;5H"
+        input === "\x1b[H" ||
+        input === "\x1b[1~" ||
+        input === "\x1bOH" ||
+        input === "\x1b[7~" ||
+        input === "\x1b[1;5H"
       ) {
         setCursor(0);
         return;
@@ -755,8 +760,11 @@ export default function InputPrompt({
       // End key: move cursor to end
       // Terminal sends \x1b[F, \x1b[4~, or \x1bOF depending on terminal
       if (
-        input === "\x1b[F" || input === "\x1b[4~" || input === "\x1bOF" ||
-        input === "\x1b[8~" || input === "\x1b[1;5F"
+        input === "\x1b[F" ||
+        input === "\x1b[4~" ||
+        input === "\x1bOF" ||
+        input === "\x1b[8~" ||
+        input === "\x1b[1;5F"
       ) {
         setCursor(value.length);
         return;
@@ -920,18 +928,13 @@ export default function InputPrompt({
   // above/below indicate hidden content.
   const MULTILINE_VIEWPORT_LINES = 20;
   const multiLines = isMultiline ? value.split("\n") : [];
-  const cursorRowCol = isMultiline
-    ? offsetToRowCol(value, cursor)
-    : { row: 0, col: 0 };
+  const cursorRowCol = isMultiline ? offsetToRowCol(value, cursor) : { row: 0, col: 0 };
   let viewportStart = 0;
   let viewportEnd = multiLines.length;
   if (isMultiline && multiLines.length > MULTILINE_VIEWPORT_LINES) {
     const half = Math.floor(MULTILINE_VIEWPORT_LINES / 2);
     viewportStart = Math.max(0, cursorRowCol.row - half);
-    viewportEnd = Math.min(
-      multiLines.length,
-      viewportStart + MULTILINE_VIEWPORT_LINES,
-    );
+    viewportEnd = Math.min(multiLines.length, viewportStart + MULTILINE_VIEWPORT_LINES);
     if (viewportEnd - viewportStart < MULTILINE_VIEWPORT_LINES) {
       viewportStart = Math.max(0, viewportEnd - MULTILINE_VIEWPORT_LINES);
     }
@@ -979,18 +982,14 @@ export default function InputPrompt({
             const isSelected = i === tabIndex;
             const displayName = match.endsWith("/") ? `📁 ${match}` : `   ${match}`;
             return (
-              <Text
-                key={match}
-                color={isSelected ? theme.accent : theme.dimmed}
-                bold={isSelected}
-              >
+              <Text key={match} color={isSelected ? theme.accent : theme.dimmed} bold={isSelected}>
                 {isSelected ? "▸ " : "  "}
                 {displayName}
               </Text>
             );
           })}
           {tabMatches.length > 12 && (
-            <Text color={theme.dimmed}>  ... +{tabMatches.length - 12} more</Text>
+            <Text color={theme.dimmed}> ... +{tabMatches.length - 12} more</Text>
           )}
         </Box>
       )}

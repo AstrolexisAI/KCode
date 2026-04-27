@@ -45,7 +45,7 @@
     "build:web": "cd src/web && bunx vite build",
     "dev:web": "cd src/web && bunx vite",
     "typecheck": "bun run --bun tsc --noEmit",
-    "lint": "biome check src/",
+    "lint": "biome check src/ --diagnostic-level=error",
     "lint:fix": "biome check --write src/",
     "format": "biome format --write src/",
     "prepublishOnly": "bun run build",

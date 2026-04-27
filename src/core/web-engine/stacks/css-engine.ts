@@ -4,7 +4,14 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-export type CssProjectType = "design-system" | "component-library" | "tailwind-plugin" | "animation-library" | "sass-framework" | "postcss-plugin" | "custom";
+export type CssProjectType =
+  | "design-system"
+  | "component-library"
+  | "tailwind-plugin"
+  | "animation-library"
+  | "sass-framework"
+  | "postcss-plugin"
+  | "custom";
 
 interface CssConfig {
   name: string;
@@ -26,17 +33,27 @@ function detectCssProject(msg: string): CssConfig {
   let darkMode = true;
 
   if (/\b(?:tailwind|tw)\s*(?:plugin|config|preset|extend)/i.test(lower)) {
-    type = "tailwind-plugin"; hasTailwind = true; preprocessor = "postcss";
-  }
-  else if (/\b(?:animation|animate|motion|transition|keyframe)\b/i.test(lower)) { type = "animation-library"; }
-  else if (/\b(?:component|ui\s*kit|ui\s*library|button|card|modal|widget)\b/i.test(lower)) {
+    type = "tailwind-plugin";
+    hasTailwind = true;
+    preprocessor = "postcss";
+  } else if (/\b(?:animation|animate|motion|transition|keyframe)\b/i.test(lower)) {
+    type = "animation-library";
+  } else if (/\b(?:component|ui\s*kit|ui\s*library|button|card|modal|widget)\b/i.test(lower)) {
     type = "component-library";
     hasStorybook = /\b(?:storybook|stories)\b/i.test(lower) || true;
+  } else if (/\b(?:sass|scss)\s*(?:framework|lib|library|mixin)/i.test(lower)) {
+    type = "sass-framework";
+    preprocessor = "scss";
+  } else if (/\b(?:postcss)\s*(?:plugin)/i.test(lower)) {
+    type = "postcss-plugin";
+    preprocessor = "postcss";
+  } else if (/\b(?:design\s*system|token|design\s*token|theme|palette|typography)\b/i.test(lower)) {
+    type = "design-system";
+    tokens = true;
+  } else {
+    type = "design-system";
+    tokens = true;
   }
-  else if (/\b(?:sass|scss)\s*(?:framework|lib|library|mixin)/i.test(lower)) { type = "sass-framework"; preprocessor = "scss"; }
-  else if (/\b(?:postcss)\s*(?:plugin)/i.test(lower)) { type = "postcss-plugin"; preprocessor = "postcss"; }
-  else if (/\b(?:design\s*system|token|design\s*token|theme|palette|typography)\b/i.test(lower)) { type = "design-system"; tokens = true; }
-  else { type = "design-system"; tokens = true; }
 
   if (/\b(?:tailwind|tw)\b/i.test(lower)) hasTailwind = true;
   if (/\b(?:sass|scss)\b/i.test(lower)) preprocessor = "scss";
@@ -46,19 +63,58 @@ function detectCssProject(msg: string): CssConfig {
   if (/\b(?:no\s*dark|light\s*only)\b/i.test(lower)) darkMode = false;
 
   const nameMatch = msg.match(/(?:called|named|nombre)\s+(\w[\w-]*)/i);
-  const name = nameMatch?.[1] ?? (type === "tailwind-plugin" ? "tw-plugin" : type === "postcss-plugin" ? "postcss-plugin" : "design-system");
+  const name =
+    nameMatch?.[1] ??
+    (type === "tailwind-plugin"
+      ? "tw-plugin"
+      : type === "postcss-plugin"
+        ? "postcss-plugin"
+        : "design-system");
 
   return { name, type, preprocessor, hasTailwind, hasStorybook, tokens, darkMode };
 }
 
-interface GenFile { path: string; content: string; needsLlm: boolean; }
-export interface CssProjectResult { config: CssConfig; files: GenFile[]; projectPath: string; prompt: string; }
+interface GenFile {
+  path: string;
+  content: string;
+  needsLlm: boolean;
+}
+export interface CssProjectResult {
+  config: CssConfig;
+  files: GenFile[];
+  projectPath: string;
+  prompt: string;
+}
 
 // ── Color palettes ────────────────────────────────────────────────
 
 const PALETTES = {
-  primary: { 50: "#eff6ff", 100: "#dbeafe", 200: "#bfdbfe", 300: "#93c5fd", 400: "#60a5fa", 500: "#3b82f6", 600: "#2563eb", 700: "#1d4ed8", 800: "#1e40af", 900: "#1e3a8a", 950: "#172554" },
-  neutral: { 50: "#fafafa", 100: "#f5f5f5", 200: "#e5e5e5", 300: "#d4d4d4", 400: "#a3a3a3", 500: "#737373", 600: "#525252", 700: "#404040", 800: "#262626", 900: "#171717", 950: "#0a0a0a" },
+  primary: {
+    50: "#eff6ff",
+    100: "#dbeafe",
+    200: "#bfdbfe",
+    300: "#93c5fd",
+    400: "#60a5fa",
+    500: "#3b82f6",
+    600: "#2563eb",
+    700: "#1d4ed8",
+    800: "#1e40af",
+    900: "#1e3a8a",
+    950: "#172554",
+  },
+  neutral: {
+    50: "#fafafa",
+    100: "#f5f5f5",
+    200: "#e5e5e5",
+    300: "#d4d4d4",
+    400: "#a3a3a3",
+    500: "#737373",
+    600: "#525252",
+    700: "#404040",
+    800: "#262626",
+    900: "#171717",
+    950: "#0a0a0a",
+  },
   success: { 500: "#22c55e", 600: "#16a34a" },
   warning: { 500: "#f59e0b", 600: "#d97706" },
   error: { 500: "#ef4444", 600: "#dc2626" },
@@ -67,8 +123,12 @@ const PALETTES = {
 function tokensCSS(name: string, darkMode: boolean): string {
   return `:root {
   /* ── Colors ── */
-${Object.entries(PALETTES.primary).map(([k, v]) => `  --${name}-primary-${k}: ${v};`).join("\n")}
-${Object.entries(PALETTES.neutral).map(([k, v]) => `  --${name}-neutral-${k}: ${v};`).join("\n")}
+${Object.entries(PALETTES.primary)
+  .map(([k, v]) => `  --${name}-primary-${k}: ${v};`)
+  .join("\n")}
+${Object.entries(PALETTES.neutral)
+  .map(([k, v]) => `  --${name}-neutral-${k}: ${v};`)
+  .join("\n")}
   --${name}-success: ${PALETTES.success[500]};
   --${name}-warning: ${PALETTES.warning[500]};
   --${name}-error: ${PALETTES.error[500]};
@@ -140,7 +200,9 @@ ${Object.entries(PALETTES.neutral).map(([k, v]) => `  --${name}-neutral-${k}: ${
   /* ── Breakpoints (for reference) ── */
   /* sm: 640px | md: 768px | lg: 1024px | xl: 1280px | 2xl: 1536px */
 }
-${darkMode ? `
+${
+  darkMode
+    ? `
 [data-theme="dark"],
 .dark,
 @media (prefers-color-scheme: dark) {
@@ -166,7 +228,9 @@ ${darkMode ? `
     --${name}-shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.4);
   }
 }
-` : ""}`;
+`
+    : ""
+}`;
 }
 
 function componentsCSS(name: string): string {
@@ -466,18 +530,32 @@ export function createCssProject(userRequest: string, cwd: string): CssProjectRe
 
   if (cfg.type === "design-system" || cfg.type === "component-library") {
     // Tokens
-    files.push({ path: `src/tokens.css`, content: tokensCSS(cfg.name, cfg.darkMode), needsLlm: false });
+    files.push({
+      path: `src/tokens.css`,
+      content: tokensCSS(cfg.name, cfg.darkMode),
+      needsLlm: false,
+    });
     // Components
     files.push({ path: `src/components.css`, content: componentsCSS(cfg.name), needsLlm: false });
     // Animations
     files.push({ path: `src/animations.css`, content: animationsCSS(cfg.name), needsLlm: false });
     // Main entry
-    files.push({ path: `src/index.css`, content: `/* ${cfg.name} — Design System */\n@import "./tokens.css";\n@import "./components.css";\n@import "./animations.css";\n`, needsLlm: false });
+    files.push({
+      path: `src/index.css`,
+      content: `/* ${cfg.name} — Design System */\n@import "./tokens.css";\n@import "./components.css";\n@import "./animations.css";\n`,
+      needsLlm: false,
+    });
     // Minified bundle placeholder
-    files.push({ path: `dist/${cfg.name}.css`, content: `/* Built version — run: npm run build */\n`, needsLlm: false });
+    files.push({
+      path: `dist/${cfg.name}.css`,
+      content: `/* Built version — run: npm run build */\n`,
+      needsLlm: false,
+    });
 
     // Demo page
-    files.push({ path: "demo/index.html", content: `<!DOCTYPE html>
+    files.push({
+      path: "demo/index.html",
+      content: `<!DOCTYPE html>
 <html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8">
@@ -576,12 +654,19 @@ export function createCssProject(userRequest: string, cwd: string): CssProjectRe
   </script>
 </body>
 </html>
-`, needsLlm: false });
-
+`,
+      needsLlm: false,
+    });
   } else if (cfg.type === "animation-library") {
     files.push({ path: `src/${cfg.name}.css`, content: animationsCSS(cfg.name), needsLlm: false });
-    files.push({ path: `src/index.css`, content: `/* ${cfg.name} — Animation Library */\n@import "./${cfg.name}.css";\n`, needsLlm: false });
-    files.push({ path: "demo/index.html", content: `<!DOCTYPE html>
+    files.push({
+      path: `src/index.css`,
+      content: `/* ${cfg.name} — Animation Library */\n@import "./${cfg.name}.css";\n`,
+      needsLlm: false,
+    });
+    files.push({
+      path: "demo/index.html",
+      content: `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>${cfg.name} Demo</title><link rel="stylesheet" href="../src/index.css">
 <style>body{font-family:system-ui;padding:2rem;}.box{width:80px;height:80px;background:#3b82f6;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;color:white;font-size:12px;margin:8px;}</style></head>
 <body><h1>${cfg.name}</h1>
@@ -592,10 +677,13 @@ export function createCssProject(userRequest: string, cwd: string): CssProjectRe
 <div class="box ${cfg.name}-animate-pulse">pulse</div>
 <div class="box ${cfg.name}-animate-glow">glow</div>
 <div class="box ${cfg.name}-animate-spin">spin</div>
-</div></body></html>`, needsLlm: false });
-
+</div></body></html>`,
+      needsLlm: false,
+    });
   } else if (cfg.type === "tailwind-plugin") {
-    files.push({ path: "src/index.js", content: `const plugin = require("tailwindcss/plugin");
+    files.push({
+      path: "src/index.js",
+      content: `const plugin = require("tailwindcss/plugin");
 
 module.exports = plugin(function ({ addUtilities, addComponents, matchUtilities, theme }) {
   // Custom utilities
@@ -662,48 +750,101 @@ module.exports = plugin(function ({ addUtilities, addComponents, matchUtilities,
     },
   },
 });
-`, needsLlm: true });
-
+`,
+      needsLlm: true,
+    });
   } else if (cfg.type === "sass-framework") {
-    files.push({ path: "src/_variables.scss", content: `// ${cfg.name} — Variables\n\n$${cfg.name}-primary: #3b82f6 !default;\n$${cfg.name}-font-sans: 'Inter', system-ui, sans-serif !default;\n$${cfg.name}-radius: 0.5rem !default;\n$${cfg.name}-shadow: 0 4px 6px rgba(0,0,0,0.1) !default;\n\n// Spacing scale\n$${cfg.name}-space: 0.25rem !default;\n@for $i from 1 through 20 {\n  $${cfg.name}-space-#{$i}: $${cfg.name}-space * $i;\n}\n`, needsLlm: false });
-    files.push({ path: "src/_mixins.scss", content: `// ${cfg.name} — Mixins\n\n@mixin ${cfg.name}-respond($bp) {\n  @if $bp == sm { @media (min-width: 640px) { @content; } }\n  @else if $bp == md { @media (min-width: 768px) { @content; } }\n  @else if $bp == lg { @media (min-width: 1024px) { @content; } }\n  @else if $bp == xl { @media (min-width: 1280px) { @content; } }\n}\n\n@mixin ${cfg.name}-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n@mixin ${cfg.name}-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }\n@mixin ${cfg.name}-flex-center { display: flex; align-items: center; justify-content: center; }\n`, needsLlm: false });
-    files.push({ path: "src/index.scss", content: `// ${cfg.name}\n@import "variables";\n@import "mixins";\n\n// TODO: add component styles\n`, needsLlm: true });
-
+    files.push({
+      path: "src/_variables.scss",
+      content: `// ${cfg.name} — Variables\n\n$${cfg.name}-primary: #3b82f6 !default;\n$${cfg.name}-font-sans: 'Inter', system-ui, sans-serif !default;\n$${cfg.name}-radius: 0.5rem !default;\n$${cfg.name}-shadow: 0 4px 6px rgba(0,0,0,0.1) !default;\n\n// Spacing scale\n$${cfg.name}-space: 0.25rem !default;\n@for $i from 1 through 20 {\n  $${cfg.name}-space-#{$i}: $${cfg.name}-space * $i;\n}\n`,
+      needsLlm: false,
+    });
+    files.push({
+      path: "src/_mixins.scss",
+      content: `// ${cfg.name} — Mixins\n\n@mixin ${cfg.name}-respond($bp) {\n  @if $bp == sm { @media (min-width: 640px) { @content; } }\n  @else if $bp == md { @media (min-width: 768px) { @content; } }\n  @else if $bp == lg { @media (min-width: 1024px) { @content; } }\n  @else if $bp == xl { @media (min-width: 1280px) { @content; } }\n}\n\n@mixin ${cfg.name}-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n@mixin ${cfg.name}-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }\n@mixin ${cfg.name}-flex-center { display: flex; align-items: center; justify-content: center; }\n`,
+      needsLlm: false,
+    });
+    files.push({
+      path: "src/index.scss",
+      content: `// ${cfg.name}\n@import "variables";\n@import "mixins";\n\n// TODO: add component styles\n`,
+      needsLlm: true,
+    });
   } else if (cfg.type === "postcss-plugin") {
-    files.push({ path: "src/index.js", content: `/**\n * ${cfg.name} — PostCSS Plugin\n */\nmodule.exports = (opts = {}) => {\n  return {\n    postcssPlugin: "${cfg.name}",\n    Declaration(decl) {\n      // TODO: transform declarations\n    },\n    Rule(rule) {\n      // TODO: transform rules\n    },\n  };\n};\nmodule.exports.postcss = true;\n`, needsLlm: true });
+    files.push({
+      path: "src/index.js",
+      content: `/**\n * ${cfg.name} — PostCSS Plugin\n */\nmodule.exports = (opts = {}) => {\n  return {\n    postcssPlugin: "${cfg.name}",\n    Declaration(decl) {\n      // TODO: transform declarations\n    },\n    Rule(rule) {\n      // TODO: transform rules\n    },\n  };\n};\nmodule.exports.postcss = true;\n`,
+      needsLlm: true,
+    });
   }
 
   // package.json
   const devDeps: Record<string, string> = {};
   if (cfg.preprocessor === "scss") devDeps["sass"] = "*";
-  if (cfg.preprocessor === "postcss") { devDeps["postcss"] = "*"; devDeps["postcss-cli"] = "*"; devDeps["autoprefixer"] = "*"; devDeps["cssnano"] = "*"; }
-  if (cfg.hasTailwind) { devDeps["tailwindcss"] = "*"; }
-  if (cfg.type === "tailwind-plugin") { devDeps["tailwindcss"] = "*"; }
+  if (cfg.preprocessor === "postcss") {
+    devDeps["postcss"] = "*";
+    devDeps["postcss-cli"] = "*";
+    devDeps["autoprefixer"] = "*";
+    devDeps["cssnano"] = "*";
+  }
+  if (cfg.hasTailwind) {
+    devDeps["tailwindcss"] = "*";
+  }
+  if (cfg.type === "tailwind-plugin") {
+    devDeps["tailwindcss"] = "*";
+  }
   devDeps["lightningcss-cli"] = "*";
 
-  files.push({ path: "package.json", content: JSON.stringify({
-    name: cfg.name,
-    version: "0.1.0",
-    main: cfg.type === "tailwind-plugin" || cfg.type === "postcss-plugin" ? "src/index.js" : `dist/${cfg.name}.css`,
-    style: `dist/${cfg.name}.css`,
-    files: ["dist", "src"],
-    scripts: {
-      build: cfg.preprocessor === "scss"
-        ? `sass src/index.scss dist/${cfg.name}.css && lightningcss --minify --bundle dist/${cfg.name}.css -o dist/${cfg.name}.min.css`
-        : `cat src/index.css | lightningcss --minify --bundle - -o dist/${cfg.name}.min.css && cp src/index.css dist/${cfg.name}.css`,
-      dev: "npx live-server demo",
-      watch: cfg.preprocessor === "scss" ? `sass --watch src/index.scss dist/${cfg.name}.css` : `echo "edit src/*.css and reload demo"`,
-    },
-    devDependencies: devDeps,
-  }, null, 2), needsLlm: false });
+  files.push({
+    path: "package.json",
+    content: JSON.stringify(
+      {
+        name: cfg.name,
+        version: "0.1.0",
+        main:
+          cfg.type === "tailwind-plugin" || cfg.type === "postcss-plugin"
+            ? "src/index.js"
+            : `dist/${cfg.name}.css`,
+        style: `dist/${cfg.name}.css`,
+        files: ["dist", "src"],
+        scripts: {
+          build:
+            cfg.preprocessor === "scss"
+              ? `sass src/index.scss dist/${cfg.name}.css && lightningcss --minify --bundle dist/${cfg.name}.css -o dist/${cfg.name}.min.css`
+              : `cat src/index.css | lightningcss --minify --bundle - -o dist/${cfg.name}.min.css && cp src/index.css dist/${cfg.name}.css`,
+          dev: "npx live-server demo",
+          watch:
+            cfg.preprocessor === "scss"
+              ? `sass --watch src/index.scss dist/${cfg.name}.css`
+              : `echo "edit src/*.css and reload demo"`,
+        },
+        devDependencies: devDeps,
+      },
+      null,
+      2,
+    ),
+    needsLlm: false,
+  });
 
   // Extras
   files.push({ path: ".gitignore", content: "node_modules/\ndist/\n*.log\n", needsLlm: false });
-  files.push({ path: "README.md", content: `# ${cfg.name}\n\nCSS ${cfg.type.replace(/-/g, " ")}. Built with KCode.\n\n## Install\n\`\`\`bash\nnpm install ${cfg.name}\n\`\`\`\n\n## Usage\n\`\`\`html\n<link rel="stylesheet" href="node_modules/${cfg.name}/dist/${cfg.name}.min.css">\n\`\`\`\n\n## Development\n\`\`\`bash\nnpm install\nnpm run dev\nnpm run build\n\`\`\`\n\n*Astrolexis.space — Kulvex Code*\n`, needsLlm: false });
+  files.push({
+    path: "README.md",
+    content: `# ${cfg.name}\n\nCSS ${cfg.type.replace(/-/g, " ")}. Built with KCode.\n\n## Install\n\`\`\`bash\nnpm install ${cfg.name}\n\`\`\`\n\n## Usage\n\`\`\`html\n<link rel="stylesheet" href="node_modules/${cfg.name}/dist/${cfg.name}.min.css">\n\`\`\`\n\n## Development\n\`\`\`bash\nnpm install\nnpm run dev\nnpm run build\n\`\`\`\n\n*Astrolexis.space — Kulvex Code*\n`,
+    needsLlm: false,
+  });
 
   const projectPath = join(cwd, cfg.name);
-  for (const f of files) { const p = join(projectPath, f.path); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, f.content); }
+  for (const f of files) {
+    const p = join(projectPath, f.path);
+    mkdirSync(dirname(p), { recursive: true });
+    writeFileSync(p, f.content);
+  }
 
-  const m = files.filter(f => !f.needsLlm).length;
-  return { config: cfg, files, projectPath, prompt: `CSS ${cfg.type}. ${m} files machine. USER: "${userRequest}"` };
+  const m = files.filter((f) => !f.needsLlm).length;
+  return {
+    config: cfg,
+    files,
+    projectPath,
+    prompt: `CSS ${cfg.type}. ${m} files machine. USER: "${userRequest}"`,
+  };
 }

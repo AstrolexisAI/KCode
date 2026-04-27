@@ -7,9 +7,9 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import {
   clearActivePlan,
   getActivePlan,
+  type Plan,
   reconcilePlanFromScope,
   setActivePlanForTesting,
-  type Plan,
 } from "../tools/plan";
 import { getTaskScopeManager } from "./task-scope";
 
@@ -35,10 +35,7 @@ describe("reconcilePlanFromScope", () => {
 
   test("flips createProject to done once projectRoot.verified", () => {
     setActivePlanForTesting(
-      makePlan([
-        "Create project directory and initialize Python project",
-        "Install dependencies",
-      ]),
+      makePlan(["Create project directory and initialize Python project", "Install dependencies"]),
     );
     const mgr = getTaskScopeManager();
     mgr.beginNewScope({ type: "scaffold", userPrompt: "test" });
@@ -97,13 +94,13 @@ describe("reconcilePlanFromScope", () => {
 
     reconcilePlanFromScope();
     const plan = getActivePlan()!;
-    expect(plan.steps[0]!.status).toBe("done");   // create project
-    expect(plan.steps[1]!.status).toBe("done");   // install deps
-    expect(plan.steps[2]!.status).toBe("done");   // structure (files written)
-    expect(plan.steps[3]!.status).toBe("done");   // implement connection (bitcoinClient.ts exists)
-    expect(plan.steps[4]!.status).toBe("done");   // blocks view file exists
-    expect(plan.steps[5]!.status).toBe("done");   // transactions view file exists
-    expect(plan.steps[6]!.status).toBe("done");   // live updates (index.ts has refresh)
+    expect(plan.steps[0]!.status).toBe("done"); // create project
+    expect(plan.steps[1]!.status).toBe("done"); // install deps
+    expect(plan.steps[2]!.status).toBe("done"); // structure (files written)
+    expect(plan.steps[3]!.status).toBe("done"); // implement connection (bitcoinClient.ts exists)
+    expect(plan.steps[4]!.status).toBe("done"); // blocks view file exists
+    expect(plan.steps[5]!.status).toBe("done"); // transactions view file exists
+    expect(plan.steps[6]!.status).toBe("done"); // live updates (index.ts has refresh)
     expect(plan.steps[7]!.status).toBe("pending"); // test/run — no runtime yet
   });
 
@@ -148,10 +145,7 @@ describe("reconcilePlanFromScope", () => {
 
   test("verified runtime marks test step as done", () => {
     setActivePlanForTesting(
-      makePlan([
-        "Create project directory",
-        "Test connection and run dashboard",
-      ]),
+      makePlan(["Create project directory", "Test connection and run dashboard"]),
     );
     const mgr = getTaskScopeManager();
     mgr.beginNewScope({ type: "scaffold", userPrompt: "test" });
@@ -170,10 +164,7 @@ describe("reconcilePlanFromScope", () => {
 
   test("failed_auth runtime does NOT flip test step to done", () => {
     setActivePlanForTesting(
-      makePlan([
-        "Create project directory",
-        "Test connection to Bitcoin node",
-      ]),
+      makePlan(["Create project directory", "Test connection to Bitcoin node"]),
     );
     const mgr = getTaskScopeManager();
     mgr.beginNewScope({ type: "scaffold", userPrompt: "test" });

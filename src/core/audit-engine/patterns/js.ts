@@ -11,8 +11,10 @@ export const JS_PATTERNS: BugPattern[] = [
     severity: "critical",
     languages: ["javascript", "typescript"],
     regex: /\beval\s*\(/g,
-    explanation: "eval() executes arbitrary JavaScript. If input is user-controlled, this is XSS/RCE.",
-    verify_prompt: "Is the argument entirely hardcoded or internal? If ANY external input reaches eval(), respond CONFIRMED." +
+    explanation:
+      "eval() executes arbitrary JavaScript. If input is user-controlled, this is XSS/RCE.",
+    verify_prompt:
+      "Is the argument entirely hardcoded or internal? If ANY external input reaches eval(), respond CONFIRMED." +
       "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
       "1. The argument is a compile-time constant or hardcoded string literal\n" +
       "2. The input comes from a trusted internal source (not user/network input)\n" +
@@ -20,7 +22,8 @@ export const JS_PATTERNS: BugPattern[] = [
       "4. The eval is used for JSON.parse fallback on a validated string\n" +
       "Only respond CONFIRMED if user-controlled or external input can reach the eval() argument.",
     cwe: "CWE-95",
-    fix_template: "Remove eval() or use JSON.parse() for data, Function constructor for controlled cases.",
+    fix_template:
+      "Remove eval() or use JSON.parse() for data, Function constructor for controlled cases.",
   },
   {
     id: "js-002-innerhtml",
@@ -44,8 +47,10 @@ export const JS_PATTERNS: BugPattern[] = [
     // before hitting `$`. Together they correctly skip assignments
     // of empty literal strings without false-negating real XSS.
     regex: /\.(innerHTML|outerHTML)\s*=\s*(?=\S)(?!(?:""|''|``)[ \t]*;?[ \t]*$)/gm,
-    explanation: "Setting innerHTML with dynamic content enables XSS. Use textContent or a sanitizer.",
-    verify_prompt: "Is the assigned value from user input or external data? If hardcoded HTML, respond FALSE_POSITIVE.",
+    explanation:
+      "Setting innerHTML with dynamic content enables XSS. Use textContent or a sanitizer.",
+    verify_prompt:
+      "Is the assigned value from user input or external data? If hardcoded HTML, respond FALSE_POSITIVE.",
     cwe: "CWE-79",
     fix_template: "Use element.textContent = value, or DOMPurify.sanitize(html).",
   },
@@ -54,20 +59,27 @@ export const JS_PATTERNS: BugPattern[] = [
     title: "Object merge/assign without prototype pollution guard",
     severity: "high",
     languages: ["javascript", "typescript"],
-    regex: /\b(?:Object\.assign|_\.merge|_\.extend|_\.defaultsDeep)\s*\([^,]+,\s*(?:req\.|params\.|body\.|query\.|input)/g,
-    explanation: "Merging user input into objects without filtering __proto__, constructor, prototype allows prototype pollution → RCE in some frameworks.",
-    verify_prompt: "Does the source object come from untrusted input (request body, query params)? If internal-only, respond FALSE_POSITIVE.",
+    regex:
+      /\b(?:Object\.assign|_\.merge|_\.extend|_\.defaultsDeep)\s*\([^,]+,\s*(?:req\.|params\.|body\.|query\.|input)/g,
+    explanation:
+      "Merging user input into objects without filtering __proto__, constructor, prototype allows prototype pollution → RCE in some frameworks.",
+    verify_prompt:
+      "Does the source object come from untrusted input (request body, query params)? If internal-only, respond FALSE_POSITIVE.",
     cwe: "CWE-1321",
-    fix_template: "Filter dangerous keys: delete input.__proto__; delete input.constructor; or use structuredClone().",
+    fix_template:
+      "Filter dangerous keys: delete input.__proto__; delete input.constructor; or use structuredClone().",
   },
   {
     id: "js-004-nosql-injection",
     title: "NoSQL query with user input (injection risk)",
     severity: "high",
     languages: ["javascript", "typescript"],
-    regex: /\b(?:find|findOne|updateOne|deleteOne|aggregate)\s*\(\s*\{[^}]*(?:req\.|params\.|body\.|query\.)/g,
-    explanation: "MongoDB queries with user-controlled operators ($gt, $ne, $regex) enable NoSQL injection.",
-    verify_prompt: "Is user input passed directly as a query filter without sanitization? If parameterized/validated, respond FALSE_POSITIVE.",
+    regex:
+      /\b(?:find|findOne|updateOne|deleteOne|aggregate)\s*\(\s*\{[^}]*(?:req\.|params\.|body\.|query\.)/g,
+    explanation:
+      "MongoDB queries with user-controlled operators ($gt, $ne, $regex) enable NoSQL injection.",
+    verify_prompt:
+      "Is user input passed directly as a query filter without sanitization? If parameterized/validated, respond FALSE_POSITIVE.",
     cwe: "CWE-943",
     fix_template: "Validate/cast input types explicitly: { email: String(req.body.email) }",
   },
@@ -77,8 +89,10 @@ export const JS_PATTERNS: BugPattern[] = [
     severity: "medium",
     languages: ["javascript", "typescript"],
     regex: /new\s+RegExp\s*\(\s*(?:req\.|params\.|body\.|query\.|input|arg|user)/g,
-    explanation: "Constructing regex from user input enables ReDoS (catastrophic backtracking). An attacker can send a pattern that hangs the event loop.",
-    verify_prompt: "Is the regex pattern from user input? If from internal/hardcoded source, respond FALSE_POSITIVE.",
+    explanation:
+      "Constructing regex from user input enables ReDoS (catastrophic backtracking). An attacker can send a pattern that hangs the event loop.",
+    verify_prompt:
+      "Is the regex pattern from user input? If from internal/hardcoded source, respond FALSE_POSITIVE.",
     cwe: "CWE-1333",
     fix_template: "Use a regex timeout library, or escape user input with escapeRegExp().",
   },
@@ -87,9 +101,11 @@ export const JS_PATTERNS: BugPattern[] = [
     title: "Hardcoded secret/key in JavaScript/TypeScript",
     severity: "high",
     languages: ["javascript", "typescript"],
-    regex: /(?:SECRET|API_KEY|PRIVATE_KEY|PASSWORD|TOKEN|AUTH)\s*[:=]\s*["'][A-Za-z0-9+/=_-]{16,}["']/g,
+    regex:
+      /(?:SECRET|API_KEY|PRIVATE_KEY|PASSWORD|TOKEN|AUTH)\s*[:=]\s*["'][A-Za-z0-9+/=_-]{16,}["']/g,
     explanation: "Hardcoded secrets in source code are exposed to anyone with repo access.",
-    verify_prompt: "Is this a real secret or a placeholder/test value? If it looks like a real key (long, random), respond CONFIRMED." +
+    verify_prompt:
+      "Is this a real secret or a placeholder/test value? If it looks like a real key (long, random), respond CONFIRMED." +
       "\n\nRespond FALSE_POSITIVE if ANY of these is true:\n" +
       "1. The value is a placeholder ('changeme', 'xxx', 'your-api-key-here', 'TODO', 'REPLACE_ME')\n" +
       "2. This is in test, example, or documentation code\n" +
@@ -105,8 +121,10 @@ export const JS_PATTERNS: BugPattern[] = [
     severity: "critical",
     languages: ["javascript", "typescript"],
     regex: /\b(?:exec|execSync|spawn|spawnSync)\s*\(\s*`/g,
-    explanation: "Running shell commands with template literals allows injection if any interpolated value is user-controlled.",
-    verify_prompt: "Does the template literal include ANY external input? If entirely hardcoded, respond FALSE_POSITIVE.",
+    explanation:
+      "Running shell commands with template literals allows injection if any interpolated value is user-controlled.",
+    verify_prompt:
+      "Does the template literal include ANY external input? If entirely hardcoded, respond FALSE_POSITIVE.",
     cwe: "CWE-78",
     fix_template: "Use spawn/execFile with array args instead of shell string.",
   },
@@ -123,14 +141,16 @@ export const JS_PATTERNS: BugPattern[] = [
       "constructor, or prototype keys are filtered. If there's a hasOwnProperty check " +
       "or allowlist, respond FALSE_POSITIVE. If user controls the key without filtering, respond CONFIRMED.",
     cwe: "CWE-1321",
-    fix_template: "Validate keys: if (['__proto__', 'constructor', 'prototype'].includes(key)) return; or use Map instead of plain objects.",
+    fix_template:
+      "Validate keys: if (['__proto__', 'constructor', 'prototype'].includes(key)) return; or use Map instead of plain objects.",
   },
   {
     id: "js-009-redos-nested-quantifier",
     title: "ReDoS: regex with nested quantifiers on user input",
     severity: "high",
     languages: ["javascript", "typescript"],
-    regex: /new\s+RegExp\s*\([^)]*\)[\s\S]{0,100}?\.(?:test|match|exec)\s*\(\s*(?:req\.|params\.|body\.|query\.|input|user)/g,
+    regex:
+      /new\s+RegExp\s*\([^)]*\)[\s\S]{0,100}?\.(?:test|match|exec)\s*\(\s*(?:req\.|params\.|body\.|query\.|input|user)/g,
     explanation:
       "Regex with nested quantifiers (e.g., (a+)+, (a|b)*c) on user input can cause catastrophic backtracking (ReDoS), freezing the event loop for minutes or hours.",
     verify_prompt:
@@ -168,14 +188,16 @@ export const JS_PATTERNS: BugPattern[] = [
       "If entirely hardcoded or from trusted internal source, respond FALSE_POSITIVE. " +
       "If any user data is interpolated, respond CONFIRMED.",
     cwe: "CWE-95",
-    fix_template: "Avoid new Function() with dynamic strings. Use a safe expression parser or sandbox.",
+    fix_template:
+      "Avoid new Function() with dynamic strings. Use a safe expression parser or sandbox.",
   },
   {
     id: "js-012-event-listener-leak",
     title: "addEventListener without corresponding removeEventListener",
     severity: "low",
     languages: ["javascript", "typescript"],
-    regex: /addEventListener\s*\(\s*["'][^"']+["']\s*,\s*(?:function|\([^)]*\)\s*=>|[a-zA-Z_]\w*)\s*\)/g,
+    regex:
+      /addEventListener\s*\(\s*["'][^"']+["']\s*,\s*(?:function|\([^)]*\)\s*=>|[a-zA-Z_]\w*)\s*\)/g,
     explanation:
       "Adding event listeners without removing them causes memory leaks, especially in SPAs where components mount/unmount. Each re-render adds another listener.",
     verify_prompt:
@@ -206,7 +228,8 @@ export const JS_PATTERNS: BugPattern[] = [
     title: "JSON.parse without try/catch (crash on invalid input)",
     severity: "medium",
     languages: ["javascript", "typescript"],
-    regex: /(?<!try\s*\{[\s\S]{0,200}?)JSON\.parse\s*\(\s*(?:req\.|body\.|data|input|response|text|content)/g,
+    regex:
+      /(?<!try\s*\{[\s\S]{0,200}?)JSON\.parse\s*\(\s*(?:req\.|body\.|data|input|response|text|content)/g,
     explanation:
       "JSON.parse() throws SyntaxError on invalid JSON. Without try/catch, malformed input crashes the process or rejects the promise unhandled.",
     verify_prompt:
@@ -232,7 +255,8 @@ export const JS_PATTERNS: BugPattern[] = [
       "anywhere in the enclosing function, AND the input comes from an untrusted " +
       "source (user request, external API, file uploaded by users).",
     cwe: "CWE-754",
-    fix_template: "Wrap in try/catch: try { const obj = JSON.parse(data); } catch (e) { /* handle */ }",
+    fix_template:
+      "Wrap in try/catch: try { const obj = JSON.parse(data); } catch (e) { /* handle */ }",
   },
   {
     id: "js-015-promise-no-catch",
@@ -247,14 +271,16 @@ export const JS_PATTERNS: BugPattern[] = [
       "If there's a .catch() further down, or it's inside an async function with try/catch, " +
       "respond FALSE_POSITIVE. If no error handler exists, respond CONFIRMED.",
     cwe: "CWE-755",
-    fix_template: "Add .catch(err => { /* handle */ }) at the end of the chain, or use async/await with try/catch.",
+    fix_template:
+      "Add .catch(err => { /* handle */ }) at the end of the chain, or use async/await with try/catch.",
   },
   {
     id: "js-016-open-redirect",
     title: "window.location set from user input (open redirect)",
     severity: "medium",
     languages: ["javascript", "typescript"],
-    regex: /(?:window\.location|location\.href|location\.assign|location\.replace)\s*(?:=|\()\s*(?:req\.|params\.|query\.|input|user|data|url)/g,
+    regex:
+      /(?:window\.location|location\.href|location\.assign|location\.replace)\s*(?:=|\()\s*(?:req\.|params\.|query\.|input|user|data|url)/g,
     explanation:
       "Setting window.location from user-controlled input enables open redirect attacks. An attacker can craft a URL that redirects users to a phishing site.",
     verify_prompt:
@@ -270,7 +296,8 @@ export const JS_PATTERNS: BugPattern[] = [
     title: "Hardcoded secret or API key in JavaScript/TypeScript",
     severity: "high",
     languages: ["javascript", "typescript"],
-    regex: /(?:api[_-]?key|api[_-]?secret|auth[_-]?token|private[_-]?key)\s*[:=]\s*["'][A-Za-z0-9+/=_\-]{20,}["']/gi,
+    regex:
+      /(?:api[_-]?key|api[_-]?secret|auth[_-]?token|private[_-]?key)\s*[:=]\s*["'][A-Za-z0-9+/=_-]{20,}["']/gi,
     explanation:
       "Hardcoded API keys and secrets in source code are exposed in git history, build artifacts, and client-side bundles. They can be extracted and abused.",
     verify_prompt:
@@ -293,6 +320,7 @@ export const JS_PATTERNS: BugPattern[] = [
       "hardcoded (e.g. analytics snippet), respond FALSE_POSITIVE. If dynamic " +
       "content or if called after DOMContentLoaded, respond CONFIRMED.",
     cwe: "CWE-79",
-    fix_template: "Use DOM APIs: document.createElement() + appendChild(), or element.textContent for text.",
+    fix_template:
+      "Use DOM APIs: document.createElement() + appendChild(), or element.textContent for text.",
   },
 ];

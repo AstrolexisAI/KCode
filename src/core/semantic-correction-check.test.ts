@@ -26,9 +26,7 @@ describe("checkSemanticCorrection — Spanish patterns", () => {
   });
 
   test("fires on 'X no es el problema, (sino|es) Y'", () => {
-    const messages: Message[] = [
-      userMsg("el header no es el problema, es el footer"),
-    ];
+    const messages: Message[] = [userMsg("el header no es el problema, es el footer")];
     const v = checkSemanticCorrection(messages);
     expect(v.isCorrection).toBe(true);
     expect(v.wrongTarget.toLowerCase()).toContain("header");
@@ -36,9 +34,7 @@ describe("checkSemanticCorrection — Spanish patterns", () => {
   });
 
   test("fires on 'el problema no es X, es Y'", () => {
-    const messages: Message[] = [
-      userMsg("el problema no es el CSS, es el JavaScript"),
-    ];
+    const messages: Message[] = [userMsg("el problema no es el CSS, es el JavaScript")];
     const v = checkSemanticCorrection(messages);
     expect(v.isCorrection).toBe(true);
     // Capture groups may include "es " or similar prefixes — we just
@@ -48,9 +44,7 @@ describe("checkSemanticCorrection — Spanish patterns", () => {
   });
 
   test("fires on 'en vez de X, Y'", () => {
-    const messages: Message[] = [
-      userMsg("en vez de renderMarsChart, arregla renderEarthView"),
-    ];
+    const messages: Message[] = [userMsg("en vez de renderMarsChart, arregla renderEarthView")];
     const v = checkSemanticCorrection(messages);
     expect(v.isCorrection).toBe(true);
     expect(v.wrongTarget.toLowerCase()).toContain("mars");
@@ -60,9 +54,7 @@ describe("checkSemanticCorrection — Spanish patterns", () => {
 
 describe("checkSemanticCorrection — English patterns", () => {
   test("fires on 'the problem is not X, it's Y'", () => {
-    const messages: Message[] = [
-      userMsg("the problem is not the layout, it's the grid columns"),
-    ];
+    const messages: Message[] = [userMsg("the problem is not the layout, it's the grid columns")];
     const v = checkSemanticCorrection(messages);
     expect(v.isCorrection).toBe(true);
     expect(v.wrongTarget.toLowerCase()).toContain("layout");
@@ -80,17 +72,13 @@ describe("checkSemanticCorrection — English patterns", () => {
   });
 
   test("fires on 'not X, it's Y'", () => {
-    const messages: Message[] = [
-      userMsg("not the button styles, it's the hover state"),
-    ];
+    const messages: Message[] = [userMsg("not the button styles, it's the hover state")];
     const v = checkSemanticCorrection(messages);
     expect(v.isCorrection).toBe(true);
   });
 
   test("fires on 'instead of X, look at Y'", () => {
-    const messages: Message[] = [
-      userMsg("instead of updateChart, look at resizeContainer"),
-    ];
+    const messages: Message[] = [userMsg("instead of updateChart, look at resizeContainer")];
     const v = checkSemanticCorrection(messages);
     expect(v.isCorrection).toBe(true);
     expect(v.wrongTarget.toLowerCase()).toContain("updatechart");
@@ -100,16 +88,12 @@ describe("checkSemanticCorrection — English patterns", () => {
 
 describe("checkSemanticCorrection — negative cases", () => {
   test("does not fire on plain descriptive statements", () => {
-    const messages: Message[] = [
-      userMsg("create a dashboard with charts and a sidebar"),
-    ];
+    const messages: Message[] = [userMsg("create a dashboard with charts and a sidebar")];
     expect(checkSemanticCorrection(messages).isCorrection).toBe(false);
   });
 
   test("does not fire on questions", () => {
-    const messages: Message[] = [
-      userMsg("what is the difference between X and Y?"),
-    ];
+    const messages: Message[] = [userMsg("what is the difference between X and Y?")];
     expect(checkSemanticCorrection(messages).isCorrection).toBe(false);
   });
 
@@ -128,9 +112,7 @@ describe("checkSemanticCorrection — negative cases", () => {
   });
 
   test("rejects degenerate matches where wrong === right", () => {
-    const messages: Message[] = [
-      userMsg("el header no es el problema, es el header otra vez"),
-    ];
+    const messages: Message[] = [userMsg("el header no es el problema, es el header otra vez")];
     // After cleanup, both sides start with "header" — should reject
     const v = checkSemanticCorrection(messages);
     // Our pattern captures "el header" and "el header otra vez" which
@@ -145,14 +127,8 @@ describe("checkSemanticCorrection — negative cases", () => {
 
 describe("checkSemanticCorrection — newUserMessage parameter", () => {
   test("picks up correction in the newUserMessage arg (not yet pushed)", () => {
-    const messages: Message[] = [
-      userMsg("crea la app"),
-      userMsg("fixes the chart"),
-    ];
-    const v = checkSemanticCorrection(
-      messages,
-      "no es el chart, es el contenedor",
-    );
+    const messages: Message[] = [userMsg("crea la app"), userMsg("fixes the chart")];
+    const v = checkSemanticCorrection(messages, "no es el chart, es el contenedor");
     expect(v.isCorrection).toBe(true);
     expect(v.wrongTarget.toLowerCase()).toContain("chart");
     expect(v.rightTarget.toLowerCase()).toContain("contenedor");

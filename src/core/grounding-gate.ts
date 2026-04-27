@@ -29,11 +29,7 @@ export interface StubFinding {
   snippet: string;
 }
 
-export type StubKind =
-  | "placeholder"
-  | "not_implemented"
-  | "todo_in_new_code"
-  | "empty_stub";
+export type StubKind = "placeholder" | "not_implemented" | "todo_in_new_code" | "empty_stub";
 
 // Identifier-level placeholders (`stub_tx1`, `stubFoo`, `placeholder_*`).
 const PLACEHOLDER_IDENT =
@@ -61,7 +57,8 @@ const TODO_MARKER = /\b(?:TODO|FIXME|XXX)\s*[:\-!]?\s*(?!.*\b(?:implement|done|f
 //   def foo(...):
 //       """doc"""
 //       pass
-const PYTHON_EMPTY_STUB = /^\s*def\s+[a-zA-Z_][a-zA-Z0-9_]*\s*\([^)]*\)\s*(?:->\s*[^:]+)?\s*:\s*(?:\n\s*"""[\s\S]*?"""\s*)?\n\s*pass\s*$/m;
+const PYTHON_EMPTY_STUB =
+  /^\s*def\s+[a-zA-Z_][a-zA-Z0-9_]*\s*\([^)]*\)\s*(?:->\s*[^:]+)?\s*:\s*(?:\n\s*"""[\s\S]*?"""\s*)?\n\s*pass\s*$/m;
 
 // TS/JS: function that only throws "not implemented" or is empty `{}`.
 const TS_EMPTY_STUB =
@@ -128,7 +125,7 @@ export function scanFilesForStubs(filePaths: string[]): StubFinding[] {
     for (let i = 0; i < lines.length; i++) {
       const raw = lines[i] ?? "";
       const line = raw.trim();
-      if (!line || line.startsWith("//") && !line.includes("TODO") && !line.includes("FIXME")) {
+      if (!line || (line.startsWith("//") && !line.includes("TODO") && !line.includes("FIXME"))) {
         // Skip pure comment lines unless they're TODO/FIXME markers.
       }
       if (PLACEHOLDER_IDENT.test(raw)) {
@@ -352,7 +349,8 @@ export interface PatchWithoutRerunFinding {
   claimSnippet: string;
 }
 
-const RUNTIME_COMMAND = /\b(?:python(?:3)?|node|bun\s+run|ruby|go\s+run|cargo\s+run|java|php|deno\s+run|rustc)\b/i;
+const RUNTIME_COMMAND =
+  /\b(?:python(?:3)?|node|bun\s+run|ruby|go\s+run|cargo\s+run|java|php|deno\s+run|rustc)\b/i;
 const PATCH_TOOL_NAMES = new Set([
   "Edit",
   "Write",
@@ -360,7 +358,8 @@ const PATCH_TOOL_NAMES = new Set([
   "GrepReplace",
   "Bash", // bash file-mutations count as patches — filter by command shape below
 ]);
-const BASH_IS_MUTATION = /\b(?:sed\s+.*-i|perl\s+.*-i|awk\s+.*-i\s+inplace|>\s*\S|>>\s*\S|tee\s)\b/i;
+const BASH_IS_MUTATION =
+  /\b(?:sed\s+.*-i|perl\s+.*-i|awk\s+.*-i\s+inplace|>\s*\S|>>\s*\S|tee\s)\b/i;
 
 export function detectPatchWithoutRerun(
   events: ToolEvent[],
@@ -487,7 +486,11 @@ export function detectRuntimeFailureInOutput(
 ): RuntimeFailureInOutputFinding | null {
   for (const ev of events) {
     // Only check output from runtime execution commands
-    if (!/\b(?:python(?:3)?|node|bun\s+run|ruby|go\s+run|cargo\s+run|java|php|deno\s+run|rustc|npx|npm\s+(?:run|start|test))\b/i.test(ev.command)) {
+    if (
+      !/\b(?:python(?:3)?|node|bun\s+run|ruby|go\s+run|cargo\s+run|java|php|deno\s+run|rustc|npx|npm\s+(?:run|start|test))\b/i.test(
+        ev.command,
+      )
+    ) {
       continue;
     }
     for (const sig of RUNTIME_ERROR_SIGNATURES) {
@@ -517,9 +520,7 @@ export function formatRuntimeFailureInOutputWarning(
   );
 }
 
-export function formatPatchWithoutRerunWarning(
-  finding: PatchWithoutRerunFinding,
-): string {
+export function formatPatchWithoutRerunWarning(finding: PatchWithoutRerunFinding): string {
   return (
     `⚠ Grounding check: runtime failed → a patch was applied → no successful rerun was observed → the response still claims success. ` +
     `Failing command: "${finding.failingCommand}". ` +
@@ -613,15 +614,9 @@ export function detectStrongCompletionClaim(
   for (const pattern of STRONG_COMPLETION_PATTERNS) {
     const match = finalText.match(pattern);
     if (match) {
-      const broadRequest = BROAD_SCOPE_REQUEST_PATTERNS.some((p) =>
-        p.test(originalUserPrompt),
-      );
+      const broadRequest = BROAD_SCOPE_REQUEST_PATTERNS.some((p) => p.test(originalUserPrompt));
       return {
-        snippet: extractSentenceLikeSnippet(
-          finalText,
-          match.index ?? 0,
-          match[0].length,
-        ),
+        snippet: extractSentenceLikeSnippet(finalText, match.index ?? 0, match[0].length),
         broadRequest,
       };
     }
@@ -657,7 +652,10 @@ export function extractSentenceLikeSnippet(
   // Walk backward to nearest sentence boundary or line start.
   for (let i = matchStart - 1; i >= 0 && matchStart - i < maxLen; i--) {
     const ch = text[i];
-    if (ch === "\n") { start = i + 1; break; }
+    if (ch === "\n") {
+      start = i + 1;
+      break;
+    }
     if (i > 0 && (ch === "." || ch === "!" || ch === "?")) {
       const next = text[i + 1];
       if (next === " " || next === "\n" || next === "\t") {
@@ -675,7 +673,10 @@ export function extractSentenceLikeSnippet(
   let end = matchEnd;
   for (let i = matchEnd; i < text.length && i - matchEnd < maxLen; i++) {
     const ch = text[i];
-    if (ch === "\n") { end = i; break; }
+    if (ch === "\n") {
+      end = i;
+      break;
+    }
     if (ch === "." || ch === "!" || ch === "?") {
       const next = text[i + 1];
       if (next === undefined || next === " " || next === "\n" || next === "\t") {
@@ -703,7 +704,13 @@ export function extractSentenceLikeSnippet(
     }
   }
   const last = snippet[snippet.length - 1];
-  if (snippet.length > 0 && last !== undefined && /\w/.test(last) && end < text.length && /\w/.test(text[end] ?? "")) {
+  if (
+    snippet.length > 0 &&
+    last !== undefined &&
+    /\w/.test(last) &&
+    end < text.length &&
+    /\w/.test(text[end] ?? "")
+  ) {
     const lastSpace = snippet.lastIndexOf(" ");
     if (lastSpace !== -1 && lastSpace > snippet.length / 2) {
       snippet = snippet.slice(0, lastSpace);
@@ -837,9 +844,7 @@ export function formatStubWarning(findings: StubFinding[]): string {
 
   for (const f of shown) {
     // Shorten the file path relative to cwd for readability
-    const rel = f.file.startsWith(process.cwd())
-      ? f.file.slice(process.cwd().length + 1)
-      : f.file;
+    const rel = f.file.startsWith(process.cwd()) ? f.file.slice(process.cwd().length + 1) : f.file;
     msg += `  • ${rel}:${f.line} — ${kindLabel[f.kind]}: ${f.snippet}\n`;
   }
 

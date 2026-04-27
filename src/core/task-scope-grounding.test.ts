@@ -5,6 +5,9 @@
 // conversation-post-turn wiring is tested via manual repro).
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   detectCreationClaimMismatch,
   detectPatchWithoutRerun,
@@ -15,9 +18,6 @@ import {
 } from "./grounding-gate";
 import { recordUserText, resetReads } from "./session-tracker";
 import { getTaskScopeManager } from "./task-scope";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 let tmp: string;
 
@@ -76,7 +76,11 @@ describe("Phase 3 — scope flag helpers propagate detector findings", () => {
     recordUserText("crear un proyecto nuevo");
     const mgr = getTaskScopeManager();
     const ev = detectRuntimeFailureInOutput([
-      { command: "timeout 5 python3 app.py 2>&1 | head", output: "Traceback (most recent call last):\n  ModuleNotFoundError: No module named 'bitcoin'" },
+      {
+        command: "timeout 5 python3 app.py 2>&1 | head",
+        output:
+          "Traceback (most recent call last):\n  ModuleNotFoundError: No module named 'bitcoin'",
+      },
     ]);
     expect(ev).not.toBeNull();
 
@@ -146,7 +150,11 @@ describe("Phase 3 — scope flag helpers propagate detector findings", () => {
   test("readiness-after-errors → scope.phase=failed + completion flags flipped", () => {
     recordUserText("armar un dashboard");
     const mgr = getTaskScopeManager();
-    const finding = detectReadinessAfterErrors("app.py is ready. Run with python3 app.py", 1, false);
+    const finding = detectReadinessAfterErrors(
+      "app.py is ready. Run with python3 app.py",
+      1,
+      false,
+    );
     expect(finding).not.toBeNull();
 
     mgr.update({
@@ -164,9 +172,7 @@ describe("Phase 3 — scope flag helpers propagate detector findings", () => {
   });
 
   test("strong completion claim on broad request → mustUsePartialLanguage=true", () => {
-    recordUserText(
-      "quiero un dashboard que analice completamente la blockchain en tiempo real",
-    );
+    recordUserText("quiero un dashboard que analice completamente la blockchain en tiempo real");
     const mgr = getTaskScopeManager();
     expect(mgr.current()?.broadRequest).toBe(true);
 

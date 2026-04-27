@@ -40,9 +40,7 @@ describe("audit-guards: redirection extraction", () => {
   });
 
   test("extracts heredoc redirection target", () => {
-    const targets = extractRedirectionTargets(
-      "cat > AUDIT_REPORT.md << 'EOF'\ncontent\nEOF",
-    );
+    const targets = extractRedirectionTargets("cat > AUDIT_REPORT.md << 'EOF'\ncontent\nEOF");
     expect(targets).toContain("AUDIT_REPORT.md");
   });
 

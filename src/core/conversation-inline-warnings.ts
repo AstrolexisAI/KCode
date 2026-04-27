@@ -4,8 +4,8 @@
 // severity into the message log and, past the 5th warning, flags the loop
 // for a force-stop after the current turn.
 
-import { getIntentionEngine } from "./intentions";
 import type { LoopGuardState } from "./agent-loop-guards";
+import { getIntentionEngine } from "./intentions";
 import { log } from "./logger";
 import type { ConversationState } from "./types";
 

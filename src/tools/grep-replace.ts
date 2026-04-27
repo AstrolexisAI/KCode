@@ -3,10 +3,7 @@
 
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, extname, join, relative, resolve } from "node:path";
-import {
-  auditGuardsEnabled,
-  checkMutationAllowed,
-} from "../core/audit-guards";
+import { auditGuardsEnabled, checkMutationAllowed } from "../core/audit-guards";
 import type { ToolDefinition, ToolResult } from "../core/types";
 
 export const grepReplaceDefinition: ToolDefinition = {

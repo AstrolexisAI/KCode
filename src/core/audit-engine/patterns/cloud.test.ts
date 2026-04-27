@@ -33,7 +33,7 @@ function matchAll(p: { regex: RegExp }, text: string): RegExpExecArray[] {
 
 describe("cloud-001-iam-wildcard-action", () => {
   const p = findPattern("cloud-001-iam-wildcard-action");
-  test("flags Action = \"*\" in tf policy", () => {
+  test('flags Action = "*" in tf policy', () => {
     const tf = `data "aws_iam_policy_document" "p" {
   statement {
     actions = ["*"]
@@ -42,7 +42,7 @@ describe("cloud-001-iam-wildcard-action", () => {
 }`;
     expect(matchAll(p, tf).length).toBeGreaterThanOrEqual(1);
   });
-  test("flags single Action = \"*\" form", () => {
+  test('flags single Action = "*" form', () => {
     const tf = `Action = "*"`;
     expect(matchAll(p, tf).length).toBe(1);
   });

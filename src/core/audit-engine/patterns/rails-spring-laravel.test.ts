@@ -59,7 +59,7 @@ describe("rails-004-eval-instance-eval", () => {
     expect(matchAll(p, `eval(params[:code])`).length).toBe(1);
   });
   test("flags instance_eval with interpolated user data", () => {
-    expect(matchAll(p, `instance_eval("foo \#{params[:x]}")`).length).toBe(1);
+    expect(matchAll(p, `instance_eval("foo #{params[:x]}")`).length).toBe(1);
   });
   test("does NOT flag eval('1 + 1')", () => {
     expect(matchAll(p, `eval('1 + 1')`).length).toBe(0);
@@ -69,7 +69,7 @@ describe("rails-004-eval-instance-eval", () => {
 describe("rails-005-render-inline", () => {
   const p = findIn(RAILS_PATTERNS, "rails-005-render-inline");
   test("flags render inline: with interpolation", () => {
-    expect(matchAll(p, `render inline: "Hello \#{params[:name]}"`).length).toBe(1);
+    expect(matchAll(p, `render inline: "Hello #{params[:name]}"`).length).toBe(1);
   });
   test("flags render inline: params[:tpl]", () => {
     expect(matchAll(p, `render inline: params[:tpl]`).length).toBe(1);

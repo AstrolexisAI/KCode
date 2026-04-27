@@ -11,8 +11,8 @@
 // Schema: https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json
 
 import { createHash } from "node:crypto";
-import type { AuditResult, Finding, Severity } from "./types";
 import { getPatternById } from "./patterns";
+import type { AuditResult, Finding, Severity } from "./types";
 
 const SARIF_SCHEMA =
   "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json";
@@ -48,9 +48,7 @@ function severityToSarif(s: Severity): SarifLevel {
  * pattern+file+match-line.
  */
 function fingerprintFinding(f: Finding): string {
-  const material = [f.pattern_id, f.file, f.line, f.matched_text.trim()].join(
-    "\x1f",
-  );
+  const material = [f.pattern_id, f.file, f.line, f.matched_text.trim()].join("\x1f");
   return createHash("sha256").update(material).digest("hex").slice(0, 32);
 }
 
@@ -113,10 +111,7 @@ function scoreFromSeverity(s: Severity): string {
  * file path as a relative URI; enterprise consumers expect project-
  * relative paths for their "open in editor" links to work.
  */
-function buildResult(
-  finding: Finding,
-  projectRoot: string,
-): unknown {
+function buildResult(finding: Finding, projectRoot: string): unknown {
   const relPath = relativize(finding.file, projectRoot);
   const ev = finding.verification.evidence;
   const reasoning = finding.verification.reasoning
@@ -182,10 +177,7 @@ export interface BuildSarifOptions {
  * no circular refs — so callers can write it with Bun.write(path,
  * JSON.stringify(sarif, null, 2)) and be done.
  */
-export function buildSarif(
-  audit: AuditResult,
-  opts: BuildSarifOptions,
-): unknown {
+export function buildSarif(audit: AuditResult, opts: BuildSarifOptions): unknown {
   // v2.10.351 P0 — SARIF results respect review_state. A finding
   // tagged 'ignored' by the human reviewer must not surface in
   // GitHub Code Scanning, IDE problem lists, or any other SARIF
@@ -230,9 +222,9 @@ export function buildSarif(
 }
 
 export {
-  // Re-exports for unit testing the helpers directly.
-  severityToSarif,
-  scoreFromSeverity,
   fingerprintFinding,
   relativize,
+  scoreFromSeverity,
+  // Re-exports for unit testing the helpers directly.
+  severityToSarif,
 };

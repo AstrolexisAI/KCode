@@ -20,12 +20,12 @@
 import { Box, Text, useInput } from "ink";
 import React, { useEffect, useState } from "react";
 import {
-  KODI_CANDIDATES,
-  type KodiCandidate,
-  type KodiStatusReport,
   deleteKodiModel,
   downloadKodiModel,
   getKodiStatusReport,
+  KODI_CANDIDATES,
+  type KodiCandidate,
+  type KodiStatusReport,
   pickDefaultCandidate,
   startKodiServer,
   stopKodiServer,
@@ -210,7 +210,7 @@ export default function KodiAdvisorMenu({ onClose, firstRun }: Props) {
       width={process.stdout.columns || 80}
     >
       <Text bold color={theme.info ?? theme.primary}>
-        ✦  {headerTitle}
+        ✦ {headerTitle}
       </Text>
 
       {view.kind === "loading" && (
@@ -223,8 +223,8 @@ export default function KodiAdvisorMenu({ onClose, firstRun }: Props) {
         <>
           <Box marginTop={1} flexDirection="column">
             <Text>
-              A small uncensored LLM runs in the background to power Kodi's autonomous
-              reactions. Pick a model to download:
+              A small uncensored LLM runs in the background to power Kodi's autonomous reactions.
+              Pick a model to download:
             </Text>
           </Box>
           <Box marginTop={1} flexDirection="column">
@@ -274,9 +274,7 @@ export default function KodiAdvisorMenu({ onClose, firstRun }: Props) {
             Downloading <Text bold>{view.candidate.label}</Text>...
           </Text>
           <Text color={theme.dimmed}>{view.progress}</Text>
-          <Text color={theme.dimmed}>
-            Saving to ~/.kcode/models/kodi/{view.candidate.filename}
-          </Text>
+          <Text color={theme.dimmed}>Saving to ~/.kcode/models/kodi/{view.candidate.filename}</Text>
         </Box>
       )}
 
@@ -294,9 +292,7 @@ export default function KodiAdvisorMenu({ onClose, firstRun }: Props) {
               Installed: <Text bold>{view.candidate.label}</Text>
             </Text>
             {view.sizeMB != null && (
-              <Text color={theme.dimmed}>
-                On disk: {view.sizeMB} MB — Server: stopped
-              </Text>
+              <Text color={theme.dimmed}>On disk: {view.sizeMB} MB — Server: stopped</Text>
             )}
           </Box>
           <Box marginTop={1} gap={2}>

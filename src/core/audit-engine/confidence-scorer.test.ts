@@ -5,12 +5,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { computeAuditConfidence } from "./confidence-scorer";
-import type {
-  AuditResult,
-  FalsePositiveDetail,
-  Finding,
-  Severity,
-} from "./types";
+import type { AuditResult, FalsePositiveDetail, Finding, Severity } from "./types";
 
 function makeFinding(over: Partial<Finding> = {}): Finding {
   const base: Finding = {
@@ -148,9 +143,7 @@ describe("verifier_score", () => {
   });
 
   test("null when verification_mode is skipped", () => {
-    const c = computeAuditConfidence(
-      makeResult({ verification_mode: "skipped" }),
-    );
+    const c = computeAuditConfidence(makeResult({ verification_mode: "skipped" }));
     expect(c.verifier_score).toBeNull();
     expect(c.warnings.some((w) => w.includes("skipped"))).toBe(true);
   });
@@ -220,9 +213,7 @@ describe("noise_score", () => {
   });
 
   test("null when verifier was skipped", () => {
-    const c = computeAuditConfidence(
-      makeResult({ verification_mode: "skipped" }),
-    );
+    const c = computeAuditConfidence(makeResult({ verification_mode: "skipped" }));
     expect(c.noise_score).toBeNull();
   });
 });
@@ -312,9 +303,7 @@ describe("aggregate score", () => {
         confirmed_findings: 1,
         false_positives: 1,
         false_positives_detail: [makeFp()],
-        ast_grammar_status: [
-          { language: "javascript", patterns_attempted: 1, loaded: true },
-        ],
+        ast_grammar_status: [{ language: "javascript", patterns_attempted: 1, loaded: true }],
       }),
     );
     expect(c.score).toBe(100);
@@ -336,9 +325,7 @@ describe("aggregate score", () => {
         verification_mode: "skipped",
         findings: [noStrategy, noStrategy],
         confirmed_findings: 2,
-        ast_grammar_status: [
-          { language: "javascript", patterns_attempted: 1, loaded: true },
-        ],
+        ast_grammar_status: [{ language: "javascript", patterns_attempted: 1, loaded: true }],
       }),
     );
     expect(c.verifier_score).toBeNull();

@@ -9,13 +9,13 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import {
   ALL_IDLE_ACTIONS,
-  WALK_RANGE,
   collectObservations,
   initialWalkState,
+  type KodiIdleAction,
   pickRandomIdleAction,
   resetObservationCooldowns,
   stepWalk,
-  type KodiIdleAction,
+  WALK_RANGE,
 } from "./kodi-autonomy";
 
 // ─── 3a — idle actions ──────────────────────────────────────────
@@ -194,9 +194,7 @@ describe("collectObservations", () => {
     expect(collectObservations(signals).length).toBe(0);
     resetObservationCooldowns();
     // Re-fires.
-    expect(
-      collectObservations(signals).some((o) => o.type === "long_idle"),
-    ).toBe(true);
+    expect(collectObservations(signals).some((o) => o.type === "long_idle")).toBe(true);
   });
 
   test("detail text includes the numeric threshold crossed", () => {

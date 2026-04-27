@@ -263,7 +263,8 @@ describe("verifier (JSON Evidence Pack contract, v2.10.361+)", () => {
   });
 
   test("parseVerdict tolerates markdown fences", () => {
-    const response = "```json\n" +
+    const response =
+      "```json\n" +
       JSON.stringify({
         verdict: "confirmed",
         reasoning: "real",
@@ -276,7 +277,8 @@ describe("verifier (JSON Evidence Pack contract, v2.10.361+)", () => {
   });
 
   test("parseVerdict tolerates leading prose before the JSON object", () => {
-    const response = "Sure, here's my verdict:\n" +
+    const response =
+      "Sure, here's my verdict:\n" +
       JSON.stringify({
         verdict: "needs_context",
         reasoning: "Cannot trace input source.",
@@ -351,10 +353,7 @@ describe("verifier (JSON Evidence Pack contract, v2.10.361+)", () => {
 
   test("verifyCandidate retries once on parse failure then degrades", async () => {
     const { verifyCandidate } = await import("./verifier");
-    const responses = [
-      "I'm sorry, I cannot answer.",
-      "Still not JSON.",
-    ];
+    const responses = ["I'm sorry, I cannot answer.", "Still not JSON."];
     let calls = 0;
     const llmCallback = async () => responses[calls++] ?? "Still not JSON.";
 
@@ -426,10 +425,7 @@ describe("audit-engine orchestrator", () => {
   });
 
   test("runAudit finds and processes candidates", async () => {
-    writeFileSync(
-      join(tmp, "buggy.cpp"),
-      `void f() { strcpy(a, b); }\n`,
-    );
+    writeFileSync(join(tmp, "buggy.cpp"), `void f() { strcpy(a, b); }\n`);
 
     // Mock LLM that confirms everything (v2.10.361 JSON contract)
     const mockLLM = async (_prompt: string): Promise<string> =>
@@ -457,10 +453,7 @@ describe("audit-engine orchestrator", () => {
   });
 
   test("runAudit filters out false positives", async () => {
-    writeFileSync(
-      join(tmp, "maybe-buggy.cpp"),
-      `void f() { strcpy(a, b); }\n`,
-    );
+    writeFileSync(join(tmp, "maybe-buggy.cpp"), `void f() { strcpy(a, b); }\n`);
 
     const mockLLM = async (): Promise<string> =>
       JSON.stringify({
@@ -590,7 +583,9 @@ describe("report-generator", () => {
     // needs_context_detail, coverage, fix_support_summary,
     // pattern_metrics). The test only exercises Markdown rendering,
     // not field completeness; cast to keep the fixture readable.
-    const md = generateMarkdownReport(result as unknown as Parameters<typeof generateMarkdownReport>[0]);
+    const md = generateMarkdownReport(
+      result as unknown as Parameters<typeof generateMarkdownReport>[0],
+    );
     expect(md).toContain("Audit Report — test");
     expect(md).toContain("Astrolexis.space");
     expect(md).toContain("2026-04-05");
@@ -613,7 +608,9 @@ describe("report-generator", () => {
       elapsed_ms: 100,
       findings: [],
     };
-    const md = generateMarkdownReport(result as unknown as Parameters<typeof generateMarkdownReport>[0]);
+    const md = generateMarkdownReport(
+      result as unknown as Parameters<typeof generateMarkdownReport>[0],
+    );
     expect(md).toContain("No confirmed findings");
   });
 });

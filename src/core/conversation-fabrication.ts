@@ -45,11 +45,7 @@ export function augmentFabricationWarnings(
       const verdict = isLikelyFabricated(attemptedPath, errorText, referenceTexts);
       if (verdict.fabricated) {
         const originalContent = typeof b.content === "string" ? b.content : errorText;
-        b.content = wrapFabricatedError(
-          originalContent,
-          attemptedPath,
-          verdict.unreferencedTokens,
-        );
+        b.content = wrapFabricatedError(originalContent, attemptedPath, verdict.unreferencedTokens);
         log.info(
           "anti-fabrication",
           `fabricated path detected: ${attemptedPath} — unreferenced tokens [${verdict.unreferencedTokens.join(",")}]`,

@@ -38,7 +38,9 @@ describe("extractEditedFiles", () => {
   });
 
   test("extracts file_path from Edit call", () => {
-    const calls = [fakeTool("Edit", { file_path: "/tmp/bar.ts", old_string: "a", new_string: "b" })];
+    const calls = [
+      fakeTool("Edit", { file_path: "/tmp/bar.ts", old_string: "a", new_string: "b" }),
+    ];
     expect(extractEditedFiles(calls)).toEqual(["/tmp/bar.ts"]);
   });
 
@@ -148,7 +150,9 @@ describe("findRelatedTests", () => {
 
 describe("hasCompileErrors", () => {
   test("detects TypeScript error TS2345", () => {
-    expect(hasCompileErrors("error TS2345: Argument of type 'string' is not assignable")).toBe(true);
+    expect(hasCompileErrors("error TS2345: Argument of type 'string' is not assignable")).toBe(
+      true,
+    );
   });
 
   test("detects tsc summary '3 errors'", () => {
@@ -220,10 +224,7 @@ describe("buildErrorRecoveryMessage", () => {
 
 describe("runPostEditFeedback", () => {
   test("returns null when no edit tool calls", async () => {
-    const result = await runPostEditFeedback(
-      [fakeTool("Bash", { command: "ls" })],
-      process.cwd(),
-    );
+    const result = await runPostEditFeedback([fakeTool("Bash", { command: "ls" })], process.cwd());
     expect(result).toBeNull();
   });
 

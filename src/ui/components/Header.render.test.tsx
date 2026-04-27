@@ -46,12 +46,7 @@ describe("Header render", () => {
 
   test("shows working directory (shortened)", () => {
     instance = renderWithTheme(
-      <Header
-        model="m"
-        workingDirectory="/home/user/KCode"
-        tokenCount={0}
-        toolUseCount={0}
-      />,
+      <Header model="m" workingDirectory="/home/user/KCode" tokenCount={0} toolUseCount={0} />,
     );
     const out = instance.lastFrame()!;
     expect(out).toContain("KCode");
@@ -85,13 +80,7 @@ describe("Header render", () => {
 
   test("shows running agents count when > 0", () => {
     instance = renderWithTheme(
-      <Header
-        model="m"
-        workingDirectory="/x"
-        tokenCount={0}
-        toolUseCount={0}
-        runningAgents={3}
-      />,
+      <Header model="m" workingDirectory="/x" tokenCount={0} toolUseCount={0} runningAgents={3} />,
     );
     expect(instance.lastFrame()).toContain("3");
   });

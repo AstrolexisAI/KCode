@@ -1,12 +1,12 @@
 // Tests for phase 25 — user-repetition detector.
 
 import { describe, expect, test } from "bun:test";
+import type { Message } from "./types";
 import {
   buildUserRepetitionReminder,
   checkUserRepetition,
   collectRecentUserMessages,
 } from "./user-repetition-check";
-import type { Message } from "./types";
 
 function userMsg(content: string): Message {
   return { role: "user", content };
@@ -36,10 +36,7 @@ describe("collectRecentUserMessages", () => {
       userMsg("[USER REPETITION — SAME ISSUE REPEATED]"),
       userMsg("another real request"),
     ];
-    expect(collectRecentUserMessages(messages)).toEqual([
-      "real request",
-      "another real request",
-    ]);
+    expect(collectRecentUserMessages(messages)).toEqual(["real request", "another real request"]);
   });
 
   test("skips tool_result-only user messages", () => {
@@ -62,9 +59,7 @@ describe("collectRecentUserMessages", () => {
   });
 
   test("respects limit parameter", () => {
-    const messages: Message[] = Array.from({ length: 10 }, (_, i) =>
-      userMsg(`msg ${i}`),
-    );
+    const messages: Message[] = Array.from({ length: 10 }, (_, i) => userMsg(`msg ${i}`));
     expect(collectRecentUserMessages(messages, 3)).toEqual(["msg 7", "msg 8", "msg 9"]);
   });
 });
@@ -293,8 +288,8 @@ describe("Nexus chart session — stemming + corrective patterns", () => {
     expect(verdict.sharedTopics).toContain("grafica");
     // The corrective pattern "no son el problema" should be recognized
     expect(
-      verdict.frustrationSignals.some((s) =>
-        s.toLowerCase().includes("no son") || s.toLowerCase().includes("el problema"),
+      verdict.frustrationSignals.some(
+        (s) => s.toLowerCase().includes("no son") || s.toLowerCase().includes("el problema"),
       ),
     ).toBe(true);
   });
@@ -354,11 +349,9 @@ describe("Nexus chart session — stemming + corrective patterns", () => {
     ];
     const verdict = checkUserRepetition(session);
     // Corrective pattern "el problema es" should match
-    expect(
-      verdict.frustrationSignals.some((s) =>
-        s.toLowerCase().includes("el problema"),
-      ),
-    ).toBe(true);
+    expect(verdict.frustrationSignals.some((s) => s.toLowerCase().includes("el problema"))).toBe(
+      true,
+    );
   });
 
   test("recognizes English corrective 'the real problem is not'", () => {
@@ -373,10 +366,6 @@ describe("Nexus chart session — stemming + corrective patterns", () => {
       },
     ];
     const verdict = checkUserRepetition(session);
-    expect(
-      verdict.frustrationSignals.some((s) =>
-        /real\s+problem\s+is/i.test(s),
-      ),
-    ).toBe(true);
+    expect(verdict.frustrationSignals.some((s) => /real\s+problem\s+is/i.test(s))).toBe(true);
   });
 });

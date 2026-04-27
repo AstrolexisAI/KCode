@@ -43,13 +43,13 @@ export interface ConductorPlan {
 
 /** Intent → tags that model should have */
 export const INTENT_TAGS: Record<BenchmarkTaskType, string[]> = {
-  "analysis":     ["analysis", "reasoning"],
+  analysis: ["analysis", "reasoning"],
   "complex-edit": ["coding"],
-  "simple-edit":  ["coding", "fast"],
-  "multi-step":   ["structured", "coding"],
-  "chat":         ["fast", "cheap"],
-  "vision":       ["vision"],
-  "general":      ["coding"],
+  "simple-edit": ["coding", "fast"],
+  "multi-step": ["structured", "coding"],
+  chat: ["fast", "cheap"],
+  vision: ["vision"],
+  general: ["coding"],
 };
 
 const SYSTEM_PROMPT = `You are a task decomposer for a coding assistant. The user's prompt may contain one task or multiple distinct tasks. Your job is to break it into a DAG of sub-tasks.
@@ -129,7 +129,10 @@ export async function decomposePrompt(userPrompt: string): Promise<ConductorPlan
   // be decomposed. Skip the conductor entirely.
   const { isMonolithicCreation, isWholeScopeEdit } = await import("./router.js");
   if (isMonolithicCreation(userPrompt)) {
-    log.info("router/conductor", "Monolithic creation prompt — skipping decomposition (single-model route)");
+    log.info(
+      "router/conductor",
+      "Monolithic creation prompt — skipping decomposition (single-model route)",
+    );
     return null;
   }
   if (isWholeScopeEdit(userPrompt)) {
@@ -178,14 +181,20 @@ export async function decomposePrompt(userPrompt: string): Promise<ConductorPlan
           return null; // single-model fallback
         }
         const summary = plan.sub_tasks
-          .map((t) => `${t.id}:${t.intent}${t.depends_on.length > 0 ? `<-${t.depends_on.join(",")}` : ""}`)
+          .map(
+            (t) =>
+              `${t.id}:${t.intent}${t.depends_on.length > 0 ? `<-${t.depends_on.join(",")}` : ""}`,
+          )
           .join(" ");
         log.info("router/conductor", `${candidate.name} → [${summary}] (${elapsed}ms)`);
         return plan;
       } else {
         // Model returned something that didn't parse — log at info level
         // so the user can see why the orchestrator was skipped.
-        log.info("router/conductor", `${candidate.name} returned unparseable response — trying next candidate`);
+        log.info(
+          "router/conductor",
+          `${candidate.name} returned unparseable response — trying next candidate`,
+        );
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -266,7 +275,10 @@ async function callConductor(
   // Permissive extraction: models (esp. mark7 local) often wrap JSON in
   // markdown fences or prefix with explanations. Strip fences first, then
   // if the result isn't pure JSON, locate the first balanced {...} block.
-  let cleaned = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let cleaned = text
+    .replace(/```json\s*/gi, "")
+    .replace(/```\s*/g, "")
+    .trim();
   if (!cleaned.startsWith("{")) {
     // Find first { and the matching } via bracket counting
     const start = cleaned.indexOf("{");
@@ -277,7 +289,10 @@ async function callConductor(
         if (cleaned[i] === "{") depth++;
         else if (cleaned[i] === "}") {
           depth--;
-          if (depth === 0) { end = i; break; }
+          if (depth === 0) {
+            end = i;
+            break;
+          }
         }
       }
       if (end > start) cleaned = cleaned.slice(start, end + 1);
@@ -299,7 +314,13 @@ function validatePlan(parsed: unknown): SubTask[] | null {
   if (!Array.isArray(p.sub_tasks)) return null;
 
   const validIntents: BenchmarkTaskType[] = [
-    "analysis", "complex-edit", "simple-edit", "multi-step", "chat", "vision", "general",
+    "analysis",
+    "complex-edit",
+    "simple-edit",
+    "multi-step",
+    "chat",
+    "vision",
+    "general",
   ];
   const tasks: SubTask[] = [];
   const seenIds = new Set<string>();
@@ -345,13 +366,15 @@ function validatePlan(parsed: unknown): SubTask[] | null {
 function hasCycle(tasks: SubTask[]): boolean {
   const adjacency = new Map<string, string[]>();
   for (const t of tasks) adjacency.set(t.id, t.depends_on);
-  const WHITE = 0, GRAY = 1, BLACK = 2;
+  const WHITE = 0,
+    GRAY = 1,
+    BLACK = 2;
   const color = new Map<string, number>();
   for (const t of tasks) color.set(t.id, WHITE);
 
   function dfs(id: string): boolean {
     const c = color.get(id);
-    if (c === GRAY) return true;   // back edge = cycle
+    if (c === GRAY) return true; // back edge = cycle
     if (c === BLACK) return false; // already fully explored
     color.set(id, GRAY);
     for (const dep of adjacency.get(id) ?? []) {
@@ -388,7 +411,10 @@ export async function resolveModelForSubTask(
     // without the "local first" bias of the chat routing preference.
     const cloudRoute = await selectBenchmarkModel("simple-edit", defaultModel);
     if (cloudRoute) {
-      log.info("router/conductor", `Chat sub-task ${task.id} has deps — upgrading to cloud (${cloudRoute.model})`);
+      log.info(
+        "router/conductor",
+        `Chat sub-task ${task.id} has deps — upgrading to cloud (${cloudRoute.model})`,
+      );
       return cloudRoute;
     }
   }

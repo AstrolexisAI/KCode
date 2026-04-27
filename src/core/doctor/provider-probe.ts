@@ -171,10 +171,7 @@ function buildAuthHeaders(prov: ProviderDef, key: string): Record<string, string
   };
 }
 
-async function probeAuth(
-  prov: ProviderDef,
-  key: string,
-): Promise<ProviderProbeResult["auth"]> {
+async function probeAuth(prov: ProviderDef, key: string): Promise<ProviderProbeResult["auth"]> {
   const start = Date.now();
   try {
     const resp = await fetch(prov.modelsUrl, {
@@ -244,7 +241,7 @@ async function probeContent(
             .filter((b) => b.type === "text")
             .map((b) => b.text ?? "")
             .join("")
-        : data.choices?.[0]?.message?.content ?? "";
+        : (data.choices?.[0]?.message?.content ?? "");
     const chars = text.length;
     return {
       ok: chars > 0,
@@ -314,9 +311,7 @@ export function renderProbeReport(results: ProviderProbeResult[]): string {
   lines.push("  " + "─".repeat(60));
   for (const r of results) {
     if (!r.configured) {
-      lines.push(
-        `  ${C.dim}○${C.reset} ${r.name.padEnd(16)} ${C.dim}not configured${C.reset}`,
-      );
+      lines.push(`  ${C.dim}○${C.reset} ${r.name.padEnd(16)} ${C.dim}not configured${C.reset}`);
       continue;
     }
     // Auth status

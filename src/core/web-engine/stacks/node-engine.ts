@@ -6,7 +6,13 @@ import { dirname, join } from "node:path";
 
 export type NodeProjectType = "cli" | "library" | "worker" | "bot" | "script" | "lambda" | "custom";
 
-interface NodeConfig { name: string; type: NodeProjectType; useTs: boolean; deps: string[]; devDeps: string[]; }
+interface NodeConfig {
+  name: string;
+  type: NodeProjectType;
+  useTs: boolean;
+  deps: string[];
+  devDeps: string[];
+}
 
 function detectNodeProject(msg: string): NodeConfig {
   const lower = msg.toLowerCase();
@@ -16,13 +22,27 @@ function detectNodeProject(msg: string): NodeConfig {
   const devDeps: string[] = useTs ? ["typescript", "@types/node", "tsx"] : [];
   devDeps.push("vitest");
 
-  if (/\b(?:cli|command|tool|herramienta)\b/i.test(lower)) { type = "cli"; deps.push("commander", "chalk", "ora"); }
-  else if (/\b(?:lib|library|package|npm\s*package)\b/i.test(lower)) { type = "library"; devDeps.push("tsup"); }
-  else if (/\b(?:worker|queue|job|bull|redis\s*queue)\b/i.test(lower)) { type = "worker"; deps.push("bullmq", "ioredis"); }
-  else if (/\b(?:bot|discord|slack)\b/i.test(lower)) { type = "bot"; if (/\bdiscord\b/i.test(lower)) deps.push("discord.js"); else deps.push("@slack/bolt"); }
-  else if (/\b(?:script|automation|cron)\b/i.test(lower)) { type = "script"; deps.push("node-cron", "dotenv"); }
-  else if (/\b(?:lambda|serverless|edge|cloudflare)\b/i.test(lower)) { type = "lambda"; }
-  else { deps.push("commander", "chalk"); }
+  if (/\b(?:cli|command|tool|herramienta)\b/i.test(lower)) {
+    type = "cli";
+    deps.push("commander", "chalk", "ora");
+  } else if (/\b(?:lib|library|package|npm\s*package)\b/i.test(lower)) {
+    type = "library";
+    devDeps.push("tsup");
+  } else if (/\b(?:worker|queue|job|bull|redis\s*queue)\b/i.test(lower)) {
+    type = "worker";
+    deps.push("bullmq", "ioredis");
+  } else if (/\b(?:bot|discord|slack)\b/i.test(lower)) {
+    type = "bot";
+    if (/\bdiscord\b/i.test(lower)) deps.push("discord.js");
+    else deps.push("@slack/bolt");
+  } else if (/\b(?:script|automation|cron)\b/i.test(lower)) {
+    type = "script";
+    deps.push("node-cron", "dotenv");
+  } else if (/\b(?:lambda|serverless|edge|cloudflare)\b/i.test(lower)) {
+    type = "lambda";
+  } else {
+    deps.push("commander", "chalk");
+  }
 
   if (/\b(?:prisma|database|db)\b/i.test(lower)) deps.push("prisma", "@prisma/client");
   if (/\b(?:axios|fetch|http\s*client)\b/i.test(lower)) deps.push("axios");
@@ -34,34 +54,83 @@ function detectNodeProject(msg: string): NodeConfig {
   return { name, type, useTs, deps: [...new Set(deps)], devDeps: [...new Set(devDeps)] };
 }
 
-interface GenFile { path: string; content: string; needsLlm: boolean; }
-export interface NodeProjectResult { config: NodeConfig; files: GenFile[]; projectPath: string; prompt: string; }
+interface GenFile {
+  path: string;
+  content: string;
+  needsLlm: boolean;
+}
+export interface NodeProjectResult {
+  config: NodeConfig;
+  files: GenFile[];
+  projectPath: string;
+  prompt: string;
+}
 
 export function createNodeProject(userRequest: string, cwd: string): NodeProjectResult {
   const cfg = detectNodeProject(userRequest);
   const files: GenFile[] = [];
   const ext = cfg.useTs ? "ts" : "js";
 
-  files.push({ path: "package.json", content: JSON.stringify({
-    name: cfg.name, version: "0.1.0", type: "module",
-    ...(cfg.type === "cli" ? { bin: { [cfg.name]: `./dist/cli.js` } } : {}),
-    ...(cfg.type === "library" ? { main: "./dist/index.js", types: "./dist/index.d.ts", exports: { ".": { import: "./dist/index.js", types: "./dist/index.d.ts" } } } : {}),
-    scripts: {
-      dev: cfg.useTs ? "tsx watch src/index.ts" : "node --watch src/index.js",
-      build: cfg.useTs ? (cfg.type === "library" ? "tsup src/index.ts --format esm --dts" : "tsc") : "echo 'no build'",
-      test: "vitest run",
-      lint: "biome check .",
-      ...(cfg.type === "cli" ? { start: cfg.useTs ? "tsx src/cli.ts" : "node src/cli.js" } : { start: cfg.useTs ? "tsx src/index.ts" : "node src/index.js" }),
-    },
-    dependencies: Object.fromEntries(cfg.deps.map(d => [d, "*"])),
-    devDependencies: Object.fromEntries(cfg.devDeps.map(d => [d, "*"])),
-  }, null, 2), needsLlm: false });
+  files.push({
+    path: "package.json",
+    content: JSON.stringify(
+      {
+        name: cfg.name,
+        version: "0.1.0",
+        type: "module",
+        ...(cfg.type === "cli" ? { bin: { [cfg.name]: `./dist/cli.js` } } : {}),
+        ...(cfg.type === "library"
+          ? {
+              main: "./dist/index.js",
+              types: "./dist/index.d.ts",
+              exports: { ".": { import: "./dist/index.js", types: "./dist/index.d.ts" } },
+            }
+          : {}),
+        scripts: {
+          dev: cfg.useTs ? "tsx watch src/index.ts" : "node --watch src/index.js",
+          build: cfg.useTs
+            ? cfg.type === "library"
+              ? "tsup src/index.ts --format esm --dts"
+              : "tsc"
+            : "echo 'no build'",
+          test: "vitest run",
+          lint: "biome check .",
+          ...(cfg.type === "cli"
+            ? { start: cfg.useTs ? "tsx src/cli.ts" : "node src/cli.js" }
+            : { start: cfg.useTs ? "tsx src/index.ts" : "node src/index.js" }),
+        },
+        dependencies: Object.fromEntries(cfg.deps.map((d) => [d, "*"])),
+        devDependencies: Object.fromEntries(cfg.devDeps.map((d) => [d, "*"])),
+      },
+      null,
+      2,
+    ),
+    needsLlm: false,
+  });
 
   if (cfg.useTs) {
-    files.push({ path: "tsconfig.json", content: JSON.stringify({
-      compilerOptions: { target: "ES2022", module: "ESNext", moduleResolution: "bundler", strict: true, outDir: "dist", rootDir: "src", declaration: true, esModuleInterop: true, skipLibCheck: true },
-      include: ["src"],
-    }, null, 2), needsLlm: false });
+    files.push({
+      path: "tsconfig.json",
+      content: JSON.stringify(
+        {
+          compilerOptions: {
+            target: "ES2022",
+            module: "ESNext",
+            moduleResolution: "bundler",
+            strict: true,
+            outDir: "dist",
+            rootDir: "src",
+            declaration: true,
+            esModuleInterop: true,
+            skipLibCheck: true,
+          },
+          include: ["src"],
+        },
+        null,
+        2,
+      ),
+      needsLlm: false,
+    });
   }
 
   // Main templates
@@ -94,7 +163,9 @@ program.parse();
  * ${cfg.name} — Main module
  */
 
-${cfg.useTs ? `export interface Config {
+${
+  cfg.useTs
+    ? `export interface Config {
   debug?: boolean;
 }
 
@@ -119,7 +190,8 @@ export class ${capitalize(cfg.name)} {
 }
 
 export default ${capitalize(cfg.name)};
-` : `class ${capitalize(cfg.name)} {
+`
+    : `class ${capitalize(cfg.name)} {
   constructor(config = {}) {
     this.config = config;
     this.initialized = false;
@@ -131,16 +203,17 @@ export default ${capitalize(cfg.name)};
   }
 }
 module.exports = { ${capitalize(cfg.name)} };
-`}`,
+`
+}`,
     worker: `${cfg.useTs ? 'import { Worker, Queue, Job } from "bullmq";\nimport { Redis } from "ioredis";\n' : 'const { Worker, Queue } = require("bullmq");\nconst { Redis } = require("ioredis");\n'}
 const QUEUE_NAME = "${cfg.name}-jobs";
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 
 const connection = new Redis(REDIS_URL, { maxRetriesPerRequest: null });
 
-${cfg.useTs ? 'interface JobData { action: string; payload: Record<string, unknown>; }' : ''}
+${cfg.useTs ? "interface JobData { action: string; payload: Record<string, unknown>; }" : ""}
 
-const worker = new Worker(QUEUE_NAME, async (job${cfg.useTs ? ': Job<JobData>' : ''}) => {
+const worker = new Worker(QUEUE_NAME, async (job${cfg.useTs ? ": Job<JobData>" : ""}) => {
   console.log(\`Processing job \${job.id}: \${job.data.action}\`);
 
   switch (job.data.action) {
@@ -185,7 +258,7 @@ if (!TOKEN) {
 
 console.log("${cfg.name} bot starting...");
 
-async function handleMessage(message${cfg.useTs ? ': string' : ''})${cfg.useTs ? ': Promise<string>' : ''} {
+async function handleMessage(message${cfg.useTs ? ": string" : ""})${cfg.useTs ? ": Promise<string>" : ""} {
   if (message.startsWith("!ping")) return "Pong!";
   if (message.startsWith("!help")) return "Available commands: !ping, !help, !status";
   if (message.startsWith("!status")) return \`Bot uptime: \${Math.floor(process.uptime())}s\`;
@@ -225,7 +298,9 @@ console.log("${cfg.name} scheduler started");
   files.push({ path: mainFile, content: mains[cfg.type] ?? mains["cli"]!, needsLlm: true });
 
   // Test
-  files.push({ path: `tests/${cfg.name}.test.${ext}`, content: `import { describe, test, expect } from "vitest";
+  files.push({
+    path: `tests/${cfg.name}.test.${ext}`,
+    content: `import { describe, test, expect } from "vitest";
 
 describe("${cfg.name}", () => {
   test("basic", () => {
@@ -234,20 +309,53 @@ describe("${cfg.name}", () => {
 
   // TODO: add tests
 });
-`, needsLlm: true });
+`,
+    needsLlm: true,
+  });
 
   // Extras
-  files.push({ path: ".gitignore", content: "node_modules/\ndist/\n.env\n*.log\n", needsLlm: false });
-  files.push({ path: ".env.example", content: `# ${cfg.name} config\nNODE_ENV=development\n`, needsLlm: false });
-  files.push({ path: "Dockerfile", content: `FROM node:22-slim\nWORKDIR /app\nCOPY package*.json ./\nRUN npm install --production\nCOPY . .\n${cfg.useTs ? "RUN npm run build\nCMD [\"node\", \"dist/index.js\"]" : 'CMD ["node", "src/index.js"]'}\n`, needsLlm: false });
-  files.push({ path: ".github/workflows/ci.yml", content: `name: CI\non: [push, pull_request]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with: { node-version: 22 }\n      - run: npm install\n      - run: npm test\n`, needsLlm: false });
-  files.push({ path: "README.md", content: `# ${cfg.name}\n\nBuilt with KCode.\n\n\`\`\`bash\nnpm install\nnpm run dev\nnpm test\n\`\`\`\n\n*Astrolexis.space — Kulvex Code*\n`, needsLlm: false });
+  files.push({
+    path: ".gitignore",
+    content: "node_modules/\ndist/\n.env\n*.log\n",
+    needsLlm: false,
+  });
+  files.push({
+    path: ".env.example",
+    content: `# ${cfg.name} config\nNODE_ENV=development\n`,
+    needsLlm: false,
+  });
+  files.push({
+    path: "Dockerfile",
+    content: `FROM node:22-slim\nWORKDIR /app\nCOPY package*.json ./\nRUN npm install --production\nCOPY . .\n${cfg.useTs ? 'RUN npm run build\nCMD ["node", "dist/index.js"]' : 'CMD ["node", "src/index.js"]'}\n`,
+    needsLlm: false,
+  });
+  files.push({
+    path: ".github/workflows/ci.yml",
+    content: `name: CI\non: [push, pull_request]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with: { node-version: 22 }\n      - run: npm install\n      - run: npm test\n`,
+    needsLlm: false,
+  });
+  files.push({
+    path: "README.md",
+    content: `# ${cfg.name}\n\nBuilt with KCode.\n\n\`\`\`bash\nnpm install\nnpm run dev\nnpm test\n\`\`\`\n\n*Astrolexis.space — Kulvex Code*\n`,
+    needsLlm: false,
+  });
 
   const projectPath = join(cwd, cfg.name);
-  for (const f of files) { const p = join(projectPath, f.path); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, f.content); }
+  for (const f of files) {
+    const p = join(projectPath, f.path);
+    mkdirSync(dirname(p), { recursive: true });
+    writeFileSync(p, f.content);
+  }
 
-  const m = files.filter(f => !f.needsLlm).length;
-  return { config: cfg, files, projectPath, prompt: `Implement Node.js ${cfg.type}. ${m} files machine. USER: "${userRequest}"` };
+  const m = files.filter((f) => !f.needsLlm).length;
+  return {
+    config: cfg,
+    files,
+    projectPath,
+    prompt: `Implement Node.js ${cfg.type}. ${m} files machine. USER: "${userRequest}"`,
+  };
 }
 
-function capitalize(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1).replace(/-(\w)/g, (_, c) => c.toUpperCase()); }
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1).replace(/-(\w)/g, (_, c) => c.toUpperCase());
+}

@@ -47,7 +47,8 @@ export const PYTHON_PATTERNS: BugPattern[] = [
     // Phase 3 fixture harness. Legit f-strings always start after
     // whitespace, paren, comma, equals, etc. — never after a
     // quote or another letter.
-    regex: /\b(?:os\.system|os\.popen|subprocess\.call|subprocess\.run|subprocess\.Popen)\s*\([^)]*(?:shell\s*=\s*True|(?<!["'\w])f["']|\.format\(|%\s)/g,
+    regex:
+      /\b(?:os\.system|os\.popen|subprocess\.call|subprocess\.run|subprocess\.Popen)\s*\([^)]*(?:shell\s*=\s*True|(?<!["'\w])f["']|\.format\(|%\s)/g,
     explanation:
       "Running shell commands with shell=True, f-strings, .format(), or % interpolation allows command injection if any part of the command comes from external input.",
     verify_prompt:
@@ -93,7 +94,8 @@ export const PYTHON_PATTERNS: BugPattern[] = [
       "If the query is entirely hardcoded or uses parameterized placeholders (%s, ?), " +
       "respond FALSE_POSITIVE. If user input is interpolated, respond CONFIRMED.",
     cwe: "CWE-89",
-    fix_template: "Use parameterized queries: cursor.execute('SELECT * FROM t WHERE id = %s', (user_id,))",
+    fix_template:
+      "Use parameterized queries: cursor.execute('SELECT * FROM t WHERE id = %s', (user_id,))",
   },
   {
     id: "py-005-yaml-unsafe-load",
@@ -169,14 +171,16 @@ export const PYTHON_PATTERNS: BugPattern[] = [
       "local file written only by the same application, respond FALSE_POSITIVE. " +
       "If from any external source, respond CONFIRMED.",
     cwe: "CWE-502",
-    fix_template: "Use json.loads() or a safe serialization format. If pickle is required, use hmac-signed pickles with a secret key.",
+    fix_template:
+      "Use json.loads() or a safe serialization format. If pickle is required, use hmac-signed pickles with a secret key.",
   },
   {
     id: "py-010-assert-validation",
     title: "assert used for input validation (stripped in -O mode)",
     severity: "medium",
     languages: ["python"],
-    regex: /\bassert\s+(?:isinstance|len|type|int|str|float|0\s*<|0\s*<=|\w+\s*(?:>|<|>=|<=|!=|==)\s*\d)/g,
+    regex:
+      /\bassert\s+(?:isinstance|len|type|int|str|float|0\s*<|0\s*<=|\w+\s*(?:>|<|>=|<=|!=|==)\s*\d)/g,
     explanation:
       "assert statements are removed when Python runs with -O (optimized) or -OO flags. Using assert for input validation means the check disappears in production.",
     verify_prompt:
@@ -201,14 +205,16 @@ export const PYTHON_PATTERNS: BugPattern[] = [
       "If the class is intentionally unhashable (e.g. mutable container), respond " +
       "FALSE_POSITIVE. If __hash__ is missing and the object may be used in sets/dicts, respond CONFIRMED.",
     cwe: "CWE-697",
-    fix_template: "Add __hash__ that returns hash of the same fields used in __eq__, or set __hash__ = None explicitly.",
+    fix_template:
+      "Add __hash__ that returns hash of the same fields used in __eq__, or set __hash__ = None explicitly.",
   },
   {
     id: "py-012-mutable-default-arg",
     title: "Mutable default argument (shared between calls)",
     severity: "medium",
     languages: ["python"],
-    regex: /def\s+\w+\s*\([^)]*(?::\s*(?:list|dict|set)\s*=\s*(?:\[\]|\{\}|set\(\))|=\s*(?:\[\]|\{\}))/g,
+    regex:
+      /def\s+\w+\s*\([^)]*(?::\s*(?:list|dict|set)\s*=\s*(?:\[\]|\{\}|set\(\))|=\s*(?:\[\]|\{\}))/g,
     explanation:
       "Mutable default arguments (def foo(x=[])) are created once and shared across all calls. Appending to them accumulates state between invocations, causing hard-to-debug issues.",
     verify_prompt:
@@ -216,7 +222,8 @@ export const PYTHON_PATTERNS: BugPattern[] = [
       "inside the function? If the function never mutates the default (only reads), " +
       "respond FALSE_POSITIVE. If it appends/modifies the default, respond CONFIRMED.",
     cwe: "CWE-665",
-    fix_template: "Use None as default and create inside: def foo(x=None): x = x if x is not None else []",
+    fix_template:
+      "Use None as default and create inside: def foo(x=None): x = x if x is not None else []",
   },
   {
     id: "py-013-bare-except",
@@ -231,7 +238,8 @@ export const PYTHON_PATTERNS: BugPattern[] = [
       "exception type like except Exception: or except ValueError:, respond FALSE_POSITIVE. " +
       "If it's truly bare except:, respond CONFIRMED.",
     cwe: "CWE-396",
-    fix_template: "Replace except: with except Exception: to allow SystemExit and KeyboardInterrupt to propagate.",
+    fix_template:
+      "Replace except: with except Exception: to allow SystemExit and KeyboardInterrupt to propagate.",
   },
   {
     id: "py-014-late-binding-closure",
@@ -276,14 +284,16 @@ export const PYTHON_PATTERNS: BugPattern[] = [
       "If it uses mkstemp(), NamedTemporaryFile, or TemporaryDirectory instead, " +
       "respond FALSE_POSITIVE. If mktemp(), respond CONFIRMED.",
     cwe: "CWE-377",
-    fix_template: "Use tempfile.mkstemp() (returns fd+name atomically) or tempfile.NamedTemporaryFile().",
+    fix_template:
+      "Use tempfile.mkstemp() (returns fd+name atomically) or tempfile.NamedTemporaryFile().",
   },
   {
     id: "py-017-hardcoded-secret-assign",
     title: "Hardcoded secret or API key in assignment",
     severity: "high",
     languages: ["python"],
-    regex: /(?:api_key|api_secret|aws_secret|private_key|database_password|db_password)\s*=\s*["'][A-Za-z0-9+/=_-]{12,}["']/gi,
+    regex:
+      /(?:api_key|api_secret|aws_secret|private_key|database_password|db_password)\s*=\s*["'][A-Za-z0-9+/=_-]{12,}["']/gi,
     explanation:
       "Hardcoded secrets in source code are exposed to anyone with repository access and persist in git history even after deletion.",
     verify_prompt:
@@ -291,7 +301,8 @@ export const PYTHON_PATTERNS: BugPattern[] = [
       "'xxx', 'test')? If it looks like a real credential (long, random string), " +
       "respond CONFIRMED. If placeholder or test, respond FALSE_POSITIVE.",
     cwe: "CWE-798",
-    fix_template: "Use os.environ.get('API_KEY') or a secrets manager (AWS Secrets Manager, Vault).",
+    fix_template:
+      "Use os.environ.get('API_KEY') or a secrets manager (AWS Secrets Manager, Vault).",
   },
   {
     id: "py-018-re-no-raw-string",
@@ -322,7 +333,8 @@ export const PYTHON_PATTERNS: BugPattern[] = [
       "respond FALSE_POSITIVE. If it involves expensive computation (database queries, " +
       "serialization, repr of large objects), respond CONFIRMED.",
     cwe: "CWE-400",
-    fix_template: "Use lazy formatting: logger.debug('Value: %s', expensive_value) instead of logger.debug(f'Value: {expensive_value}')",
+    fix_template:
+      "Use lazy formatting: logger.debug('Value: %s', expensive_value) instead of logger.debug(f'Value: {expensive_value}')",
   },
   {
     id: "py-020-global-keyword",
@@ -347,7 +359,8 @@ export const PYTHON_PATTERNS: BugPattern[] = [
       "Only respond CONFIRMED if the global is used to pass arbitrary state between " +
       "unrelated functions in a way that suggests the code should have been a class.",
     cwe: "CWE-1054",
-    fix_template: "Pass the value as a function parameter, use a class to encapsulate state, or use a module-level constant.",
+    fix_template:
+      "Pass the value as a function parameter, use a class to encapsulate state, or use a module-level constant.",
   },
 
   // ── ML library deserialization (torch / joblib / cloudpickle) ──

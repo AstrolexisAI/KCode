@@ -30,9 +30,7 @@ describe("extractBashFileMutations — #102 sed/perl/awk bypass", () => {
   });
 
   test("detects `perl -i -pe '…' PATH`", () => {
-    const targets = extractBashFileMutations(
-      "perl -i -pe 's/foo/bar/' /tmp/thing.py",
-    );
+    const targets = extractBashFileMutations("perl -i -pe 's/foo/bar/' /tmp/thing.py");
     expect(targets).toContain("/tmp/thing.py");
   });
 
@@ -42,9 +40,7 @@ describe("extractBashFileMutations — #102 sed/perl/awk bypass", () => {
   });
 
   test("detects `awk -i inplace`", () => {
-    const targets = extractBashFileMutations(
-      "awk -i inplace '{print $1}' data.txt",
-    );
+    const targets = extractBashFileMutations("awk -i inplace '{print $1}' data.txt");
     expect(targets).toContain("data.txt");
   });
 
@@ -66,9 +62,7 @@ describe("extractBashFileMutations — #102 sed/perl/awk bypass", () => {
   });
 
   test("handles command chain with pipe correctly", () => {
-    const targets = extractBashFileMutations(
-      "cat file.txt | sed -i 's/a/b/' target.py",
-    );
+    const targets = extractBashFileMutations("cat file.txt | sed -i 's/a/b/' target.py");
     expect(targets).toContain("target.py");
   });
 });

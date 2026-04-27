@@ -1,8 +1,8 @@
 // KCode - C/C++ AST patterns tests (v2.10.346)
 
 import { describe, expect, it } from "bun:test";
-import { _resetAstRunnerForTest, runAstPatterns } from "./runner";
 import { C_CPP_AST_PATTERNS } from "./c-cpp-patterns";
+import { _resetAstRunnerForTest, runAstPatterns } from "./runner";
 
 function gateOnGrammar<T>(stats: { grammar_loaded: boolean }[], thunk: () => T): T | undefined {
   if (stats.every((s) => !s.grammar_loaded)) return undefined;
@@ -171,7 +171,9 @@ describe("cpp-ast-003 printf-format-of-parameter", () => {
     const code = `int log(const char *fmt) { return printf(fmt); }\n`;
     const r = await runAstPatterns(C_CPP_AST_PATTERNS, "/tmp/x.c", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "cpp-ast-003-printf-format-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "cpp-ast-003-printf-format-of-parameter",
+      );
       expect(hits.length).toBe(1);
       expect(hits[0]!.matched_text).toBe("printf(fmt)");
     });
@@ -182,7 +184,9 @@ describe("cpp-ast-003 printf-format-of-parameter", () => {
     const code = `int log(const char *p) { return printf("%s\\n", p); }\n`;
     const r = await runAstPatterns(C_CPP_AST_PATTERNS, "/tmp/x.c", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "cpp-ast-003-printf-format-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "cpp-ast-003-printf-format-of-parameter",
+      );
       expect(hits.length).toBe(0);
     });
   });
@@ -192,7 +196,9 @@ describe("cpp-ast-003 printf-format-of-parameter", () => {
     const code = `void a(const wchar_t *fmt) { wprintf(fmt); }\nint b(const char *s) { return puts(s); }\n`;
     const r = await runAstPatterns(C_CPP_AST_PATTERNS, "/tmp/x.c", code);
     gateOnGrammar(r.stats, () => {
-      const hits = r.candidates.filter((c) => c.pattern_id === "cpp-ast-003-printf-format-of-parameter");
+      const hits = r.candidates.filter(
+        (c) => c.pattern_id === "cpp-ast-003-printf-format-of-parameter",
+      );
       expect(hits.length).toBe(2);
     });
   });

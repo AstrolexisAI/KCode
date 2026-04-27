@@ -13,17 +13,23 @@ beforeEach(() => {
   TMP = mkdtempSync(join(tmpdir(), "kcode-sbom-wire-"));
 });
 afterEach(() => {
-  try { rmSync(TMP, { recursive: true, force: true }); } catch {}
+  try {
+    rmSync(TMP, { recursive: true, force: true });
+  } catch {}
 });
 
 describe("runAudit({ includeDeps })", () => {
   test("default (no flag) does NOT scan dependencies", async () => {
-    writeFileSync(join(TMP, "package.json"), JSON.stringify({
-      dependencies: { "event-stream": "3.3.6" },
-    }));
+    writeFileSync(
+      join(TMP, "package.json"),
+      JSON.stringify({
+        dependencies: { "event-stream": "3.3.6" },
+      }),
+    );
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => JSON.stringify({ verdict: "confirmed", reasoning: "x", evidence: { sink: "y" } }),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "x", evidence: { sink: "y" } }),
       skipVerification: true,
     });
     // No SBOM finding present
@@ -32,12 +38,16 @@ describe("runAudit({ includeDeps })", () => {
   });
 
   test("--deps appends SBOM findings to result.findings[]", async () => {
-    writeFileSync(join(TMP, "package.json"), JSON.stringify({
-      dependencies: { "event-stream": "3.3.6", "node-ipc": "10.1.2" },
-    }));
+    writeFileSync(
+      join(TMP, "package.json"),
+      JSON.stringify({
+        dependencies: { "event-stream": "3.3.6", "node-ipc": "10.1.2" },
+      }),
+    );
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => JSON.stringify({ verdict: "confirmed", reasoning: "x", evidence: { sink: "y" } }),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "x", evidence: { sink: "y" } }),
       skipVerification: true,
       includeDeps: true,
     });
@@ -52,12 +62,16 @@ describe("runAudit({ includeDeps })", () => {
   });
 
   test("--deps with no vulnerable packages produces no SBOM findings", async () => {
-    writeFileSync(join(TMP, "package.json"), JSON.stringify({
-      dependencies: { "lodash": "4.17.21", "react": "18.3.0" },
-    }));
+    writeFileSync(
+      join(TMP, "package.json"),
+      JSON.stringify({
+        dependencies: { lodash: "4.17.21", react: "18.3.0" },
+      }),
+    );
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => JSON.stringify({ verdict: "confirmed", reasoning: "x", evidence: { sink: "y" } }),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "x", evidence: { sink: "y" } }),
       skipVerification: true,
       includeDeps: true,
     });
@@ -69,7 +83,8 @@ describe("runAudit({ includeDeps })", () => {
     // Empty TMP — no package.json at all
     const result = await runAudit({
       projectRoot: TMP,
-      llmCallback: async () => JSON.stringify({ verdict: "confirmed", reasoning: "x", evidence: { sink: "y" } }),
+      llmCallback: async () =>
+        JSON.stringify({ verdict: "confirmed", reasoning: "x", evidence: { sink: "y" } }),
       skipVerification: true,
       includeDeps: true,
     });

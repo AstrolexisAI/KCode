@@ -50,7 +50,10 @@ export class AutoAgentManager {
   private cfg: AutoAgentConfig;
   private active = false;
 
-  constructor(cfg: Partial<AutoAgentConfig> & { cwd: string; model: string; config: KCodeConfig }, onProgress: AgentProgressCallback) {
+  constructor(
+    cfg: Partial<AutoAgentConfig> & { cwd: string; model: string; config: KCodeConfig },
+    onProgress: AgentProgressCallback,
+  ) {
     this.cfg = {
       minPendingSteps: cfg.minPendingSteps ?? DEFAULT_MIN_PENDING,
       maxAgents: cfg.maxAgents ?? DEFAULT_MAX_AGENTS,
@@ -130,13 +133,30 @@ export class AutoAgentManager {
       // SECURITY: whitelist env vars to avoid leaking AWS/GCP/SSH credentials
       // to spawned agents. Only pass what's needed for the subprocess to run.
       const AGENT_ENV_ALLOWLIST = new Set([
-        "PATH", "HOME", "USER", "LANG", "LC_ALL", "LC_CTYPE", "TZ", "TERM",
-        "TMPDIR", "TMP", "TEMP", "SHELL", "PWD", "XDG_CONFIG_HOME",
-        "XDG_DATA_HOME", "XDG_CACHE_HOME", "NODE_ENV",
+        "PATH",
+        "HOME",
+        "USER",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "TZ",
+        "TERM",
+        "TMPDIR",
+        "TMP",
+        "TEMP",
+        "SHELL",
+        "PWD",
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_CACHE_HOME",
+        "NODE_ENV",
         // KCode-specific config inheritance
-        "KCODE_API_BASE", "KCODE_MODEL", "KCODE_LOG_LEVEL",
+        "KCODE_API_BASE",
+        "KCODE_MODEL",
+        "KCODE_LOG_LEVEL",
         // Let parent's Anthropic config flow through (agents need it)
-        "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL",
+        "ANTHROPIC_API_KEY",
+        "ANTHROPIC_BASE_URL",
       ]);
       const env: Record<string, string | undefined> = {};
       for (const [key, value] of Object.entries(process.env)) {

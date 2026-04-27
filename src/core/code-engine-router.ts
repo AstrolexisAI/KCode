@@ -2,11 +2,31 @@
 // Detects which engine to use from user's natural language request
 
 export type EngineId =
-  | "python" | "cpp" | "rust" | "go" | "swift" | "java" | "node"
-  | "csharp" | "kotlin" | "php" | "ruby" | "zig" | "elixir"
-  | "dart" | "lua" | "haskell" | "scala"
-  | "docker" | "db" | "css" | "terraform" | "monorepo" | "cicd"
-  | "api" | "fullstack";
+  | "python"
+  | "cpp"
+  | "rust"
+  | "go"
+  | "swift"
+  | "java"
+  | "node"
+  | "csharp"
+  | "kotlin"
+  | "php"
+  | "ruby"
+  | "zig"
+  | "elixir"
+  | "dart"
+  | "lua"
+  | "haskell"
+  | "scala"
+  | "docker"
+  | "db"
+  | "css"
+  | "terraform"
+  | "monorepo"
+  | "cicd"
+  | "api"
+  | "fullstack";
 
 interface EngineMatch {
   engine: EngineId;
@@ -16,17 +36,34 @@ interface EngineMatch {
 // Order: high-confidence infra FIRST, then languages, then generic stacks
 const ENGINE_PATTERNS: Array<{ engine: EngineId; pattern: RegExp }> = [
   // ── High-confidence infra (when the PRIMARY intent is infra, not language) ──
-  { engine: "terraform", pattern: /\b(?:terraform|infra(?:structure)?(?:\s+as\s+code)?|iac|vpc|hcl)\b/i },
+  {
+    engine: "terraform",
+    pattern: /\b(?:terraform|infra(?:structure)?(?:\s+as\s+code)?|iac|vpc|hcl)\b/i,
+  },
   { engine: "docker", pattern: /\b(?:docker(?:\s*file)?|docker.?compose|containerize)\b/i },
   { engine: "monorepo", pattern: /\b(?:monorepo|turborepo|nx\s+workspace|mono.?repo)\b/i },
-  { engine: "cicd", pattern: /\b(?:ci\/?cd|github\s*actions?|gitlab\s*ci|jenkins(?:file)?|ci\s+pipeline)\b/i },
-  { engine: "db", pattern: /\b(?:database|schema|migration|postgres(?:ql)?|mysql|sqlite|mongo(?:db)?|redis|sql\s*server|mssql|prisma|drizzle|typeorm|knex|mongoose)\b/i },
-  { engine: "css", pattern: /\b(?:design\s*system|css\s+(?:framework|library|component)|tailwind\s+plugin|sass\s+framework|animation\s+library|ui\s*kit)\b/i },
+  {
+    engine: "cicd",
+    pattern: /\b(?:ci\/?cd|github\s*actions?|gitlab\s*ci|jenkins(?:file)?|ci\s+pipeline)\b/i,
+  },
+  {
+    engine: "db",
+    pattern:
+      /\b(?:database|schema|migration|postgres(?:ql)?|mysql|sqlite|mongo(?:db)?|redis|sql\s*server|mssql|prisma|drizzle|typeorm|knex|mongoose)\b/i,
+  },
+  {
+    engine: "css",
+    pattern:
+      /\b(?:design\s*system|css\s+(?:framework|library|component)|tailwind\s+plugin|sass\s+framework|animation\s+library|ui\s*kit)\b/i,
+  },
 
   // ── Languages (explicit mention wins over generic stacks) ──
   { engine: "dart", pattern: /\b(?:flutter|dart)\b/i },
   { engine: "rust", pattern: /\b(?:rust|cargo|axum|tokio|actix)\b/i },
-  { engine: "go", pattern: /\b(?:golang|go\s+(?:api|server|cli|project|app|rest)|chi\s+|gin\s+|go\s+lang)\b/i },
+  {
+    engine: "go",
+    pattern: /\b(?:golang|go\s+(?:api|server|cli|project|app|rest)|chi\s+|gin\s+|go\s+lang)\b/i,
+  },
   { engine: "swift", pattern: /\b(?:swift(?:ui)?|vapor|ios\s+app|macos\s+app|xcode)\b/i },
   { engine: "kotlin", pattern: /\b(?:kotlin|ktor|android\s+(?:app|project)|jetpack\s*compose)\b/i },
   { engine: "scala", pattern: /\b(?:scala|http4s|akka|spark\s+(?:job|pipeline|app)|sbt)\b/i },
@@ -35,61 +72,121 @@ const ENGINE_PATTERNS: Array<{ engine: EngineId; pattern: RegExp }> = [
   { engine: "zig", pattern: /\b(?:zig)\b/i },
   { engine: "lua", pattern: /\b(?:lua|love2d|neovim\s+plugin|roblox)\b/i },
   { engine: "csharp", pattern: /(?:c#|csharp|\b(?:\.?net|dotnet|asp\.?net|blazor|maui)\b)/i },
-  { engine: "java", pattern: /\b(?:java\s+(?:api|app|project|server)|spring\s*boot|spring|gradle\s+project|maven)\b/i },
-  { engine: "php", pattern: /\b(?:php|laravel|symfony|slim\s+(?:api|app)|wordpress\s+plugin|composer\s+project)\b/i },
-  { engine: "ruby", pattern: /\b(?:ruby|rails|sinatra|gem\s+(?:library|package)|bundler|sidekiq)\b/i },
+  {
+    engine: "java",
+    pattern:
+      /\b(?:java\s+(?:api|app|project|server)|spring\s*boot|spring|gradle\s+project|maven)\b/i,
+  },
+  {
+    engine: "php",
+    pattern:
+      /\b(?:php|laravel|symfony|slim\s+(?:api|app)|wordpress\s+plugin|composer\s+project)\b/i,
+  },
+  {
+    engine: "ruby",
+    pattern: /\b(?:ruby|rails|sinatra|gem\s+(?:library|package)|bundler|sidekiq)\b/i,
+  },
   { engine: "python", pattern: /\b(?:python|fastapi|django|flask|pip|poetry|pytorch|pandas)\b/i },
-  { engine: "cpp", pattern: /(?:\bc\+\+|cpp|cmake|\bc\s+(?:library|server|project|program)\b)|C\+\+/i },
-  { engine: "node", pattern: /\b(?:node\.?js|npm\s+package|typescript\s+(?:cli|project|library)|bun\s+project)\b/i },
+  {
+    engine: "cpp",
+    pattern: /(?:\bc\+\+|cpp|cmake|\bc\s+(?:library|server|project|program)\b)|C\+\+/i,
+  },
+  {
+    engine: "node",
+    pattern: /\b(?:node\.?js|npm\s+package|typescript\s+(?:cli|project|library)|bun\s+project)\b/i,
+  },
 
   // ── Generic stacks (checked last) ──
-  { engine: "fullstack", pattern: /\b(?:fullstack|full.?stack|frontend.{0,5}backend|front.{0,5}back)\b/i },
-  { engine: "api", pattern: /\b(?:rest\s*api|express\s*api|api\s+(?:with|con|para)\s+(?:users|products|auth))\b/i },
+  {
+    engine: "fullstack",
+    pattern: /\b(?:fullstack|full.?stack|frontend.{0,5}backend|front.{0,5}back)\b/i,
+  },
+  {
+    engine: "api",
+    pattern: /\b(?:rest\s*api|express\s*api|api\s+(?:with|con|para)\s+(?:users|products|auth))\b/i,
+  },
 ];
 
 // Must also match "create" intent — don't hijack "fix my Go code" or "explain this Python"
-const CREATE_INTENT = /\b(?:crea(?:r|te|ting)?|make|build|genera(?:te|r)?|scaffold|setup|new|init|starter|bootstrap|hazme|construir|proyecto\s+(?:de|en|con)|project\s+(?:in|with|for|using))\b/i;
+const CREATE_INTENT =
+  /\b(?:crea(?:r|te|ting)?|make|build|genera(?:te|r)?|scaffold|setup|new|init|starter|bootstrap|hazme|construir|proyecto\s+(?:de|en|con)|project\s+(?:in|with|for|using))\b/i;
 
 // ── Auto-selector: infer best engine from project description ──
 
-interface ProjectSignal { type: "web" | "api" | "mobile" | "cli" | "data" | "game" | "realtime" | "embedded" | "ml" | "desktop"; }
+interface ProjectSignal {
+  type:
+    | "web"
+    | "api"
+    | "mobile"
+    | "cli"
+    | "data"
+    | "game"
+    | "realtime"
+    | "embedded"
+    | "ml"
+    | "desktop";
+}
 
 function detectProjectType(msg: string): ProjectSignal | null {
   const lower = msg.toLowerCase();
   // Web app signals — these are always web, regardless of other keywords
   // "create a chat" / "chat app" / "chat messaging app" / "messaging app" → web
-  const isWebApp = /\b(?:crm|kanban|chat\s+(?:app|messag)|chat\b(?=.*\b(?:levant|run|start|app|and))|messag(?:ing)?\s+app|social\s+(?:media\s+)?feed|lms|course\s+platform|e-?commerce|store|shop|admin\s+panel|project\s+manag|task\s+(?:board|manag)|iot\s+(?:monitor|dashboard)|device\s+monitor)\b/i.test(lower)
-    || /\b(?:crea|create|build|make)\s+(?:an?\s+)?chat\b/i.test(lower);
+  const isWebApp =
+    /\b(?:crm|kanban|chat\s+(?:app|messag)|chat\b(?=.*\b(?:levant|run|start|app|and))|messag(?:ing)?\s+app|social\s+(?:media\s+)?feed|lms|course\s+platform|e-?commerce|store|shop|admin\s+panel|project\s+manag|task\s+(?:board|manag)|iot\s+(?:monitor|dashboard)|device\s+monitor)\b/i.test(
+      lower,
+    ) || /\b(?:crea|create|build|make)\s+(?:an?\s+)?chat\b/i.test(lower);
   if (isWebApp) return { type: "web" };
   // Visual UI signals — if user wants a dashboard/page WITH visual elements, it's web
-  const hasVisualUI = /\b(?:dashboard|page|ui|frontend|dark\s*(?:theme|ui|mode)|chart|heatmap|candlestick|ticker|interface|panel|widget|responsive)\b/i.test(lower);
-  const hasDataSignal = /\b(?:pipeline|etl|csv|report|scraper|crawler|batch|transform|ingest|bot|trading\s*bot|stock\s*(?:bot|script|tool))\b/i.test(lower);
+  const hasVisualUI =
+    /\b(?:dashboard|page|ui|frontend|dark\s*(?:theme|ui|mode)|chart|heatmap|candlestick|ticker|interface|panel|widget|responsive)\b/i.test(
+      lower,
+    );
+  const hasDataSignal =
+    /\b(?:pipeline|etl|csv|report|scraper|crawler|batch|transform|ingest|bot|trading\s*bot|stock\s*(?:bot|script|tool))\b/i.test(
+      lower,
+    );
   // "wallstreet dashboard with charts" = web (visual), "data pipeline with ETL" = data (processing)
   if (hasDataSignal && !hasVisualUI) return { type: "data" };
-  if (/\b(?:dashboard|landing|page|website|sitio|portal|blog|portfolio|store|tienda|saas|admin\s*panel|cms)\b/i.test(lower)) return { type: "web" };
-  if (/\b(?:api|backend|server|microservice|endpoint|servicio|servidor)\b/i.test(lower)) return { type: "api" };
-  if (/\b(?:desktop|gui|window|native\s*app|tray|menubar)\b/i.test(lower)) return { type: "desktop" };
-  if (/\b(?:mobile|app|ios|android|tablet|telefono|celular)\b/i.test(lower)) return { type: "mobile" };
-  if (/\b(?:cli|command|terminal|tool|herramienta|script|automation|cron)\b/i.test(lower)) return { type: "cli" };
+  if (
+    /\b(?:dashboard|landing|page|website|sitio|portal|blog|portfolio|store|tienda|saas|admin\s*panel|cms)\b/i.test(
+      lower,
+    )
+  )
+    return { type: "web" };
+  if (/\b(?:api|backend|server|microservice|endpoint|servicio|servidor)\b/i.test(lower))
+    return { type: "api" };
+  if (/\b(?:desktop|gui|window|native\s*app|tray|menubar)\b/i.test(lower))
+    return { type: "desktop" };
+  if (/\b(?:mobile|app|ios|android|tablet|telefono|celular)\b/i.test(lower))
+    return { type: "mobile" };
+  if (/\b(?:cli|command|terminal|tool|herramienta|script|automation|cron)\b/i.test(lower))
+    return { type: "cli" };
   if (/\b(?:game|juego|2d|3d|engine|sprite|physics|player)\b/i.test(lower)) return { type: "game" };
-  if (/\b(?:realtime|real.?time|websocket|chat|streaming|live|notification)\b/i.test(lower)) return { type: "realtime" };
-  if (/\b(?:embedded|firmware|iot|sensor|arduino|raspberry|microcontroller)\b/i.test(lower)) return { type: "embedded" };
-  if (/\b(?:ml|machine\s*learn|ai|model|train|neural|deep\s*learn|torch|tensorflow|llm)\b/i.test(lower)) return { type: "ml" };
+  if (/\b(?:realtime|real.?time|websocket|chat|streaming|live|notification)\b/i.test(lower))
+    return { type: "realtime" };
+  if (/\b(?:embedded|firmware|iot|sensor|arduino|raspberry|microcontroller)\b/i.test(lower))
+    return { type: "embedded" };
+  if (
+    /\b(?:ml|machine\s*learn|ai|model|train|neural|deep\s*learn|torch|tensorflow|llm)\b/i.test(
+      lower,
+    )
+  )
+    return { type: "ml" };
   return null;
 }
 
 // Best engine per project type (based on ecosystem strength)
 const AUTO_SELECT: Record<string, EngineId> = {
-  web: "node",        // Next.js via web engine (handled by isWebRequest in conversation.ts)
-  api: "go",          // Go Chi — fast, simple, production-proven
-  mobile: "dart",     // Flutter — cross-platform
-  cli: "go",          // Go — single binary, fast compilation
-  data: "python",     // Python — pandas, charts, scrapers
-  game: "lua",        // Love2D — simple 2D games
+  web: "node", // Next.js via web engine (handled by isWebRequest in conversation.ts)
+  api: "go", // Go Chi — fast, simple, production-proven
+  mobile: "dart", // Flutter — cross-platform
+  cli: "go", // Go — single binary, fast compilation
+  data: "python", // Python — pandas, charts, scrapers
+  game: "lua", // Love2D — simple 2D games
   realtime: "elixir", // Elixir — built for concurrency
-  embedded: "cpp",    // C/C++ — hardware level
-  ml: "python",       // Python — PyTorch, TensorFlow
-  desktop: "csharp",  // .NET MAUI — cross-platform desktop
+  embedded: "cpp", // C/C++ — hardware level
+  ml: "python", // Python — PyTorch, TensorFlow
+  desktop: "csharp", // .NET MAUI — cross-platform desktop
 };
 
 export function detectCodeEngine(message: string): EngineMatch | null {
@@ -115,7 +212,11 @@ export function detectCodeEngine(message: string): EngineMatch | null {
   return null;
 }
 
-export async function runCodeEngine(engine: EngineId, userRequest: string, cwd: string): Promise<string | null> {
+export async function runCodeEngine(
+  engine: EngineId,
+  userRequest: string,
+  cwd: string,
+): Promise<string | null> {
   const engineMap: Record<string, { mod: string; fn: string; promptKey?: string }> = {
     python: { mod: "./web-engine/stacks/python-engine.js", fn: "createPyProject" },
     cpp: { mod: "./web-engine/stacks/cpp-engine.js", fn: "createCppProject" },
@@ -151,7 +252,10 @@ export async function runCodeEngine(engine: EngineId, userRequest: string, cwd: 
   const result = mod[entry.fn](userRequest, cwd);
 
   // Build enriched prompt from engine result
-  const files = result.files?.length ?? result.totalFiles ?? (result.machineFiles ?? 0) + (result.llmFiles ?? 0);
+  const files =
+    result.files?.length ??
+    result.totalFiles ??
+    (result.machineFiles ?? 0) + (result.llmFiles ?? 0);
   const machine = result.files?.filter((f: any) => !f.needsLlm)?.length ?? result.machineFiles ?? 0;
   const llmFiles = result.files?.filter((f: any) => f.needsLlm) ?? [];
   const projectPath = result.projectPath ?? result.name ?? "";

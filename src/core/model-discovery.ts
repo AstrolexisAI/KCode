@@ -123,13 +123,7 @@ const TOGETHER: ProviderSpec = {
   baseUrl: "https://api.together.xyz",
 };
 
-export const ALL_PROVIDERS: ProviderSpec[] = [
-  ANTHROPIC,
-  OPENAI,
-  GROQ,
-  DEEPSEEK,
-  TOGETHER,
-];
+export const ALL_PROVIDERS: ProviderSpec[] = [ANTHROPIC, OPENAI, GROQ, DEEPSEEK, TOGETHER];
 
 /**
  * Parser for the common { data: [{ id: string }, ...] } shape used
@@ -300,10 +294,7 @@ export async function collectProviderKeys(): Promise<Map<string, string>> {
     for (const oauthProvider of ["anthropic", "openai"]) {
       try {
         const cfg = resolveProviderConfig(oauthProvider);
-        const token = await manager.getAccessToken(
-          oauthProvider,
-          cfg ?? undefined,
-        );
+        const token = await manager.getAccessToken(oauthProvider, cfg ?? undefined);
         if (token) {
           keys.set(oauthProvider, token);
           log.debug("model-discovery", `using OAuth token for ${oauthProvider}`);
@@ -395,10 +386,7 @@ export async function runModelDiscovery(opts?: {
 
   if (anyAdded) {
     await saveModelsConfig(config);
-    log.info(
-      "model-discovery",
-      `saved ${config.models.length} total models to registry`,
-    );
+    log.info("model-discovery", `saved ${config.models.length} total models to registry`);
   }
 
   return results;
@@ -436,11 +424,7 @@ function readDiscoveryState(): DiscoveryState | null {
 
 function writeDiscoveryState(state: DiscoveryState): void {
   try {
-    writeFileSync(
-      kcodePath(DISCOVERY_STATE_FILE),
-      JSON.stringify(state, null, 2),
-      "utf-8",
-    );
+    writeFileSync(kcodePath(DISCOVERY_STATE_FILE), JSON.stringify(state, null, 2), "utf-8");
   } catch {
     // Non-fatal: next run will just re-run discovery.
   }
@@ -517,7 +501,9 @@ export async function maybeAutoDiscover(opts?: {
         try {
           const { scheduleBackgroundBenchmark } = await import("./benchmark-driver.js");
           scheduleBackgroundBenchmark();
-        } catch { /* benchmark module optional */ }
+        } catch {
+          /* benchmark module optional */
+        }
       }
       return added;
     } catch (err) {
@@ -531,4 +517,3 @@ export async function maybeAutoDiscover(opts?: {
   _inFlightDiscovery = runPromise;
   return runPromise;
 }
-

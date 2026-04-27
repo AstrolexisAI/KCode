@@ -20,6 +20,7 @@ function timingSafeTokenEqual(supplied: string, expected: string): boolean {
   }
   return timingSafeEqual(a, b);
 }
+
 import type { PermissionBridge } from "./permission-bridge";
 import { createMessage, isClientMessageType, parseMessage, serializeMessage } from "./protocol";
 import type { SessionManager } from "./session-manager";

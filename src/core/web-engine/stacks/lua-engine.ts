@@ -3,9 +3,21 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-export type LuaProjectType = "script" | "game" | "neovim" | "roblox" | "library" | "server" | "embedded";
+export type LuaProjectType =
+  | "script"
+  | "game"
+  | "neovim"
+  | "roblox"
+  | "library"
+  | "server"
+  | "embedded";
 
-interface LuaConfig { name: string; type: LuaProjectType; framework?: string; deps: string[]; }
+interface LuaConfig {
+  name: string;
+  type: LuaProjectType;
+  framework?: string;
+  deps: string[];
+}
 
 function detectLuaProject(msg: string): LuaConfig {
   const lower = msg.toLowerCase();
@@ -14,15 +26,15 @@ function detectLuaProject(msg: string): LuaConfig {
   const deps: string[] = [];
 
   if (/\b(?:love2?d|game|2d|sprite|physics)\b/i.test(lower)) {
-    type = "game"; framework = "love2d";
-  }
-  else if (/\b(?:neovim|nvim|vim\s*plugin|editor\s*plugin)\b/i.test(lower)) {
-    type = "neovim"; framework = "neovim";
-  }
-  else if (/\b(?:roblox|rblx|luau|studio)\b/i.test(lower)) {
-    type = "roblox"; framework = "roblox";
-  }
-  else if (/\b(?:lapis|openresty|nginx|web|api|rest|server|http)\b/i.test(lower)) {
+    type = "game";
+    framework = "love2d";
+  } else if (/\b(?:neovim|nvim|vim\s*plugin|editor\s*plugin)\b/i.test(lower)) {
+    type = "neovim";
+    framework = "neovim";
+  } else if (/\b(?:roblox|rblx|luau|studio)\b/i.test(lower)) {
+    type = "roblox";
+    framework = "roblox";
+  } else if (/\b(?:lapis|openresty|nginx|web|api|rest|server|http)\b/i.test(lower)) {
     type = "server";
     if (/\b(?:lapis)\b/i.test(lower)) {
       framework = "lapis";
@@ -30,12 +42,16 @@ function detectLuaProject(msg: string): LuaConfig {
     } else {
       framework = "openresty";
     }
+  } else if (/\b(?:lib|library|module|package|rock)\b/i.test(lower)) {
+    type = "library";
+  } else if (/\b(?:embedded|esp|iot|nodemcu|firmware)\b/i.test(lower)) {
+    type = "embedded";
+  } else if (/\b(?:script|cli|tool|command|automate)\b/i.test(lower)) {
+    type = "script";
   }
-  else if (/\b(?:lib|library|module|package|rock)\b/i.test(lower)) { type = "library"; }
-  else if (/\b(?:embedded|esp|iot|nodemcu|firmware)\b/i.test(lower)) { type = "embedded"; }
-  else if (/\b(?:script|cli|tool|command|automate)\b/i.test(lower)) { type = "script"; }
 
-  if (/\b(?:luasocket|socket|network)\b/i.test(lower) && !deps.includes("luasocket")) deps.push("luasocket");
+  if (/\b(?:luasocket|socket|network)\b/i.test(lower) && !deps.includes("luasocket"))
+    deps.push("luasocket");
   if (/\b(?:lfs|filesystem|file\s*system)\b/i.test(lower)) deps.push("lfs");
   if (/\b(?:cjson|json)\b/i.test(lower)) deps.push("cjson");
   if (/\b(?:lpeg|peg|parsing|grammar)\b/i.test(lower)) deps.push("lpeg");
@@ -48,8 +64,17 @@ function detectLuaProject(msg: string): LuaConfig {
   return { name, type, framework, deps: [...new Set(deps)] };
 }
 
-interface GenFile { path: string; content: string; needsLlm: boolean; }
-export interface LuaProjectResult { config: LuaConfig; files: GenFile[]; projectPath: string; prompt: string; }
+interface GenFile {
+  path: string;
+  content: string;
+  needsLlm: boolean;
+}
+export interface LuaProjectResult {
+  config: LuaConfig;
+  files: GenFile[];
+  projectPath: string;
+  prompt: string;
+}
 
 export function createLuaProject(userRequest: string, cwd: string): LuaProjectResult {
   const cfg = detectLuaProject(userRequest);
@@ -57,7 +82,9 @@ export function createLuaProject(userRequest: string, cwd: string): LuaProjectRe
   const snake = cfg.name.replace(/-/g, "_");
 
   // Rockspec
-  files.push({ path: `${snake}-0.1.0-1.rockspec`, content: `package = "${snake}"
+  files.push({
+    path: `${snake}-0.1.0-1.rockspec`,
+    content: `package = "${snake}"
 version = "0.1.0-1"
 source = {
   url = "git+https://github.com/user/${snake}.git",
@@ -69,7 +96,7 @@ description = {
 }
 dependencies = {
   "lua >= 5.1",
-${cfg.deps.map(d => `  "${d}",`).join("\n")}
+${cfg.deps.map((d) => `  "${d}",`).join("\n")}
 }
 build = {
   type = "builtin",
@@ -77,20 +104,28 @@ build = {
     ["${snake}"] = "src/${snake}/init.lua",
   },
 }
-`, needsLlm: false });
+`,
+    needsLlm: false,
+  });
 
   // Main code per type
   if (cfg.type === "game" && cfg.framework === "love2d") {
-    files.push({ path: "conf.lua", content: `function love.conf(t)
+    files.push({
+      path: "conf.lua",
+      content: `function love.conf(t)
   t.title = "${cfg.name}"
   t.version = "11.5"
   t.window.width = 800
   t.window.height = 600
   t.window.resizable = true
 end
-`, needsLlm: false });
+`,
+      needsLlm: false,
+    });
 
-    files.push({ path: "main.lua", content: `-- ${cfg.name} -- Love2D game
+    files.push({
+      path: "main.lua",
+      content: `-- ${cfg.name} -- Love2D game
 
 local player = { x = 400, y = 300, speed = 200 }
 
@@ -116,10 +151,13 @@ function love.draw()
 
   -- TODO: add rendering
 end
-`, needsLlm: true });
-
+`,
+      needsLlm: true,
+    });
   } else if (cfg.type === "neovim") {
-    files.push({ path: `lua/${snake}/init.lua`, content: `-- ${cfg.name} -- Neovim plugin
+    files.push({
+      path: `lua/${snake}/init.lua`,
+      content: `-- ${cfg.name} -- Neovim plugin
 
 local M = {}
 
@@ -145,19 +183,26 @@ function M.run(input)
 end
 
 return M
-`, needsLlm: true });
+`,
+      needsLlm: true,
+    });
 
-    files.push({ path: `plugin/${snake}.vim`, content: `" ${cfg.name} -- Neovim plugin loader
+    files.push({
+      path: `plugin/${snake}.vim`,
+      content: `" ${cfg.name} -- Neovim plugin loader
 if exists('g:loaded_${snake}')
   finish
 endif
 let g:loaded_${snake} = 1
 
 lua require('${snake}').setup()
-`, needsLlm: false });
-
+`,
+      needsLlm: false,
+    });
   } else if (cfg.type === "roblox") {
-    files.push({ path: "src/init.lua", content: `-- ${cfg.name} -- Roblox module
+    files.push({
+      path: "src/init.lua",
+      content: `-- ${cfg.name} -- Roblox module
 
 local ${cap(cfg.name)} = {}
 ${cap(cfg.name)}.__index = ${cap(cfg.name)}
@@ -180,11 +225,14 @@ function ${cap(cfg.name)}:Start()
 end
 
 return ${cap(cfg.name)}
-`, needsLlm: true });
-
+`,
+      needsLlm: true,
+    });
   } else if (cfg.type === "server") {
     if (cfg.framework === "lapis") {
-      files.push({ path: "app.lua", content: `local lapis = require("lapis")
+      files.push({
+        path: "app.lua",
+        content: `local lapis = require("lapis")
 local app = lapis.Application()
 
 app:get("/", function(self)
@@ -206,9 +254,13 @@ app:post("/api/items", function(self)
 end)
 
 return app
-`, needsLlm: true });
+`,
+        needsLlm: true,
+      });
 
-      files.push({ path: "config.lua", content: `local config = require("lapis.config")
+      files.push({
+        path: "config.lua",
+        content: `local config = require("lapis.config")
 
 config("development", function()
   port(10080)
@@ -218,10 +270,13 @@ config("production", function()
   port(10080)
   code_cache("on")
 end)
-`, needsLlm: false });
-
+`,
+        needsLlm: false,
+      });
     } else {
-      files.push({ path: "app.lua", content: `-- ${cfg.name} -- OpenResty server
+      files.push({
+        path: "app.lua",
+        content: `-- ${cfg.name} -- OpenResty server
 
 local cjson = require("cjson")
 
@@ -240,9 +295,13 @@ end
 -- TODO: add handlers
 
 return _M
-`, needsLlm: true });
+`,
+        needsLlm: true,
+      });
 
-      files.push({ path: "nginx.conf", content: `worker_processes 1;
+      files.push({
+        path: "nginx.conf",
+        content: `worker_processes 1;
 
 events {
   worker_connections 1024;
@@ -267,11 +326,14 @@ http {
     }
   }
 }
-`, needsLlm: false });
+`,
+        needsLlm: false,
+      });
     }
-
   } else if (cfg.type === "library") {
-    files.push({ path: `src/${snake}/init.lua`, content: `-- ${cfg.name} -- Lua library
+    files.push({
+      path: `src/${snake}/init.lua`,
+      content: `-- ${cfg.name} -- Lua library
 
 local ${cap(cfg.name)} = {}
 ${cap(cfg.name)}.__index = ${cap(cfg.name)}
@@ -297,10 +359,13 @@ function ${cap(cfg.name)}:process(data)
 end
 
 return ${cap(cfg.name)}
-`, needsLlm: true });
-
+`,
+      needsLlm: true,
+    });
   } else if (cfg.type === "embedded") {
-    files.push({ path: "main.lua", content: `-- ${cfg.name} -- Embedded Lua script
+    files.push({
+      path: "main.lua",
+      content: `-- ${cfg.name} -- Embedded Lua script
 
 local config = {
   pin = 4,
@@ -323,11 +388,14 @@ while true do
   loop()
   -- TODO: replace with platform sleep
 end
-`, needsLlm: true });
-
+`,
+      needsLlm: true,
+    });
   } else {
     // script (default)
-    files.push({ path: "main.lua", content: `-- ${cfg.name} -- Lua script
+    files.push({
+      path: "main.lua",
+      content: `-- ${cfg.name} -- Lua script
 
 local function parse_args(args)
   local opts = { verbose = false }
@@ -361,29 +429,49 @@ local function main(args)
 end
 
 main(arg)
-`, needsLlm: true });
+`,
+      needsLlm: true,
+    });
   }
 
   // Busted tests
-  files.push({ path: "spec/main_spec.lua", content: `describe("${cfg.name}", function()
+  files.push({
+    path: "spec/main_spec.lua",
+    content: `describe("${cfg.name}", function()
   it("works", function()
     assert.is_true(true)
   end)
 
   -- TODO: add tests
 end)
-`, needsLlm: true });
+`,
+    needsLlm: true,
+  });
 
   // .luacheckrc
-  files.push({ path: ".luacheckrc", content: `std = "lua51+lua52+lua53"
+  files.push({
+    path: ".luacheckrc",
+    content: `std = "lua51+lua52+lua53"
 ${cfg.type === "game" ? 'globals = { "love" }\n' : ""}${cfg.type === "neovim" ? 'read_globals = { "vim" }\n' : ""}${cfg.type === "roblox" ? 'read_globals = { "game", "script", "workspace", "Instance" }\n' : ""}max_line_length = 120
 ignore = { "212" }
-`, needsLlm: false });
+`,
+    needsLlm: false,
+  });
 
   // Makefile
-  const runCmd = cfg.type === "game" ? "\tlove ." : cfg.type === "server" && cfg.framework === "lapis" ? "\tlapis server" : cfg.type === "server" ? "\topenresty -p . -c nginx.conf" : "\tlua main.lua";
-  const lintTarget = cfg.type === "game" || cfg.type === "script" || cfg.type === "embedded" ? "main.lua" : "src/";
-  files.push({ path: "Makefile", content: `.PHONY: test lint run install
+  const runCmd =
+    cfg.type === "game"
+      ? "\tlove ."
+      : cfg.type === "server" && cfg.framework === "lapis"
+        ? "\tlapis server"
+        : cfg.type === "server"
+          ? "\topenresty -p . -c nginx.conf"
+          : "\tlua main.lua";
+  const lintTarget =
+    cfg.type === "game" || cfg.type === "script" || cfg.type === "embedded" ? "main.lua" : "src/";
+  files.push({
+    path: "Makefile",
+    content: `.PHONY: test lint run install
 
 test:
 \tbusted spec/
@@ -396,17 +484,41 @@ ${runCmd}
 
 install:
 \tluarocks install --only-deps ${snake}-0.1.0-1.rockspec
-`, needsLlm: false });
+`,
+    needsLlm: false,
+  });
 
   // Extras
-  files.push({ path: ".gitignore", content: `*.rock\n*.src.rock\nluarocks/\n.luarocks/\nlua_modules/\n.env\n*.o\n*.so\n`, needsLlm: false });
-  files.push({ path: "README.md", content: `# ${cfg.name}\n\nLua ${cfg.type}${cfg.framework ? " (" + cfg.framework + ")" : ""}. Built with KCode.\n\n\`\`\`bash\nluarocks install --only-deps ${snake}-0.1.0-1.rockspec\nmake run\nmake test\n\`\`\`\n\n*Astrolexis.space -- Kulvex Code*\n`, needsLlm: false });
+  files.push({
+    path: ".gitignore",
+    content: `*.rock\n*.src.rock\nluarocks/\n.luarocks/\nlua_modules/\n.env\n*.o\n*.so\n`,
+    needsLlm: false,
+  });
+  files.push({
+    path: "README.md",
+    content: `# ${cfg.name}\n\nLua ${cfg.type}${cfg.framework ? " (" + cfg.framework + ")" : ""}. Built with KCode.\n\n\`\`\`bash\nluarocks install --only-deps ${snake}-0.1.0-1.rockspec\nmake run\nmake test\n\`\`\`\n\n*Astrolexis.space -- Kulvex Code*\n`,
+    needsLlm: false,
+  });
 
   const projectPath = join(cwd, cfg.name);
-  for (const f of files) { const p = join(projectPath, f.path); mkdirSync(dirname(p), { recursive: true }); writeFileSync(p, f.content); }
+  for (const f of files) {
+    const p = join(projectPath, f.path);
+    mkdirSync(dirname(p), { recursive: true });
+    writeFileSync(p, f.content);
+  }
 
-  const m = files.filter(f => !f.needsLlm).length;
-  return { config: cfg, files, projectPath, prompt: `Implement Lua ${cfg.type}${cfg.framework ? " (" + cfg.framework + ")" : ""}. ${m} files machine. USER: "${userRequest}"` };
+  const m = files.filter((f) => !f.needsLlm).length;
+  return {
+    config: cfg,
+    files,
+    projectPath,
+    prompt: `Implement Lua ${cfg.type}${cfg.framework ? " (" + cfg.framework + ")" : ""}. ${m} files machine. USER: "${userRequest}"`,
+  };
 }
 
-function cap(s: string): string { return s.split(/[-_]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(""); }
+function cap(s: string): string {
+  return s
+    .split(/[-_]/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join("");
+}

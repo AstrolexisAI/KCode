@@ -1,8 +1,8 @@
 // KCode - PHP AST patterns tests (v2.10.349)
 
 import { describe, expect, it } from "bun:test";
-import { _resetAstRunnerForTest, runAstPatterns } from "./runner";
 import { PHP_AST_PATTERNS } from "./php-patterns";
+import { _resetAstRunnerForTest, runAstPatterns } from "./runner";
 
 function gateOnGrammar<T>(stats: { grammar_loaded: boolean }[], thunk: () => T): T | undefined {
   if (stats.every((s) => !s.grammar_loaded)) return undefined;
@@ -12,7 +12,11 @@ function gateOnGrammar<T>(stats: { grammar_loaded: boolean }[], thunk: () => T):
 describe("php-ast-001 eval-of-parameter", () => {
   it("flags eval($p) when $p is a parameter", async () => {
     _resetAstRunnerForTest();
-    const r = await runAstPatterns(PHP_AST_PATTERNS, "/tmp/a.php", `<?php function f($p) { eval($p); }`);
+    const r = await runAstPatterns(
+      PHP_AST_PATTERNS,
+      "/tmp/a.php",
+      `<?php function f($p) { eval($p); }`,
+    );
     gateOnGrammar(r.stats, () => {
       const hits = r.candidates.filter((c) => c.pattern_id === "php-ast-001-eval-of-parameter");
       expect(hits.length).toBe(1);
@@ -22,7 +26,11 @@ describe("php-ast-001 eval-of-parameter", () => {
 
   it("flags assert($p) (string-form RCE in PHP <8)", async () => {
     _resetAstRunnerForTest();
-    const r = await runAstPatterns(PHP_AST_PATTERNS, "/tmp/a.php", `<?php function f($p) { assert($p); }`);
+    const r = await runAstPatterns(
+      PHP_AST_PATTERNS,
+      "/tmp/a.php",
+      `<?php function f($p) { assert($p); }`,
+    );
     gateOnGrammar(r.stats, () => {
       const hits = r.candidates.filter((c) => c.pattern_id === "php-ast-001-eval-of-parameter");
       expect(hits.length).toBe(1);
@@ -78,7 +86,11 @@ function h($p) { pcntl_exec($p); }
 
   it("does NOT flag system(literal)", async () => {
     _resetAstRunnerForTest();
-    const r = await runAstPatterns(PHP_AST_PATTERNS, "/tmp/a.php", `<?php function f() { system("ls"); }`);
+    const r = await runAstPatterns(
+      PHP_AST_PATTERNS,
+      "/tmp/a.php",
+      `<?php function f() { system("ls"); }`,
+    );
     gateOnGrammar(r.stats, () => {
       const hits = r.candidates.filter((c) => c.pattern_id === "php-ast-002-shell-of-parameter");
       expect(hits.length).toBe(0);

@@ -71,7 +71,8 @@ export const NPM_ADVISORIES: AdvisoryRecord[] = [
     package: "event-stream",
     affected: ">=3.3.6 <=4.0.1",
     severity: "critical",
-    summary: "event-stream@3.3.6 shipped flatmap-stream containing a credential-stealing payload (Copay wallet). Any project that pinned to 3.3.6 or higher is compromised.",
+    summary:
+      "event-stream@3.3.6 shipped flatmap-stream containing a credential-stealing payload (Copay wallet). Any project that pinned to 3.3.6 or higher is compromised.",
     cwe: "CWE-506",
     url: "https://github.com/advisories/GHSA-mh6f-8j2x-4483",
     published: "2018-11-26",
@@ -82,7 +83,8 @@ export const NPM_ADVISORIES: AdvisoryRecord[] = [
     package: "ua-parser-js",
     affected: ">=0.7.29 <0.7.30 || >=0.8.0 <0.8.1 || >=1.0.0 <1.0.1",
     severity: "critical",
-    summary: "ua-parser-js 0.7.29, 0.8.0, 1.0.0 shipped a cryptominer + credential-exfiltration payload. Maintainer's npm account was compromised.",
+    summary:
+      "ua-parser-js 0.7.29, 0.8.0, 1.0.0 shipped a cryptominer + credential-exfiltration payload. Maintainer's npm account was compromised.",
     cwe: "CWE-506",
     url: "https://github.com/advisories/GHSA-pjwm-rvh2-c87w",
     published: "2021-10-22",
@@ -93,7 +95,8 @@ export const NPM_ADVISORIES: AdvisoryRecord[] = [
     package: "node-ipc",
     affected: ">=10.1.1 <=10.1.3",
     severity: "critical",
-    summary: "node-ipc 10.1.1-10.1.3 shipped 'protestware' that deleted files on machines geolocated to Russia/Belarus. Any package depending on node-ipc transitively was affected.",
+    summary:
+      "node-ipc 10.1.1-10.1.3 shipped 'protestware' that deleted files on machines geolocated to Russia/Belarus. Any package depending on node-ipc transitively was affected.",
     cwe: "CWE-506",
     url: "https://github.com/advisories/GHSA-97m3-w2cp-4xx6",
     published: "2022-03-17",
@@ -104,7 +107,8 @@ export const NPM_ADVISORIES: AdvisoryRecord[] = [
     package: "eslint-scope",
     affected: ">=3.7.2 <3.7.3",
     severity: "critical",
-    summary: "eslint-scope 3.7.2 shipped credential-stealing code targeting npm tokens. The token was used to publish further compromised packages.",
+    summary:
+      "eslint-scope 3.7.2 shipped credential-stealing code targeting npm tokens. The token was used to publish further compromised packages.",
     cwe: "CWE-506",
     url: "https://github.com/advisories/GHSA-p9pc-299p-vxgp",
     published: "2018-07-12",
@@ -115,7 +119,8 @@ export const NPM_ADVISORIES: AdvisoryRecord[] = [
     package: "coa",
     affected: ">=2.0.3 <=2.1.3",
     severity: "critical",
-    summary: "coa 2.0.3+ shipped a cryptominer + credential exfiltrator. Affected millions of installs because of transitive depth (react-scripts pulled it).",
+    summary:
+      "coa 2.0.3+ shipped a cryptominer + credential exfiltrator. Affected millions of installs because of transitive depth (react-scripts pulled it).",
     cwe: "CWE-506",
     url: "https://github.com/advisories/GHSA-73qr-pfmq-6rp8",
     published: "2021-11-04",
@@ -126,7 +131,8 @@ export const NPM_ADVISORIES: AdvisoryRecord[] = [
     package: "rc",
     affected: ">=1.2.9 <1.3.0 || >=1.3.9 <1.4.0 || >=2.3.9 <2.4.0",
     severity: "critical",
-    summary: "rc 1.2.9, 1.3.9, 2.3.9 shipped the same coinminer payload as coa@2.0.3 — same compromised account.",
+    summary:
+      "rc 1.2.9, 1.3.9, 2.3.9 shipped the same coinminer payload as coa@2.0.3 — same compromised account.",
     cwe: "CWE-506",
     url: "https://github.com/advisories/GHSA-g2q5-5433-rhrf",
     published: "2021-11-04",
@@ -137,7 +143,8 @@ export const NPM_ADVISORIES: AdvisoryRecord[] = [
     package: "minimist",
     affected: "<0.2.4",
     severity: "high",
-    summary: "Prototype pollution via __proto__ in minimist <0.2.4. Reachable from many transitive deps.",
+    summary:
+      "Prototype pollution via __proto__ in minimist <0.2.4. Reachable from many transitive deps.",
     cwe: "CWE-1321",
     url: "https://github.com/advisories/GHSA-xvch-5gv4-984h",
     published: "2020-03-11",
@@ -148,7 +155,8 @@ export const NPM_ADVISORIES: AdvisoryRecord[] = [
     package: "next",
     affected: ">=13.5.1 <14.2.7",
     severity: "high",
-    summary: "Next.js cache poisoning via Server-Side Render (SSR) — attacker-controlled cache keys allowed cross-user data leak.",
+    summary:
+      "Next.js cache poisoning via Server-Side Render (SSR) — attacker-controlled cache keys allowed cross-user data leak.",
     cwe: "CWE-444",
     url: "https://github.com/advisories/GHSA-gp8f-8m3g-qvj9",
     published: "2024-09-17",
@@ -159,7 +167,8 @@ export const NPM_ADVISORIES: AdvisoryRecord[] = [
     package: "ip",
     affected: "<=2.0.0",
     severity: "high",
-    summary: "ip.isPublic() / ip.isPrivate() incorrectly classified hex/octal IP literals — SSRF bypass when the function gates outbound requests.",
+    summary:
+      "ip.isPublic() / ip.isPrivate() incorrectly classified hex/octal IP literals — SSRF bypass when the function gates outbound requests.",
     cwe: "CWE-918",
     url: "https://github.com/advisories/GHSA-2p57-rm9w-gvfp",
     published: "2024-04-07",
@@ -170,7 +179,8 @@ export const NPM_ADVISORIES: AdvisoryRecord[] = [
     package: "semver",
     affected: ">=7.0.0 <7.5.2",
     severity: "high",
-    summary: "ReDoS in semver < 7.5.2 via crafted semver range strings. Reachable from any code that parses semver from user input.",
+    summary:
+      "ReDoS in semver < 7.5.2 via crafted semver range strings. Reachable from any code that parses semver from user input.",
     cwe: "CWE-1333",
     url: "https://github.com/advisories/GHSA-c2qf-rxjj-qqgw",
     published: "2023-06-21",
@@ -181,7 +191,8 @@ export const NPM_ADVISORIES: AdvisoryRecord[] = [
     package: "tj-actions/changed-files",
     affected: ">=1.0.0 <46.0.1",
     severity: "critical",
-    summary: "tj-actions/changed-files supply-chain compromise (March 2025) — every workflow that used the action without a SHA pin executed attacker code with full secrets scope.",
+    summary:
+      "tj-actions/changed-files supply-chain compromise (March 2025) — every workflow that used the action without a SHA pin executed attacker code with full secrets scope.",
     cwe: "CWE-829",
     url: "https://github.com/advisories/GHSA-mrrh-fwg8-r2c3",
     published: "2025-03-15",
@@ -205,7 +216,10 @@ export const NPM_ADVISORIES: AdvisoryRecord[] = [
 export function matchesRange(version: string, range: string): boolean {
   const v = stripPrefix(version);
   if (!v) return false;
-  const disjuncts = range.split("||").map((d) => d.trim()).filter(Boolean);
+  const disjuncts = range
+    .split("||")
+    .map((d) => d.trim())
+    .filter(Boolean);
   for (const d of disjuncts) {
     if (matchesAndedRange(v, d)) return true;
   }
@@ -228,12 +242,18 @@ function matchesComparator(version: string, comp: string): boolean {
   const target = stripPrefix(m[2]!);
   const cmp = compareVersions(version, target);
   switch (op) {
-    case "<": return cmp < 0;
-    case "<=": return cmp <= 0;
-    case ">": return cmp > 0;
-    case ">=": return cmp >= 0;
-    case "=": return cmp === 0;
-    default: return false;
+    case "<":
+      return cmp < 0;
+    case "<=":
+      return cmp <= 0;
+    case ">":
+      return cmp > 0;
+    case ">=":
+      return cmp >= 0;
+    case "=":
+      return cmp === 0;
+    default:
+      return false;
   }
 }
 
@@ -329,9 +349,7 @@ export function scanDependencies(
   for (const m of manifests) {
     const deps = parsePackageJson(m);
     for (const d of deps) {
-      const matches = advisories.filter(
-        (a) => a.ecosystem === d.ecosystem && a.package === d.name,
-      );
+      const matches = advisories.filter((a) => a.ecosystem === d.ecosystem && a.package === d.name);
       for (const adv of matches) {
         if (!matchesRange(d.versionSpec, adv.affected)) continue;
         findings.push({

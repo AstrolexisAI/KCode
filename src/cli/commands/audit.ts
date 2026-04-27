@@ -119,249 +119,253 @@ export function registerAuditCommand(program: Command): void {
         "P2.4 slice 1 (v2.10.392+). Currently npm-only; future slices add pip / cargo / go / etc.",
       false,
     )
-    .action(async (path: string, opts: {
-      output?: string;
-      model?: string;
-      apiBase?: string;
-      apiKey?: string;
-      fallbackModel?: string;
-      fallbackApiBase?: string;
-      fallbackApiKey?: string;
-      maxFiles: string;
-      skipVerify: boolean;
-      since?: string;
-      pack?: string;
-      json: boolean;
-      sarif: boolean;
-      ci: boolean;
-      exploits: boolean;
-      deps: boolean;
-    }) => {
-      const projectRoot = pathResolve(path);
-      const outputPath = opts.output ?? pathResolve(projectRoot, "AUDIT_REPORT.md");
-      // Default is unlimited (Number.MAX_SAFE_INTEGER). Users can cap
-      // with --max-files N when they explicitly want truncation.
-      const parsedMaxFiles = parseInt(opts.maxFiles, 10);
-      const maxFiles =
-        !Number.isFinite(parsedMaxFiles) || parsedMaxFiles <= 0
-          ? Number.MAX_SAFE_INTEGER
-          : parsedMaxFiles;
+    .action(
+      async (
+        path: string,
+        opts: {
+          output?: string;
+          model?: string;
+          apiBase?: string;
+          apiKey?: string;
+          fallbackModel?: string;
+          fallbackApiBase?: string;
+          fallbackApiKey?: string;
+          maxFiles: string;
+          skipVerify: boolean;
+          since?: string;
+          pack?: string;
+          json: boolean;
+          sarif: boolean;
+          ci: boolean;
+          exploits: boolean;
+          deps: boolean;
+        },
+      ) => {
+        const projectRoot = pathResolve(path);
+        const outputPath = opts.output ?? pathResolve(projectRoot, "AUDIT_REPORT.md");
+        // Default is unlimited (Number.MAX_SAFE_INTEGER). Users can cap
+        // with --max-files N when they explicitly want truncation.
+        const parsedMaxFiles = parseInt(opts.maxFiles, 10);
+        const maxFiles =
+          !Number.isFinite(parsedMaxFiles) || parsedMaxFiles <= 0
+            ? Number.MAX_SAFE_INTEGER
+            : parsedMaxFiles;
 
-      // v2.10.353 — --ci sets opinionated defaults for PR-gate
-      // pipelines. Each can still be overridden by an explicit flag
-      // (commander already preserves user values that come AFTER the
-      // option string). What --ci adds:
-      //   1. Auto-detect a diff base when --since is omitted
-      //   2. Default --skip-verify to true (CI usually has no model)
-      //   3. Default --json + --sarif (so the CI can upload artifacts)
-      //   4. Suppress per-candidate progress (noisy in CI logs)
-      //   5. Exit code 1 when actionable findings remain
-      if (opts.ci) {
-        if (!opts.since) {
-          opts.since = await detectDefaultDiffBase(projectRoot);
+        // v2.10.353 — --ci sets opinionated defaults for PR-gate
+        // pipelines. Each can still be overridden by an explicit flag
+        // (commander already preserves user values that come AFTER the
+        // option string). What --ci adds:
+        //   1. Auto-detect a diff base when --since is omitted
+        //   2. Default --skip-verify to true (CI usually has no model)
+        //   3. Default --json + --sarif (so the CI can upload artifacts)
+        //   4. Suppress per-candidate progress (noisy in CI logs)
+        //   5. Exit code 1 when actionable findings remain
+        if (opts.ci) {
+          if (!opts.since) {
+            opts.since = await detectDefaultDiffBase(projectRoot);
+          }
+          // Defaults — only apply when user didn't explicitly set them.
+          // The flags are boolean so we can't distinguish "default" from
+          // "explicit false"; but commander gives us false for both. We
+          // default to true unconditionally — the user can opt back out
+          // with `--no-ci` (or skip --ci entirely).
+          if (!opts.skipVerify && !opts.model && !opts.apiBase) {
+            opts.skipVerify = true;
+          }
+          opts.json = true;
+          opts.sarif = true;
         }
-        // Defaults — only apply when user didn't explicitly set them.
-        // The flags are boolean so we can't distinguish "default" from
-        // "explicit false"; but commander gives us false for both. We
-        // default to true unconditionally — the user can opt back out
-        // with `--no-ci` (or skip --ci entirely).
-        if (!opts.skipVerify && !opts.model && !opts.apiBase) {
-          opts.skipVerify = true;
-        }
-        opts.json = true;
-        opts.sarif = true;
-      }
 
-      console.log("");
-      console.log(`${ICONS.phase} KCode Audit Engine`);
-      console.log(`  Project:  ${projectRoot}`);
-      console.log(`  Output:   ${outputPath}`);
-      if (opts.ci) {
-        console.log(`  Mode:     CI gate (--since ${opts.since ?? "<none>"}, json+sarif, exit-on-finding)`);
-      }
-      console.log("");
-
-      // Auto-skip verification for machine-generated projects. The web engine
-      // drops a .kcode-generated marker at the project root; when present we
-      // know the tree is scaffolded from audited templates, so per-candidate
-      // LLM verification is wasted time (it took 3h+ on local models for a
-      // clean Next.js scaffold).
-      if (!opts.skipVerify && existsSync(pathJoin(projectRoot, ".kcode-generated"))) {
-        opts.skipVerify = true;
-        console.log("  \x1b[33m.kcode-generated detected — auto-enabling --skip-verify\x1b[0m");
-      }
-
-      // Resolve LLM config from settings (unless --skip-verify)
-      let llmCallback: (prompt: string) => Promise<string>;
-      let fallbackCallback: ((prompt: string) => Promise<string>) | undefined;
-      if (opts.skipVerify) {
-        console.log("  \x1b[33m--skip-verify: model verification disabled\x1b[0m");
         console.log("");
-        llmCallback = async () =>
-          JSON.stringify({
-            verdict: "confirmed",
-            reasoning: "static-only mode",
-            evidence: { sink: "static-only bypass" },
-          });
-      } else {
-        const settings = await loadSettings(projectRoot);
-        // Pick a default provider based on which API key is actually
-        // present in the environment. Prior to v2.10.130 this hardcoded
-        // Anthropic; the branding-cleanup flip to OpenAI broke users
-        // who had only `ANTHROPIC_API_KEY` set and ran `kcode audit`
-        // with no flags. Now the provider follows the key.
-        const hasOpenAi = !!(opts.apiKey ?? settings.apiKey ?? process.env.OPENAI_API_KEY);
-        const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
-        const defaultModel =
-          hasOpenAi || !hasAnthropic ? "gpt-4o" : "claude-sonnet-4-6";
-        const defaultBase =
-          hasOpenAi || !hasAnthropic
-            ? "https://api.openai.com/v1"
-            : "https://api.anthropic.com/v1";
-        const defaultKey = hasOpenAi
-          ? opts.apiKey ?? settings.apiKey ?? process.env.OPENAI_API_KEY
-          : process.env.ANTHROPIC_API_KEY;
-        llmCallback = makeAuditLlmCallback({
-          model: opts.model ?? settings.model ?? defaultModel,
-          apiBase: opts.apiBase ?? settings.apiBase ?? defaultBase,
-          apiKey: opts.apiKey ?? settings.apiKey ?? defaultKey,
-        });
-        if (opts.fallbackModel) {
-          fallbackCallback = makeAuditLlmCallback({
-            model: opts.fallbackModel,
-            apiBase: opts.fallbackApiBase ?? defaultBase,
-            apiKey: opts.fallbackApiKey,
-          });
+        console.log(`${ICONS.phase} KCode Audit Engine`);
+        console.log(`  Project:  ${projectRoot}`);
+        console.log(`  Output:   ${outputPath}`);
+        if (opts.ci) {
           console.log(
-            `  \x1b[36mHybrid mode: primary ${opts.model ?? settings.model}, fallback ${opts.fallbackModel}\x1b[0m`,
+            `  Mode:     CI gate (--since ${opts.since ?? "<none>"}, json+sarif, exit-on-finding)`,
+          );
+        }
+        console.log("");
+
+        // Auto-skip verification for machine-generated projects. The web engine
+        // drops a .kcode-generated marker at the project root; when present we
+        // know the tree is scaffolded from audited templates, so per-candidate
+        // LLM verification is wasted time (it took 3h+ on local models for a
+        // clean Next.js scaffold).
+        if (!opts.skipVerify && existsSync(pathJoin(projectRoot, ".kcode-generated"))) {
+          opts.skipVerify = true;
+          console.log("  \x1b[33m.kcode-generated detected — auto-enabling --skip-verify\x1b[0m");
+        }
+
+        // Resolve LLM config from settings (unless --skip-verify)
+        let llmCallback: (prompt: string) => Promise<string>;
+        let fallbackCallback: ((prompt: string) => Promise<string>) | undefined;
+        if (opts.skipVerify) {
+          console.log("  \x1b[33m--skip-verify: model verification disabled\x1b[0m");
+          console.log("");
+          llmCallback = async () =>
+            JSON.stringify({
+              verdict: "confirmed",
+              reasoning: "static-only mode",
+              evidence: { sink: "static-only bypass" },
+            });
+        } else {
+          const settings = await loadSettings(projectRoot);
+          // Pick a default provider based on which API key is actually
+          // present in the environment. Prior to v2.10.130 this hardcoded
+          // Anthropic; the branding-cleanup flip to OpenAI broke users
+          // who had only `ANTHROPIC_API_KEY` set and ran `kcode audit`
+          // with no flags. Now the provider follows the key.
+          const hasOpenAi = !!(opts.apiKey ?? settings.apiKey ?? process.env.OPENAI_API_KEY);
+          const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
+          const defaultModel = hasOpenAi || !hasAnthropic ? "gpt-4o" : "claude-sonnet-4-6";
+          const defaultBase =
+            hasOpenAi || !hasAnthropic
+              ? "https://api.openai.com/v1"
+              : "https://api.anthropic.com/v1";
+          const defaultKey = hasOpenAi
+            ? (opts.apiKey ?? settings.apiKey ?? process.env.OPENAI_API_KEY)
+            : process.env.ANTHROPIC_API_KEY;
+          llmCallback = makeAuditLlmCallback({
+            model: opts.model ?? settings.model ?? defaultModel,
+            apiBase: opts.apiBase ?? settings.apiBase ?? defaultBase,
+            apiKey: opts.apiKey ?? settings.apiKey ?? defaultKey,
+          });
+          if (opts.fallbackModel) {
+            fallbackCallback = makeAuditLlmCallback({
+              model: opts.fallbackModel,
+              apiBase: opts.fallbackApiBase ?? defaultBase,
+              apiKey: opts.fallbackApiKey,
+            });
+            console.log(
+              `  \x1b[36mHybrid mode: primary ${opts.model ?? settings.model}, fallback ${opts.fallbackModel}\x1b[0m`,
+            );
+            console.log("");
+          }
+        }
+
+        // Run pipeline with progress output
+        let lastPhase = "";
+        let verifiedCount = 0;
+        // F9 (v2.10.370) — validate --pack before passing through.
+        const validPacks = new Set(["web", "ai-ml", "cloud", "supply-chain", "embedded"]);
+        if (opts.pack && !validPacks.has(opts.pack)) {
+          console.error(
+            `  --pack must be one of: ${[...validPacks].join(", ")}. Got: "${opts.pack}".`,
+          );
+          process.exit(1);
+        }
+        const result = await runAudit({
+          projectRoot,
+          llmCallback,
+          fallbackCallback,
+          maxFiles,
+          skipVerification: opts.skipVerify,
+          generateExploits: opts.exploits,
+          includeDeps: opts.deps,
+          since: opts.since,
+          ...(opts.pack
+            ? { pack: opts.pack as "web" | "ai-ml" | "cloud" | "supply-chain" | "embedded" }
+            : {}),
+          onPhase: (phase, detail) => {
+            if (phase !== lastPhase) {
+              console.log(`${ICONS.phase} ${phase}${detail ? `: ${detail}` : "..."}`);
+              lastPhase = phase;
+            }
+          },
+          onCandidate: opts.ci
+            ? undefined // v2.10.353 — silence per-candidate noise in CI logs
+            : (cand, ver, i, total) => {
+                verifiedCount++;
+                const icon =
+                  ver.verdict === "confirmed"
+                    ? ICONS.confirmed
+                    : ver.verdict === "false_positive"
+                      ? ICONS.false_positive
+                      : ICONS.needs_context;
+                const rel = cand.file.replace(projectRoot + "/", "");
+                process.stdout.write(
+                  `\r  ${icon} [${verifiedCount}/${total}] ${cand.pattern_id} — ${rel}:${cand.line}          \n`,
+                );
+              },
+        });
+
+        // Write markdown report
+        const markdown = generateMarkdownReport(result);
+        writeFileSync(outputPath, markdown);
+        console.log("");
+        console.log(`${ICONS.phase} Report written: ${outputPath}`);
+
+        if (opts.json) {
+          const jsonPath = outputPath.replace(/\.md$/, ".json");
+          writeFileSync(jsonPath, JSON.stringify(result, null, 2));
+          console.log(`${ICONS.phase} JSON data:     ${jsonPath}`);
+        }
+
+        if (opts.sarif) {
+          const { buildSarif } = await import("../../core/audit-engine/sarif-exporter");
+          const { version } = await import("../../../package.json");
+          const sarifDoc = buildSarif(result, {
+            toolVersion: String(version),
+            projectRoot,
+          });
+          const sarifPath = outputPath.replace(/\.md$/, ".sarif");
+          writeFileSync(sarifPath, JSON.stringify(sarifDoc, null, 2));
+          console.log(`${ICONS.phase} SARIF report:  ${sarifPath}`);
+        }
+
+        console.log("");
+        const scannedLabel = result.coverage
+          ? `${result.files_scanned} / ${result.coverage.totalCandidateFiles}`
+          : String(result.files_scanned);
+        console.log(`  Files scanned:       ${scannedLabel}`);
+        console.log(`  Candidates found:    ${result.candidates_found}`);
+        console.log(`  \x1b[31mConfirmed findings:  ${result.confirmed_findings}\x1b[0m`);
+        console.log(`  False positives:     ${result.false_positives}`);
+        if ((result.needs_context ?? 0) > 0) {
+          console.log(
+            `  \x1b[33mUncertain (needs_context): ${result.needs_context}\x1b[0m — verifier couldn't decide`,
+          );
+        }
+        console.log(`  Duration:            ${(result.elapsed_ms / 1000).toFixed(1)}s`);
+        if (result.coverage?.truncated) {
+          const suggestion = Math.min(
+            result.coverage.totalCandidateFiles,
+            result.coverage.maxFiles * 4,
           );
           console.log("");
+          console.log(
+            `  \x1b[33m⚠ Coverage truncated: ${result.coverage.scannedFiles}/${result.coverage.totalCandidateFiles} ` +
+              `files scanned (${result.coverage.skippedByLimit} skipped, cap ${result.coverage.maxFiles} ` +
+              `from ${result.coverage.capSource}).\x1b[0m`,
+          );
+          console.log(`  \x1b[33m  Rerun with --max-files ${suggestion} for full coverage.\x1b[0m`);
         }
-      }
-
-      // Run pipeline with progress output
-      let lastPhase = "";
-      let verifiedCount = 0;
-      // F9 (v2.10.370) — validate --pack before passing through.
-      const validPacks = new Set(["web", "ai-ml", "cloud", "supply-chain", "embedded"]);
-      if (opts.pack && !validPacks.has(opts.pack)) {
-        console.error(
-          `  --pack must be one of: ${[...validPacks].join(", ")}. Got: "${opts.pack}".`,
-        );
-        process.exit(1);
-      }
-      const result = await runAudit({
-        projectRoot,
-        llmCallback,
-        fallbackCallback,
-        maxFiles,
-        skipVerification: opts.skipVerify,
-        generateExploits: opts.exploits,
-        includeDeps: opts.deps,
-        since: opts.since,
-        ...(opts.pack
-          ? { pack: opts.pack as "web" | "ai-ml" | "cloud" | "supply-chain" | "embedded" }
-          : {}),
-        onPhase: (phase, detail) => {
-          if (phase !== lastPhase) {
-            console.log(`${ICONS.phase} ${phase}${detail ? `: ${detail}` : "..."}`);
-            lastPhase = phase;
-          }
-        },
-        onCandidate: opts.ci
-          ? undefined  // v2.10.353 — silence per-candidate noise in CI logs
-          : (cand, ver, i, total) => {
-              verifiedCount++;
-              const icon =
-                ver.verdict === "confirmed"
-                  ? ICONS.confirmed
-                  : ver.verdict === "false_positive"
-                    ? ICONS.false_positive
-                    : ICONS.needs_context;
-              const rel = cand.file.replace(projectRoot + "/", "");
-              process.stdout.write(
-                `\r  ${icon} [${verifiedCount}/${total}] ${cand.pattern_id} — ${rel}:${cand.line}          \n`,
-              );
-            },
-      });
-
-      // Write markdown report
-      const markdown = generateMarkdownReport(result);
-      writeFileSync(outputPath, markdown);
-      console.log("");
-      console.log(`${ICONS.phase} Report written: ${outputPath}`);
-
-      if (opts.json) {
-        const jsonPath = outputPath.replace(/\.md$/, ".json");
-        writeFileSync(jsonPath, JSON.stringify(result, null, 2));
-        console.log(`${ICONS.phase} JSON data:     ${jsonPath}`);
-      }
-
-      if (opts.sarif) {
-        const { buildSarif } = await import("../../core/audit-engine/sarif-exporter");
-        const { version } = await import("../../../package.json");
-        const sarifDoc = buildSarif(result, {
-          toolVersion: String(version),
-          projectRoot,
-        });
-        const sarifPath = outputPath.replace(/\.md$/, ".sarif");
-        writeFileSync(sarifPath, JSON.stringify(sarifDoc, null, 2));
-        console.log(`${ICONS.phase} SARIF report:  ${sarifPath}`);
-      }
-
-      console.log("");
-      const scannedLabel = result.coverage
-        ? `${result.files_scanned} / ${result.coverage.totalCandidateFiles}`
-        : String(result.files_scanned);
-      console.log(`  Files scanned:       ${scannedLabel}`);
-      console.log(`  Candidates found:    ${result.candidates_found}`);
-      console.log(
-        `  \x1b[31mConfirmed findings:  ${result.confirmed_findings}\x1b[0m`,
-      );
-      console.log(`  False positives:     ${result.false_positives}`);
-      if ((result.needs_context ?? 0) > 0) {
-        console.log(
-          `  \x1b[33mUncertain (needs_context): ${result.needs_context}\x1b[0m — verifier couldn't decide`,
-        );
-      }
-      console.log(`  Duration:            ${(result.elapsed_ms / 1000).toFixed(1)}s`);
-      if (result.coverage?.truncated) {
-        const suggestion = Math.min(
-          result.coverage.totalCandidateFiles,
-          result.coverage.maxFiles * 4,
-        );
         console.log("");
-        console.log(
-          `  \x1b[33m⚠ Coverage truncated: ${result.coverage.scannedFiles}/${result.coverage.totalCandidateFiles} ` +
-            `files scanned (${result.coverage.skippedByLimit} skipped, cap ${result.coverage.maxFiles} ` +
-            `from ${result.coverage.capSource}).\x1b[0m`,
-        );
-        console.log(
-          `  \x1b[33m  Rerun with --max-files ${suggestion} for full coverage.\x1b[0m`,
-        );
-      }
-      console.log("");
 
-      // v2.10.353 — --ci sets the process exit code based on
-      // ACTIONABLE findings (excludes review_state ignored /
-      // demoted_fp). For a fresh scan with no review history, this
-      // equals confirmed_findings; for a re-run that has a prior
-      // review trail in the JSON, this respects the reviewer's
-      // decisions. Exit 1 signals "block the merge"; exit 0 is
-      // green.
-      if (opts.ci) {
-        const actionable = result.findings.filter(
-          (f) =>
-            (f as { review_state?: string }).review_state !== "ignored" &&
-            (f as { review_state?: string }).review_state !== "demoted_fp",
-        ).length;
-        if (actionable > 0) {
-          console.log(`\x1b[31m✗ CI gate: ${actionable} actionable finding${actionable === 1 ? "" : "s"} — failing build.\x1b[0m`);
-          process.exit(1);
-        } else {
-          console.log(`\x1b[32m✓ CI gate: no actionable findings.\x1b[0m`);
-          process.exit(0);
+        // v2.10.353 — --ci sets the process exit code based on
+        // ACTIONABLE findings (excludes review_state ignored /
+        // demoted_fp). For a fresh scan with no review history, this
+        // equals confirmed_findings; for a re-run that has a prior
+        // review trail in the JSON, this respects the reviewer's
+        // decisions. Exit 1 signals "block the merge"; exit 0 is
+        // green.
+        if (opts.ci) {
+          const actionable = result.findings.filter(
+            (f) =>
+              (f as { review_state?: string }).review_state !== "ignored" &&
+              (f as { review_state?: string }).review_state !== "demoted_fp",
+          ).length;
+          if (actionable > 0) {
+            console.log(
+              `\x1b[31m✗ CI gate: ${actionable} actionable finding${actionable === 1 ? "" : "s"} — failing build.\x1b[0m`,
+            );
+            process.exit(1);
+          } else {
+            console.log(`\x1b[32m✓ CI gate: no actionable findings.\x1b[0m`);
+            process.exit(0);
+          }
         }
-      }
-    });
+      },
+    );
 }

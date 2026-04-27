@@ -34,10 +34,7 @@ export const MARK_REGISTRY: MarkEntry[] = [
   },
   {
     mark: "mark6",
-    patterns: [
-      /(^|[-_. ])Qwen3\.5([-_. ]|$)/i,
-      /(^|[-_. ])Gemma[-_. ]?3[-_. ]?31[Bb]([-_. ]|$)/i,
-    ],
+    patterns: [/(^|[-_. ])Qwen3\.5([-_. ]|$)/i, /(^|[-_. ])Gemma[-_. ]?3[-_. ]?31[Bb]([-_. ]|$)/i],
     notes: "Qwen3.5 and Gemma 3 abliterated — previous generation",
   },
   {

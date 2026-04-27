@@ -149,7 +149,6 @@ export default function MessageList({
 
       {/* Live streaming Bash output */}
       {bashStreamOutput.length > 0 && <BashStreamDisplay output={bashStreamOutput} />}
-
     </Box>
   );
 }

@@ -20,10 +20,14 @@ export const grepDefinition: ToolDefinition = {
   input_schema: {
     type: "object",
     properties: {
-      pattern: { type: "string", description: "The regular expression pattern to search for in file contents" },
+      pattern: {
+        type: "string",
+        description: "The regular expression pattern to search for in file contents",
+      },
       path: {
         type: "string",
-        description: "File or directory to search in (rg PATH). Defaults to current working directory.",
+        description:
+          "File or directory to search in (rg PATH). Defaults to current working directory.",
       },
       glob: {
         type: "string",

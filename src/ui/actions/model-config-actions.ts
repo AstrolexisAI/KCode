@@ -704,14 +704,11 @@ export async function handleModelConfigAction(
       const tokens = (args ?? "").trim().split(/\s+/).filter(Boolean);
       const sub = tokens[0]?.toLowerCase() ?? "show";
 
-      const formatStatus = (
-        s: Awaited<ReturnType<typeof getAllStatuses>>[number],
-      ): string => {
+      const formatStatus = (s: Awaited<ReturnType<typeof getAllStatuses>>[number]): string => {
         const spent = `spent $${s.spent.toFixed(2)}`;
-        if (s.starting == null) return `  ${s.label.padEnd(14)} — ${spent} (no starting credit set)`;
-        const pct = s.fractionRemaining != null
-          ? `${Math.round(s.fractionRemaining * 100)}%`
-          : "—";
+        if (s.starting == null)
+          return `  ${s.label.padEnd(14)} — ${spent} (no starting credit set)`;
+        const pct = s.fractionRemaining != null ? `${Math.round(s.fractionRemaining * 100)}%` : "—";
         return `  ${s.label.padEnd(14)} — $${s.remaining!.toFixed(2)} / $${s.starting.toFixed(2)} left (${pct}), ${spent}`;
       };
 
@@ -772,7 +769,10 @@ export async function handleModelConfigAction(
             const n = Number(s);
             return n > 1 ? n / 100 : n; // accept "20" for 20%
           });
-        if (fractions.length === 0 || fractions.some((f) => !Number.isFinite(f) || f <= 0 || f >= 1)) {
+        if (
+          fractions.length === 0 ||
+          fractions.some((f) => !Number.isFinite(f) || f <= 0 || f >= 1)
+        ) {
           return "  Thresholds must be between 0 and 1 (or 0–100 as percentages).";
         }
         await setThresholds(fractions);
@@ -793,12 +793,15 @@ export async function handleModelConfigAction(
 
     case "multimodel": {
       // Toggle multi-model routing on/off
-      const { existsSync, readFileSync, writeFileSync } = require("node:fs") as typeof import("node:fs");
+      const { existsSync, readFileSync, writeFileSync } =
+        require("node:fs") as typeof import("node:fs");
       const settingsPath = kcodePath("settings.json");
       let settings: Record<string, unknown> = {};
       try {
         if (existsSync(settingsPath)) settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
 
       const current = settings.multimodel === true;
       const arg = args?.trim().toLowerCase();
@@ -823,7 +826,9 @@ export async function handleModelConfigAction(
         const { listModels } = await import("../../core/models.js");
         const models = await listModels();
         const LOCAL = /localhost|127\.0\.0\.1/;
-        const cloudWithTags = models.filter((m) => !LOCAL.test(m.baseUrl) && (m as unknown as Record<string,unknown>).tags);
+        const cloudWithTags = models.filter(
+          (m) => !LOCAL.test(m.baseUrl) && (m as unknown as Record<string, unknown>).tags,
+        );
         const local = models.find((m) => LOCAL.test(m.baseUrl));
         const lines = [
           "  ✅ Multi-model routing ENABLED",
@@ -832,7 +837,7 @@ export async function handleModelConfigAction(
           `  ${local ? `  🖥  Local: ${local.name} → chat, simple questions` : "  (no local model — cloud only)"}`,
         ];
         for (const m of cloudWithTags.slice(0, 6)) {
-          const tags: string[] = (m as unknown as Record<string,unknown>).tags as string[] ?? [];
+          const tags: string[] = ((m as unknown as Record<string, unknown>).tags as string[]) ?? [];
           lines.push(`  ☁  ${m.name} → ${tags.join(", ")}`);
         }
         lines.push("", "  Use /multimodel off to disable.");
@@ -863,7 +868,9 @@ export async function handleModelConfigAction(
             }
           }
           if (total === 0) {
-            lines.push("  No untested cloud models with valid API keys. Run `/benchmark --all` to re-test.");
+            lines.push(
+              "  No untested cloud models with valid API keys. Run `/benchmark --all` to re-test.",
+            );
           } else {
             lines.push("");
             lines.push("  Done. Reopen /model to see ✓ marks.");

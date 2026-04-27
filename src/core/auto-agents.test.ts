@@ -1,7 +1,7 @@
 // Tests for AutoAgentManager — plan evaluation + spawn orchestration
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { AutoAgentManager, type AgentStatus } from "./auto-agents";
 import { clearActivePlan, type Plan, type PlanStep, setActivePlanForTesting } from "../tools/plan";
+import { type AgentStatus, AutoAgentManager } from "./auto-agents";
 import type { KCodeConfig } from "./types";
 
 const mockConfig: KCodeConfig = {
@@ -48,22 +48,21 @@ function installPlan(plan: Plan | null): void {
 describe("AutoAgentManager — evaluate", () => {
   test("returns shouldSpawn=false when no active plan", async () => {
     const statuses: AgentStatus[] = [];
-    const mgr = new AutoAgentManager(
-      { cwd: "/tmp", model: "m", config: mockConfig },
-      (s) => {
-        statuses.push(...s);
-      },
-    );
+    const mgr = new AutoAgentManager({ cwd: "/tmp", model: "m", config: mockConfig }, (s) => {
+      statuses.push(...s);
+    });
     const result = await mgr.evaluate();
     expect(result.shouldSpawn).toBe(false);
     expect(result.steps).toEqual([]);
   });
 
   test("returns shouldSpawn=false when plan has fewer than minPendingSteps", async () => {
-    installPlan(makeMockPlan([
-      { id: "1", title: "Step 1", status: "pending" },
-      { id: "2", title: "Step 2", status: "pending" },
-    ]));
+    installPlan(
+      makeMockPlan([
+        { id: "1", title: "Step 1", status: "pending" },
+        { id: "2", title: "Step 2", status: "pending" },
+      ]),
+    );
     const mgr = new AutoAgentManager(
       { cwd: "/tmp", model: "m", config: mockConfig, minPendingSteps: 3 },
       () => {},
@@ -73,12 +72,14 @@ describe("AutoAgentManager — evaluate", () => {
   });
 
   test("returns shouldSpawn=true with steps when threshold reached", async () => {
-    installPlan(makeMockPlan([
-      { id: "1", title: "Fix bug A", status: "pending" },
-      { id: "2", title: "Add test B", status: "pending" },
-      { id: "3", title: "Refactor C", status: "pending" },
-      { id: "4", title: "Document D", status: "pending" },
-    ]));
+    installPlan(
+      makeMockPlan([
+        { id: "1", title: "Fix bug A", status: "pending" },
+        { id: "2", title: "Add test B", status: "pending" },
+        { id: "3", title: "Refactor C", status: "pending" },
+        { id: "4", title: "Document D", status: "pending" },
+      ]),
+    );
     const mgr = new AutoAgentManager(
       { cwd: "/tmp", model: "m", config: mockConfig, minPendingSteps: 3 },
       () => {},
@@ -90,14 +91,16 @@ describe("AutoAgentManager — evaluate", () => {
   });
 
   test("caps steps at maxAgents", async () => {
-    installPlan(makeMockPlan([
-      { id: "1", title: "A", status: "pending" },
-      { id: "2", title: "B", status: "pending" },
-      { id: "3", title: "C", status: "pending" },
-      { id: "4", title: "D", status: "pending" },
-      { id: "5", title: "E", status: "pending" },
-      { id: "6", title: "F", status: "pending" },
-    ]));
+    installPlan(
+      makeMockPlan([
+        { id: "1", title: "A", status: "pending" },
+        { id: "2", title: "B", status: "pending" },
+        { id: "3", title: "C", status: "pending" },
+        { id: "4", title: "D", status: "pending" },
+        { id: "5", title: "E", status: "pending" },
+        { id: "6", title: "F", status: "pending" },
+      ]),
+    );
     const mgr = new AutoAgentManager(
       { cwd: "/tmp", model: "m", config: mockConfig, minPendingSteps: 3, maxAgents: 2 },
       () => {},
@@ -107,12 +110,14 @@ describe("AutoAgentManager — evaluate", () => {
   });
 
   test("only counts pending steps (ignores done/in_progress)", async () => {
-    installPlan(makeMockPlan([
-      { id: "1", title: "A", status: "done" },
-      { id: "2", title: "B", status: "in_progress" },
-      { id: "3", title: "C", status: "pending" },
-      { id: "4", title: "D", status: "pending" },
-    ]));
+    installPlan(
+      makeMockPlan([
+        { id: "1", title: "A", status: "done" },
+        { id: "2", title: "B", status: "in_progress" },
+        { id: "3", title: "C", status: "pending" },
+        { id: "4", title: "D", status: "pending" },
+      ]),
+    );
     const mgr = new AutoAgentManager(
       { cwd: "/tmp", model: "m", config: mockConfig, minPendingSteps: 3 },
       () => {},
@@ -125,40 +130,30 @@ describe("AutoAgentManager — evaluate", () => {
 
 describe("AutoAgentManager — state", () => {
   test("starts inactive", () => {
-    const mgr = new AutoAgentManager(
-      { cwd: "/tmp", model: "m", config: mockConfig },
-      () => {},
-    );
+    const mgr = new AutoAgentManager({ cwd: "/tmp", model: "m", config: mockConfig }, () => {});
     expect(mgr.isActive()).toBe(false);
   });
 
   test("getStatuses returns empty array initially", () => {
-    const mgr = new AutoAgentManager(
-      { cwd: "/tmp", model: "m", config: mockConfig },
-      () => {},
-    );
+    const mgr = new AutoAgentManager({ cwd: "/tmp", model: "m", config: mockConfig }, () => {});
     expect(mgr.getStatuses()).toEqual([]);
   });
 
   test("getResults returns empty array when no agents completed", () => {
-    const mgr = new AutoAgentManager(
-      { cwd: "/tmp", model: "m", config: mockConfig },
-      () => {},
-    );
+    const mgr = new AutoAgentManager({ cwd: "/tmp", model: "m", config: mockConfig }, () => {});
     expect(mgr.getResults()).toEqual([]);
   });
 });
 
 describe("AutoAgentManager — config defaults", () => {
   test("uses default minPendingSteps of 3", async () => {
-    installPlan(makeMockPlan([
-      { id: "1", title: "A", status: "pending" },
-      { id: "2", title: "B", status: "pending" },
-    ]));
-    const mgr = new AutoAgentManager(
-      { cwd: "/tmp", model: "m", config: mockConfig },
-      () => {},
+    installPlan(
+      makeMockPlan([
+        { id: "1", title: "A", status: "pending" },
+        { id: "2", title: "B", status: "pending" },
+      ]),
     );
+    const mgr = new AutoAgentManager({ cwd: "/tmp", model: "m", config: mockConfig }, () => {});
     const result = await mgr.evaluate();
     // Default 3, only 2 pending
     expect(result.shouldSpawn).toBe(false);
@@ -171,10 +166,7 @@ describe("AutoAgentManager — config defaults", () => {
       status: "pending" as const,
     }));
     installPlan(makeMockPlan(steps));
-    const mgr = new AutoAgentManager(
-      { cwd: "/tmp", model: "m", config: mockConfig },
-      () => {},
-    );
+    const mgr = new AutoAgentManager({ cwd: "/tmp", model: "m", config: mockConfig }, () => {});
     const result = await mgr.evaluate();
     expect(result.steps.length).toBe(4);
   });

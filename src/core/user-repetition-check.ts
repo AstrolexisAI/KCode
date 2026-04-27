@@ -222,10 +222,7 @@ const SYSTEM_REMINDER_PREFIXES = [
  *
  * Returns messages in chronological order (oldest first).
  */
-export function collectRecentUserMessages(
-  messages: Message[],
-  limit = 5,
-): string[] {
+export function collectRecentUserMessages(messages: Message[], limit = 5): string[] {
   const result: string[] = [];
   for (let i = messages.length - 1; i >= 0 && result.length < limit; i--) {
     const msg = messages[i];
@@ -354,52 +351,28 @@ export function buildUserRepetitionReminder(
     lines.push(`  ${i + 1}. "${truncated}"`);
   }
   lines.push("");
-  lines.push(
-    `Frustration signals detected: ${verdict.frustrationSignals.join(", ")}`,
-  );
+  lines.push(`Frustration signals detected: ${verdict.frustrationSignals.join(", ")}`);
   lines.push("");
-  lines.push(
-    "This means your previous attempts did NOT fix the actual problem.",
-  );
+  lines.push("This means your previous attempts did NOT fix the actual problem.");
   lines.push("You are in a rut. Do NOT:");
   lines.push("  - Propose the same fix approach again");
   lines.push('  - Write another "✅ Aplicado" / "Fixed" / "Done" claim');
-  lines.push(
-    "  - Run more diagnostic Reads on the same file region you already checked",
-  );
-  lines.push(
-    "  - Emit a long AUDIT REPORT in prose without actually applying a mutation",
-  );
+  lines.push("  - Run more diagnostic Reads on the same file region you already checked");
+  lines.push("  - Emit a long AUDIT REPORT in prose without actually applying a mutation");
   lines.push("");
   lines.push("Instead you MUST do ONE of:");
-  lines.push(
-    "  a) Re-read the EXACT code path the user is pointing at, line by line,",
-  );
-  lines.push(
-    "     and propose a FUNDAMENTALLY DIFFERENT fix. Show your reasoning for",
-  );
+  lines.push("  a) Re-read the EXACT code path the user is pointing at, line by line,");
+  lines.push("     and propose a FUNDAMENTALLY DIFFERENT fix. Show your reasoning for");
   lines.push("     why the previous attempts missed the mark.");
-  lines.push(
-    '  b) Admit "I do not know why this is happening" and ask the user for',
-  );
-  lines.push(
-    "     more info (browser console screenshot, devtools trace, exact repro",
-  );
-  lines.push(
-    "     steps). Honesty is better than yet another failed attempt.",
-  );
+  lines.push('  b) Admit "I do not know why this is happening" and ask the user for');
+  lines.push("     more info (browser console screenshot, devtools trace, exact repro");
+  lines.push("     steps). Honesty is better than yet another failed attempt.");
 
   if (contextSaturation !== undefined && contextSaturation >= 0.85) {
     lines.push("");
-    lines.push(
-      `⚠️ Context window is ~${Math.round(contextSaturation * 100)}% full.`,
-    );
-    lines.push(
-      "You have lost track of what you already tried. Before the next fix,",
-    );
-    lines.push(
-      "run /compact to free space and reset working memory, then approach the",
-    );
+    lines.push(`⚠️ Context window is ~${Math.round(contextSaturation * 100)}% full.`);
+    lines.push("You have lost track of what you already tried. Before the next fix,");
+    lines.push("run /compact to free space and reset working memory, then approach the");
     lines.push("problem with a clean slate.");
   }
 

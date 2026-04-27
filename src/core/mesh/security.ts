@@ -111,7 +111,11 @@ export async function encryptData(data: Uint8Array, teamToken: string): Promise<
   const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
   const key = await deriveKey(teamToken, salt);
 
-  const ciphertext = await crypto.subtle.encrypt({ name: AES_ALGORITHM, iv }, key, data as BufferSource);
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: AES_ALGORITHM, iv },
+    key,
+    data as BufferSource,
+  );
 
   // Concatenate: salt + iv + ciphertext
   const result = new Uint8Array(salt.length + iv.length + ciphertext.byteLength);

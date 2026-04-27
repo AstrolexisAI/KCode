@@ -56,7 +56,7 @@ export interface Settings {
   geminiApiKey?: string; // Gemini API key
   deepseekApiKey?: string; // DeepSeek API key
   togetherApiKey?: string; // Together AI API key
-  kimiApiKey?: string;    // Kimi/Moonshot AI API key
+  kimiApiKey?: string; // Kimi/Moonshot AI API key
   apiBase?: string;
   systemPromptExtra?: string;
   autoRoute?: boolean;
@@ -874,9 +874,7 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
   // localhost:10091 that produces confusing "connection refused" errors).
   const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/i.test(apiBase);
   if (isLocalhost && model.toLowerCase().startsWith("grok-")) {
-    const hasXaiKey =
-      process.env.XAI_API_KEY ||
-      (settings as Record<string, unknown>).xaiApiKey;
+    const hasXaiKey = process.env.XAI_API_KEY || (settings as Record<string, unknown>).xaiApiKey;
     if (hasXaiKey) {
       apiBase = "https://api.x.ai";
       log.info("config", `Auto-routing ${model} → api.x.ai (XAI_API_KEY present)`);
@@ -885,8 +883,7 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
   const lowerModel = model.toLowerCase();
   if (isLocalhost && (lowerModel.startsWith("kimi-") || lowerModel.startsWith("moonshot-"))) {
     const hasKimiKey =
-      process.env.MOONSHOT_API_KEY ||
-      (settings as Record<string, unknown>).kimiApiKey;
+      process.env.MOONSHOT_API_KEY || (settings as Record<string, unknown>).kimiApiKey;
     if (hasKimiKey) {
       apiBase = "https://api.moonshot.ai";
       log.info("config", `Auto-routing ${model} → api.moonshot.ai (MOONSHOT_API_KEY present)`);
@@ -909,17 +906,13 @@ export async function buildConfig(cwd: string): Promise<KCodeConfig> {
   return {
     apiKey: lockedApiKey ?? settings.apiKey ?? process.env.ASTROLEXIS_API_KEY,
     anthropicApiKey:
-      process.env.ANTHROPIC_API_KEY ??
-      (settings.anthropicApiKey as string | undefined),
+      process.env.ANTHROPIC_API_KEY ?? (settings.anthropicApiKey as string | undefined),
     xaiApiKey: process.env.XAI_API_KEY ?? (settings.xaiApiKey as string | undefined),
     groqApiKey: process.env.GROQ_API_KEY ?? (settings.groqApiKey as string | undefined),
     geminiApiKey: process.env.GEMINI_API_KEY ?? (settings.geminiApiKey as string | undefined),
-    deepseekApiKey:
-      process.env.DEEPSEEK_API_KEY ?? (settings.deepseekApiKey as string | undefined),
-    togetherApiKey:
-      process.env.TOGETHER_API_KEY ?? (settings.togetherApiKey as string | undefined),
-    kimiApiKey:
-      process.env.MOONSHOT_API_KEY ?? (settings.kimiApiKey as string | undefined),
+    deepseekApiKey: process.env.DEEPSEEK_API_KEY ?? (settings.deepseekApiKey as string | undefined),
+    togetherApiKey: process.env.TOGETHER_API_KEY ?? (settings.togetherApiKey as string | undefined),
+    kimiApiKey: process.env.MOONSHOT_API_KEY ?? (settings.kimiApiKey as string | undefined),
     apiBase,
     model,
     maxTokens: settings.maxTokens ?? 16384,

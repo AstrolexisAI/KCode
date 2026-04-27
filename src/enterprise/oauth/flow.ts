@@ -122,7 +122,11 @@ export async function startOAuthFlow(config: OAuthConfig): Promise<OAuthTokens |
   } else {
     try {
       const openCmd =
-        process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
+        process.platform === "darwin"
+          ? "open"
+          : process.platform === "win32"
+            ? "start"
+            : "xdg-open";
       Bun.spawn([openCmd, authUrl], { stdout: "ignore", stderr: "ignore" });
     } catch (err) {
       log.warn("config", `Failed to open browser for OAuth: ${err}`);

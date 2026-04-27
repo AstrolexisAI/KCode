@@ -142,7 +142,16 @@ const SITE_RULES: SiteRule[] = [
       /\bsitio\s+web\s+(?:para|de)\b/i,
     ],
     defaultStack: "nextjs",
-    defaultFeatures: ["hero", "features", "testimonials", "pricing", "cta", "footer", "responsive", "seo"],
+    defaultFeatures: [
+      "hero",
+      "features",
+      "testimonials",
+      "pricing",
+      "cta",
+      "footer",
+      "responsive",
+      "seo",
+    ],
     defaultPages: ["index"],
   },
   {
@@ -158,10 +167,7 @@ const SITE_RULES: SiteRule[] = [
   },
   {
     type: "blog",
-    patterns: [
-      /\bblog\b/i,
-      /\b(?:content|article|post)\s+(?:site|website)\b/i,
-    ],
+    patterns: [/\bblog\b/i, /\b(?:content|article|post)\s+(?:site|website)\b/i],
     defaultStack: "astro",
     defaultFeatures: ["markdown", "seo", "rss", "tags", "search", "responsive"],
     defaultPages: ["index", "blog/[slug]", "about"],
@@ -189,30 +195,21 @@ const SITE_RULES: SiteRule[] = [
   },
   {
     type: "docs",
-    patterns: [
-      /\bdoc(?:s|umentation)\b/i,
-      /\bdocumentaci[oó]n\b/i,
-    ],
+    patterns: [/\bdoc(?:s|umentation)\b/i, /\bdocumentaci[oó]n\b/i],
     defaultStack: "astro",
     defaultFeatures: ["sidebar", "search", "markdown", "seo", "toc", "responsive"],
     defaultPages: ["index", "getting-started", "api-reference"],
   },
   {
     type: "api",
-    patterns: [
-      /\bapi\s+(?:server|backend|rest|graphql)\b/i,
-      /\bbackend\s+(?:api|server)\b/i,
-    ],
+    patterns: [/\bapi\s+(?:server|backend|rest|graphql)\b/i, /\bbackend\s+(?:api|server)\b/i],
     defaultStack: "express",
     defaultFeatures: ["routes", "middleware", "validation", "auth", "database", "cors"],
     defaultPages: [],
   },
   {
     type: "fullstack",
-    patterns: [
-      /\bfull\s*stack\b/i,
-      /\b(?:app|application)\s+(?:completa|full)\b/i,
-    ],
+    patterns: [/\bfull\s*stack\b/i, /\b(?:app|application)\s+(?:completa|full)\b/i],
     defaultStack: "nextjs",
     defaultFeatures: ["auth", "database", "api", "dashboard", "landing", "responsive", "dark-mode"],
     defaultPages: ["index", "login", "dashboard", "api"],
@@ -253,11 +250,9 @@ const FEATURE_PATTERNS: Array<{ pattern: RegExp; feature: string }> = [
 // Project name extraction
 function extractName(message: string): string {
   // "create a site called X" / "build X website"
-  const m = message.match(
-    /(?:called|named|nombre|llamad[oa])\s+["']?(\w[\w-]*)/i,
-  ) ?? message.match(
-    /(?:for|para)\s+["']?(\w[\w-]*)/i,
-  );
+  const m =
+    message.match(/(?:called|named|nombre|llamad[oa])\s+["']?(\w[\w-]*)/i) ??
+    message.match(/(?:for|para)\s+["']?(\w[\w-]*)/i);
   return m?.[1] ?? "my-site";
 }
 
@@ -272,7 +267,7 @@ export function detectWebIntent(message: string): DetectedIntent {
   let defaultStack: Stack = "nextjs";
 
   for (const rule of SITE_RULES) {
-    if (rule.patterns.some(p => p.test(message))) {
+    if (rule.patterns.some((p) => p.test(message))) {
       siteType = rule.type;
       defaultStack = rule.defaultStack;
       defaultFeatures = [...rule.defaultFeatures];

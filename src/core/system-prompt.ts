@@ -18,11 +18,11 @@ import {
   loadProjectInstructions,
 } from "./system-prompt-context";
 import {
+  buildAntiFabricationGuidance,
   buildAutoMemoryInstructions,
   buildCodeGuidelines,
   buildCoordinatorInstructions,
   buildGitInstructions,
-  buildAntiFabricationGuidance,
   buildIdentity,
   buildMetacognition,
   buildOperatorRecoveryGuidance,
@@ -309,11 +309,7 @@ NEVER skip the reasoning block, even for simple questions. The reasoning block i
 
       // Knowledge distillation
       try {
-        const distilled = await loadDistilledExamples(
-          undefined,
-          keywords,
-          config.workingDirectory,
-        );
+        const distilled = await loadDistilledExamples(undefined, keywords, config.workingDirectory);
         if (distilled) {
           sections.push({
             content: distilled,
@@ -342,7 +338,6 @@ NEVER skip the reasoning block, even for simple questions. The reasoning block i
       } catch (err) {
         log.debug("world-model", "Failed to load recent discrepancies: " + err);
       }
-
     }
 
     // Path-specific rules

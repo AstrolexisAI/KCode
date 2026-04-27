@@ -41,7 +41,7 @@ import type { AstNode, AstPattern } from "./types";
 
 const CPP_FUNCTION_NODE_TYPES = new Set([
   "function_definition",
-  "lambda_expression",  // C++11 lambdas
+  "lambda_expression", // C++11 lambdas
 ]);
 
 function findEnclosingFunction(node: AstNode): AstNode | null {
@@ -141,24 +141,49 @@ function parameterNames(func: AstNode): Set<string> {
 const CPP_SYSTEM_CALLEES = new Set([
   "system",
   "popen",
-  "execv", "execve", "execvp", "execvpe",
-  "execl", "execle", "execlp", "execlpe",
-  "_execv", "_execve", "_execvp", "_execvpe", // Windows _exec*
-  "_execl", "_execle", "_execlp", "_execlpe",
-  "_spawnv", "_spawnve", "_spawnvp", "_spawnvpe",
-  "wsystem",   // wide-char variant
+  "execv",
+  "execve",
+  "execvp",
+  "execvpe",
+  "execl",
+  "execle",
+  "execlp",
+  "execlpe",
+  "_execv",
+  "_execve",
+  "_execvp",
+  "_execvpe", // Windows _exec*
+  "_execl",
+  "_execle",
+  "_execlp",
+  "_execlpe",
+  "_spawnv",
+  "_spawnve",
+  "_spawnvp",
+  "_spawnvpe",
+  "wsystem", // wide-char variant
 ]);
 
 const CPP_STR_COPY_CALLEES = new Set([
-  "strcpy", "strcat", "strncpy", "strncat",
-  "wcscpy", "wcscat", "wcsncpy", "wcsncat",
-  "lstrcpy", "lstrcat",
-  "sprintf", "vsprintf",  // unbounded sprintf is the canonical buffer overflow
-  "stpcpy", "stpncpy",
+  "strcpy",
+  "strcat",
+  "strncpy",
+  "strncat",
+  "wcscpy",
+  "wcscat",
+  "wcsncpy",
+  "wcsncat",
+  "lstrcpy",
+  "lstrcat",
+  "sprintf",
+  "vsprintf", // unbounded sprintf is the canonical buffer overflow
+  "stpcpy",
+  "stpncpy",
 ]);
 
 const CPP_PRINTF_CALLEES = new Set([
-  "printf", "puts",
+  "printf",
+  "puts",
   "wprintf",
   // fprintf/sprintf/snprintf/dprintf have the format string at a
   // later position — we'd need per-function position info to handle
@@ -321,7 +346,7 @@ export const C_CPP_AST_PATTERNS: AstPattern[] = [
       };
     },
     explanation:
-      "printf / wprintf / puts invoked with a format string AST-traced to a function parameter. A caller-controlled format string lets an attacker use `%s` to dereference arbitrary stack values (memory disclosure), `%n` to write to attacker-chosen addresses, and `%99999s` to crash the process. The signature `printf(p)` instead of `printf(\"%s\", p)` is the canonical bug pattern.",
+      'printf / wprintf / puts invoked with a format string AST-traced to a function parameter. A caller-controlled format string lets an attacker use `%s` to dereference arbitrary stack values (memory disclosure), `%n` to write to attacker-chosen addresses, and `%99999s` to crash the process. The signature `printf(p)` instead of `printf("%s", p)` is the canonical bug pattern.',
     verify_prompt:
       "Is the function exposed to caller-controlled input?\n" +
       "1. CLI logger / network handler / template engine — CONFIRMED.\n" +
@@ -330,6 +355,6 @@ export const C_CPP_AST_PATTERNS: AstPattern[] = [
       "Default to CONFIRMED — printf(p) is the canonical format-string vulnerability.",
     cwe: "CWE-134",
     fix_template:
-      "Always use a literal format string: replace `printf(p)` with `printf(\"%s\", p)`. For dynamic format selection, use a small allowlisted lookup table.",
+      'Always use a literal format string: replace `printf(p)` with `printf("%s", p)`. For dynamic format selection, use a small allowlisted lookup table.',
   },
 ];

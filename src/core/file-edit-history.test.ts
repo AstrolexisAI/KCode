@@ -15,12 +15,7 @@ describe("file-edit-history", () => {
   // ─── Scope filtering ──────────────────────────────────────────
 
   test("ignores non-file-edit tool names", () => {
-    recordEditAttempt(
-      "Read",
-      { file_path: "/a/b" },
-      true,
-      "boom",
-    );
+    recordEditAttempt("Read", { file_path: "/a/b" }, true, "boom");
     expect(detectImmediateEditRetry("Read", { file_path: "/a/b" })).toBeNull();
   });
 
@@ -146,15 +141,8 @@ describe("file-edit-history", () => {
   });
 
   test("does NOT trigger Write when content differs (intentional revision)", () => {
-    recordEditAttempt(
-      "Write",
-      { file_path: "/x.ts", content: "v1" },
-      true,
-      "boom",
-    );
-    expect(
-      detectImmediateEditRetry("Write", { file_path: "/x.ts", content: "v2" }),
-    ).toBeNull();
+    recordEditAttempt("Write", { file_path: "/x.ts", content: "v1" }, true, "boom");
+    expect(detectImmediateEditRetry("Write", { file_path: "/x.ts", content: "v2" })).toBeNull();
   });
 
   // ─── Window expiry ─────────────────────────────────────────────
@@ -188,12 +176,7 @@ describe("file-edit-history", () => {
 
   test("history is bounded", () => {
     for (let i = 0; i < 200; i++) {
-      recordEditAttempt(
-        "Write",
-        { file_path: `/f${i}.ts`, content: `content ${i}` },
-        false,
-        "",
-      );
+      recordEditAttempt("Write", { file_path: `/f${i}.ts`, content: `content ${i}` }, false, "");
     }
     expect(snapshotEditHistory().length).toBeLessThanOrEqual(64);
   });

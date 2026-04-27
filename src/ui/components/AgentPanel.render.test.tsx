@@ -6,10 +6,10 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { render } from "ink-testing-library";
-import React from "react";
-import { ThemeProvider } from "../ThemeContext.js";
+import type React from "react";
 import { _resetAgentPoolForTests, getAgentPool } from "../../core/agents/pool.js";
 import type { AgentExecutor } from "../../core/agents/types.js";
+import { ThemeProvider } from "../ThemeContext.js";
 import AgentPanel from "./AgentPanel.js";
 
 /** Synthetic executor that hangs forever — keeps agents in "running" state. */
@@ -17,9 +17,7 @@ const hangingExecutor: AgentExecutor = () => new Promise(() => {});
 /** Synthetic executor that resolves immediately. */
 const instantExecutor: AgentExecutor = async (agent) => `done-${agent.name}`;
 
-const wrap = (node: React.ReactElement) => (
-  <ThemeProvider>{node}</ThemeProvider>
-);
+const wrap = (node: React.ReactElement) => <ThemeProvider>{node}</ThemeProvider>;
 
 describe("AgentPanel", () => {
   beforeEach(() => {

@@ -14,10 +14,10 @@
 //   kcode grammars list                show what's bundled and what's installed
 //   kcode grammars remove <lang>       delete an installed grammar
 
-import type { Command } from "commander";
 import { existsSync, mkdirSync, statSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { Command } from "commander";
 import { BUNDLED_GRAMMARS, findBundledGrammar } from "../../core/audit-engine/ast/grammars-bundled";
 
 const GREEN = "\x1b[32m";
@@ -148,7 +148,9 @@ export function registerGrammarsCommand(program: Command): void {
 
   grammars
     .command("list")
-    .description("Show which grammars this build ships with and which are installed in ~/.kcode/grammars/.")
+    .description(
+      "Show which grammars this build ships with and which are installed in ~/.kcode/grammars/.",
+    )
     .action(() => {
       listCmd();
     });

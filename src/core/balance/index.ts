@@ -11,15 +11,10 @@
 import { log } from "../logger";
 import { fetchOpenRouterBalance } from "./openrouter";
 import { type BillingProvider, providerFromModel, providerLabel } from "./provider";
-import {
-  type BalanceState,
-  getEntry,
-  loadBalance,
-  saveBalance,
-} from "./store";
+import { type BalanceState, getEntry, loadBalance, saveBalance } from "./store";
 
 export type { BillingProvider } from "./provider";
-export { providerLabel, KNOWN_PROVIDERS } from "./provider";
+export { KNOWN_PROVIDERS, providerLabel } from "./provider";
 
 export interface ProviderStatus {
   provider: BillingProvider;
@@ -48,8 +43,7 @@ export async function getAllStatuses(): Promise<ProviderStatus[]> {
   for (const [name, entry] of Object.entries(state.providers)) {
     if (!entry) continue;
     const provider = name as BillingProvider;
-    const remaining =
-      entry.starting != null ? Math.max(0, entry.starting - entry.spent) : null;
+    const remaining = entry.starting != null ? Math.max(0, entry.starting - entry.spent) : null;
     const fractionRemaining =
       entry.starting != null && entry.starting > 0
         ? Math.max(0, remaining! / entry.starting)
@@ -69,9 +63,7 @@ export async function getAllStatuses(): Promise<ProviderStatus[]> {
 }
 
 /** Status for a single provider, or null if nothing was ever recorded. */
-export async function getStatus(
-  provider: BillingProvider,
-): Promise<ProviderStatus | null> {
+export async function getStatus(provider: BillingProvider): Promise<ProviderStatus | null> {
   const all = await getAllStatuses();
   return all.find((s) => s.provider === provider) ?? null;
 }
@@ -87,10 +79,7 @@ export async function getStatusForModel(
 }
 
 /** Register a starting credit. Pass null (or 0 via `off`) to stop tracking. */
-export async function setStarting(
-  provider: BillingProvider,
-  amount: number | null,
-): Promise<void> {
+export async function setStarting(provider: BillingProvider, amount: number | null): Promise<void> {
   const state = await loadBalance();
   const entry = getEntry(state, provider);
   entry.starting = amount;
@@ -172,10 +161,7 @@ export async function fetchLiveBalance(
 
 // ─── Internals ─────────────────────────────────────────────────────────
 
-function computeAlert(
-  state: BalanceState,
-  provider: BillingProvider,
-): ThresholdAlert | null {
+function computeAlert(state: BalanceState, provider: BillingProvider): ThresholdAlert | null {
   const entry = state.providers[provider];
   if (!entry || entry.starting == null || entry.starting <= 0) return null;
   const remaining = Math.max(0, entry.starting - entry.spent);

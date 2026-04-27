@@ -69,7 +69,7 @@ const BARE_LONG_IDENT_REGEX =
 // CDN filter can distinguish user-project files (has path) from
 // third-party dependencies (bare library name).
 const FILE_REGEX =
-  /(?:\b|\.{0,2}\/)([A-Za-z0-9_\-./\\]*[A-Za-z0-9_\-]+\.(?:html|htm|js|jsx|ts|tsx|mjs|cjs|py|rs|go|java|rb|php|cs|swift|kt|scala|vue|svelte|astro|md|json|yml|yaml|toml|css|scss|sass|less))\b/g;
+  /(?:\b|\.{0,2}\/)([A-Za-z0-9_\-./\\]*[A-Za-z0-9_-]+\.(?:html|htm|js|jsx|ts|tsx|mjs|cjs|py|rs|go|java|rb|php|cs|swift|kt|scala|vue|svelte|astro|md|json|yml|yaml|toml|css|scss|sass|less))\b/g;
 
 /**
  * Extensions that can legitimately be CDN-delivered third-party
@@ -224,11 +224,7 @@ function isCdnLibraryMention(file: string, context: string): boolean {
   const before = context.slice(Math.max(0, idx - 40), idx).toLowerCase();
   const after = context.slice(idx + file.length, idx + file.length + 40).toLowerCase();
   const surround = before + " " + after;
-  if (
-    /\bcdn\b|\bcdnjs\b|\bunpkg\b|\bjsdelivr\b|\blibrary\b|\bframework\b/.test(
-      surround,
-    )
-  ) {
+  if (/\bcdn\b|\bcdnjs\b|\bunpkg\b|\bjsdelivr\b|\blibrary\b|\bframework\b/.test(surround)) {
     return true;
   }
   return false;
@@ -281,10 +277,7 @@ const GENERIC_IDENTIFIERS = new Set([
  * Extract location hints from the last N user messages. Looks for
  * explicit line numbers, ranges, symbol names, and file paths.
  */
-export function extractLocationHints(
-  userTexts: readonly string[],
-  lookback = 3,
-): LocationHints {
+export function extractLocationHints(userTexts: readonly string[], lookback = 3): LocationHints {
   const window = userTexts.slice(-lookback);
   const lineHints: LocationHint[] = [];
   const symbolHints: LocationHint[] = [];
@@ -469,9 +462,7 @@ export function checkEditLocationMismatch(
   // File-level mismatch: did the user mention a different file?
   let fileMismatch: string | null = null;
   if (hints.fileHints.length > 0) {
-    const exactHit = hints.fileHints.some(
-      (f) => basename(f) === fileBase,
-    );
+    const exactHit = hints.fileHints.some((f) => basename(f) === fileBase);
     if (!exactHit) {
       // Only report if there's exactly one file hint — ambiguous
       // cases (user mentioned 3 files, model picked one) are fine
@@ -490,10 +481,7 @@ export function checkEditLocationMismatch(
     const lineNum = parseInt(h.value, 10);
     if (Number.isNaN(lineNum)) continue;
     const endNum = h.endValue ? parseInt(h.endValue, 10) : lineNum;
-    const distance = Math.min(
-      Math.abs(editLine - lineNum),
-      Math.abs(editLine - endNum),
-    );
+    const distance = Math.min(Math.abs(editLine - lineNum), Math.abs(editLine - endNum));
     if (distance <= LINE_PROXIMITY_WINDOW) {
       anyLineHintNear = true;
     } else {
@@ -521,8 +509,7 @@ export function checkEditLocationMismatch(
   // File mismatch still fires unconditionally when applicable.
   const lineMismatch =
     hints.lineHints.length > 0 && !anyLineHintNear && unmatchedLineHints.length > 0;
-  const symbolMismatch =
-    anySymbolFoundInFile && !anySymbolNear && unmatchedSymbolHints.length > 0;
+  const symbolMismatch = anySymbolFoundInFile && !anySymbolNear && unmatchedSymbolHints.length > 0;
   const isMismatch = fileMismatch !== null || lineMismatch || symbolMismatch;
 
   let reason = "";
@@ -573,18 +560,10 @@ export function buildLocationWarning(verdict: LocationMismatchVerdict): string {
     );
   }
   lines.push("");
-  lines.push(
-    `   The Edit succeeded, but the target region doesn't match where`,
-  );
-  lines.push(
-    `   the user's recent messages pointed. If this Edit doesn't actually`,
-  );
-  lines.push(
-    `   fix the reported issue, re-read the code region the user referenced`,
-  );
-  lines.push(
-    `   before making another Edit. Do NOT claim "✅ fixed" on the next`,
-  );
+  lines.push(`   The Edit succeeded, but the target region doesn't match where`);
+  lines.push(`   the user's recent messages pointed. If this Edit doesn't actually`);
+  lines.push(`   fix the reported issue, re-read the code region the user referenced`);
+  lines.push(`   before making another Edit. Do NOT claim "✅ fixed" on the next`);
   lines.push(`   turn without verifying the user's actual bug is addressed.`);
 
   return lines.join("\n");

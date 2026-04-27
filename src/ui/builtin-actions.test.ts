@@ -70,9 +70,7 @@ describe("summarizeInput", () => {
   });
 
   test("GrepReplace shows pattern → replacement", () => {
-    expect(
-      summarizeInput("GrepReplace", { pattern: "foo", replacement: "bar" }),
-    ).toBe("foo → bar");
+    expect(summarizeInput("GrepReplace", { pattern: "foo", replacement: "bar" })).toBe("foo → bar");
   });
 
   test("Stash shows action and optional name", () => {
@@ -86,9 +84,7 @@ describe("summarizeInput", () => {
   });
 
   test("LSP shows action + file", () => {
-    expect(
-      summarizeInput("LSP", { action: "definition", file: "a.ts" }),
-    ).toBe("definition a.ts");
+    expect(summarizeInput("LSP", { action: "definition", file: "a.ts" })).toBe("definition a.ts");
   });
 
   test("ToolSearch truncates query (60 chars)", () => {

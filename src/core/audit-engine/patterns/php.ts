@@ -12,9 +12,11 @@ export const PHP_PATTERNS: BugPattern[] = [
     languages: ["php"],
     regex: /\b(?:mysql_query|mysqli_query|->query)\s*\(\s*["'].*\$/g,
     explanation: "SQL queries with PHP variable interpolation ($var) are vulnerable to injection.",
-    verify_prompt: "Is user input interpolated? If using prepared statements (bind_param), respond FALSE_POSITIVE.",
+    verify_prompt:
+      "Is user input interpolated? If using prepared statements (bind_param), respond FALSE_POSITIVE.",
     cwe: "CWE-89",
-    fix_template: "Use prepared statements: $stmt = $pdo->prepare('SELECT * FROM t WHERE id = ?'); $stmt->execute([$id]);",
+    fix_template:
+      "Use prepared statements: $stmt = $pdo->prepare('SELECT * FROM t WHERE id = ?'); $stmt->execute([$id]);",
   },
   {
     id: "php-002-eval",
@@ -23,7 +25,8 @@ export const PHP_PATTERNS: BugPattern[] = [
     languages: ["php"],
     regex: /\beval\s*\(\s*\$/g,
     explanation: "eval() executes arbitrary PHP code. If input is user-controlled, this is RCE.",
-    verify_prompt: "Is the argument from user input? If hardcoded/internal, respond FALSE_POSITIVE.",
+    verify_prompt:
+      "Is the argument from user input? If hardcoded/internal, respond FALSE_POSITIVE.",
     cwe: "CWE-95",
     fix_template: "Remove eval(). Use specific functions for the intended operation.",
   },
@@ -34,9 +37,11 @@ export const PHP_PATTERNS: BugPattern[] = [
     languages: ["php"],
     regex: /\b(?:include|require|include_once|require_once)\s*\(\s*\$/g,
     explanation: "Including files from user input enables Local/Remote File Inclusion attacks.",
-    verify_prompt: "Is the path from user input? If from internal config/constant, respond FALSE_POSITIVE.",
+    verify_prompt:
+      "Is the path from user input? If from internal config/constant, respond FALSE_POSITIVE.",
     cwe: "CWE-98",
-    fix_template: "Whitelist allowed files: $allowed = ['page1', 'page2']; if (in_array($input, $allowed)) include($input.'.php');",
+    fix_template:
+      "Whitelist allowed files: $allowed = ['page1', 'page2']; if (in_array($input, $allowed)) include($input.'.php');",
   },
   {
     id: "php-004-xss",
@@ -45,7 +50,8 @@ export const PHP_PATTERNS: BugPattern[] = [
     languages: ["php"],
     regex: /echo\s+\$(?:_GET|_POST|_REQUEST|_COOKIE)\s*\[/g,
     explanation: "Echoing superglobal variables directly enables XSS. Always escape output.",
-    verify_prompt: "Is htmlspecialchars() or equivalent applied before output? If escaped, respond FALSE_POSITIVE.",
+    verify_prompt:
+      "Is htmlspecialchars() or equivalent applied before output? If escaped, respond FALSE_POSITIVE.",
     cwe: "CWE-79",
     fix_template: "echo htmlspecialchars($_GET['param'], ENT_QUOTES, 'UTF-8');",
   },
@@ -61,7 +67,8 @@ export const PHP_PATTERNS: BugPattern[] = [
       "Is the superglobal value passed through a prepared statement with bind_param or execute([...])? " +
       "If parameterized, respond FALSE_POSITIVE. If interpolated into SQL string, respond CONFIRMED.",
     cwe: "CWE-89",
-    fix_template: "$stmt = $pdo->prepare('SELECT * FROM t WHERE id = ?'); $stmt->execute([$_GET['id']]);",
+    fix_template:
+      "$stmt = $pdo->prepare('SELECT * FROM t WHERE id = ?'); $stmt->execute([$_GET['id']]);",
   },
   {
     id: "php-006-unserialize",
@@ -76,7 +83,8 @@ export const PHP_PATTERNS: BugPattern[] = [
       "If from trusted internal cache with HMAC verification, respond FALSE_POSITIVE. " +
       "If from user input without signature check, respond CONFIRMED.",
     cwe: "CWE-502",
-    fix_template: "Use json_decode() instead of unserialize(), or pass allowed_classes: ['ClassName'] option.",
+    fix_template:
+      "Use json_decode() instead of unserialize(), or pass allowed_classes: ['ClassName'] option.",
   },
   {
     id: "php-007-path-traversal",
@@ -98,7 +106,8 @@ export const PHP_PATTERNS: BugPattern[] = [
     title: "POST handler without CSRF token validation",
     severity: "medium",
     languages: ["php"],
-    regex: /\$_SERVER\s*\[\s*['"]REQUEST_METHOD['"]\s*\]\s*===?\s*['"]POST['"](?![\s\S]{0,300}?(?:csrf|token|nonce|verify))/gi,
+    regex:
+      /\$_SERVER\s*\[\s*['"]REQUEST_METHOD['"]\s*\]\s*===?\s*['"]POST['"](?![\s\S]{0,300}?(?:csrf|token|nonce|verify))/gi,
     explanation:
       "POST handler without CSRF token validation. An attacker can craft a form on another site that submits to this endpoint on behalf of an authenticated user.",
     verify_prompt:
@@ -107,7 +116,8 @@ export const PHP_PATTERNS: BugPattern[] = [
       "If this is an API endpoint using Bearer tokens (not cookies), respond FALSE_POSITIVE. " +
       "If no CSRF protection exists, respond CONFIRMED.",
     cwe: "CWE-352",
-    fix_template: "Add CSRF token: if ($_POST['csrf_token'] !== $_SESSION['csrf_token']) die('CSRF');",
+    fix_template:
+      "Add CSRF token: if ($_POST['csrf_token'] !== $_SESSION['csrf_token']) die('CSRF');",
   },
   {
     id: "php-009-type-juggling",
@@ -137,14 +147,16 @@ export const PHP_PATTERNS: BugPattern[] = [
       "If called with EXTR_SKIP or EXTR_PREFIX_ALL flag, respond FALSE_POSITIVE. " +
       "If called without protection on superglobals, respond CONFIRMED.",
     cwe: "CWE-621",
-    fix_template: "Access values explicitly: $name = $_POST['name']; or use extract($data, EXTR_SKIP);",
+    fix_template:
+      "Access values explicitly: $name = $_POST['name']; or use extract($data, EXTR_SKIP);",
   },
   {
     id: "php-011-shell-exec",
     title: "Shell execution with user input",
     severity: "critical",
     languages: ["php"],
-    regex: /\b(?:shell_exec|exec|system|passthru|popen|proc_open)\s*\([^)]*\$_(?:GET|POST|REQUEST)/g,
+    regex:
+      /\b(?:shell_exec|exec|system|passthru|popen|proc_open)\s*\([^)]*\$_(?:GET|POST|REQUEST)/g,
     explanation:
       "Passing user input to shell execution functions enables command injection. Attacker can chain commands with ; | && etc.",
     verify_prompt:
@@ -159,7 +171,8 @@ export const PHP_PATTERNS: BugPattern[] = [
     title: "Hardcoded credentials in PHP",
     severity: "high",
     languages: ["php"],
-    regex: /\$(?:password|db_pass|secret|api_key|auth_token)\s*=\s*['"][A-Za-z0-9!@#$%^&*+/=_-]{8,}['"]\s*;/g,
+    regex:
+      /\$(?:password|db_pass|secret|api_key|auth_token)\s*=\s*['"][A-Za-z0-9!@#$%^&*+/=_-]{8,}['"]\s*;/g,
     explanation:
       "Hardcoded credentials in source code are exposed to anyone with repo access and persist in version history even after removal.",
     verify_prompt:
@@ -190,8 +203,7 @@ export const PHP_PATTERNS: BugPattern[] = [
     severity: "high",
     languages: ["php"],
     regex: /\b(?:print|printf)\s*\(?[^)]*\$_(?:GET|POST|REQUEST|COOKIE)\s*\[/g,
-    explanation:
-      "Printing user input without htmlspecialchars() enables reflected XSS attacks.",
+    explanation: "Printing user input without htmlspecialchars() enables reflected XSS attacks.",
     verify_prompt:
       "Is the output HTML-escaped with htmlspecialchars() or htmlentities()? " +
       "If escaped, respond FALSE_POSITIVE. If raw output, respond CONFIRMED.",

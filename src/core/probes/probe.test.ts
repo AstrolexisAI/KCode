@@ -1,11 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { getTaskScopeManager } from "../task-scope";
 import { listProbes, resolveApplicableProbe } from "./registry";
-import {
-  computeEvidenceTier,
-  tierAllowsClaim,
-  type EvidenceTier,
-} from "./types";
+import { computeEvidenceTier, type EvidenceTier, tierAllowsClaim } from "./types";
 
 describe("probe registry (v298)", () => {
   beforeEach(() => getTaskScopeManager().reset());

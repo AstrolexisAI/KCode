@@ -1,8 +1,8 @@
 // Tests for v310 needs_context bucket accounting.
 
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { runAudit } from "./audit-engine";
 import { generateMarkdownReport } from "./report-generator";
 
@@ -60,11 +60,11 @@ void f(char *p) {
     const result = await runAudit({
       projectRoot: TMP,
       llmCallback: async () =>
-        JSON.stringify({verdict:"confirmed",reasoning:"test",evidence:{sink:"test"}}),
+        JSON.stringify({ verdict: "confirmed", reasoning: "test", evidence: { sink: "test" } }),
     });
-    expect(
-      result.confirmed_findings + result.false_positives + result.needs_context,
-    ).toBe(result.candidates_found);
+    expect(result.confirmed_findings + result.false_positives + result.needs_context).toBe(
+      result.candidates_found,
+    );
   });
 
   it("renders a 'Needs context' section when count > 0", () => {

@@ -13,7 +13,12 @@ import { join } from "node:path";
 
 function run(cmd: string, cwd: string, timeout = 30_000): { output: string; code: number } {
   try {
-    const output = execSync(cmd, { cwd, encoding: "utf-8", timeout, stdio: ["pipe", "pipe", "pipe"] }).trim();
+    const output = execSync(cmd, {
+      cwd,
+      encoding: "utf-8",
+      timeout,
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
     return { output, code: 0 };
   } catch (err: any) {
     return {
@@ -43,18 +48,21 @@ export type ChainProgressCallback = (step: ChainStep, index: number, total: numb
 // ── Chain Definitions ──────────────────────────────────────────
 
 export type WorkflowType =
-  | "audit-full"       // scan → fix → build → pr
-  | "implement-full"   // implement → lint → test → fix-if-fail
-  | "fix-verify"       // debug → fix → test → verify
-  | "refactor-safe"    // refactor → test → verify no regression
-  | "review-full"      // lint → test → review
+  | "audit-full" // scan → fix → build → pr
+  | "implement-full" // implement → lint → test → fix-if-fail
+  | "fix-verify" // debug → fix → test → verify
+  | "refactor-safe" // refactor → test → verify no regression
+  | "review-full" // lint → test → review
   | "custom";
 
 interface ChainConfig {
   type: WorkflowType;
   steps: Array<{
     name: string;
-    run: (cwd: string, context: Map<string, string>) => Promise<{ output: string; success: boolean }>;
+    run: (
+      cwd: string,
+      context: Map<string, string>,
+    ) => Promise<{ output: string; success: boolean }>;
     /** If true, failure stops the chain */
     critical?: boolean;
     /** If true, only run if previous step succeeded */
@@ -64,7 +72,10 @@ interface ChainConfig {
 
 // ── Step Implementations ───────────────────────────────────────
 
-async function stepScan(cwd: string, ctx: Map<string, string>): Promise<{ output: string; success: boolean }> {
+async function stepScan(
+  cwd: string,
+  ctx: Map<string, string>,
+): Promise<{ output: string; success: boolean }> {
   const { runAudit } = await import("../audit-engine/audit-engine");
   const { generateMarkdownReport } = await import("../audit-engine/report-generator");
 
@@ -89,9 +100,13 @@ async function stepScan(cwd: string, ctx: Map<string, string>): Promise<{ output
   };
 }
 
-async function stepFix(cwd: string, ctx: Map<string, string>): Promise<{ output: string; success: boolean }> {
+async function stepFix(
+  cwd: string,
+  ctx: Map<string, string>,
+): Promise<{ output: string; success: boolean }> {
   const jsonPath = join(cwd, "AUDIT_REPORT.json");
-  if (!existsSync(jsonPath)) return { output: "No AUDIT_REPORT.json — run scan first", success: false };
+  if (!existsSync(jsonPath))
+    return { output: "No AUDIT_REPORT.json — run scan first", success: false };
 
   const { applyFixes } = await import("../audit-engine/fixer");
   const data = JSON.parse(readFileSync(jsonPath, "utf-8"));
@@ -105,8 +120,7 @@ async function stepFix(cwd: string, ctx: Map<string, string>): Promise<{ output:
   // confirmed by a real verifier, or bail out with a clear message.
   const realConfirmed = (data.findings ?? []).filter(
     (f: { verification?: { verdict?: string; reasoning?: string } }) =>
-      f.verification?.verdict === "confirmed" &&
-      f.verification.reasoning !== "static-only",
+      f.verification?.verdict === "confirmed" && f.verification.reasoning !== "static-only",
   );
   if (realConfirmed.length === 0) {
     return {
@@ -119,9 +133,9 @@ async function stepFix(cwd: string, ctx: Map<string, string>): Promise<{ output:
   }
   const filteredData = { ...data, findings: realConfirmed };
   const fixes = applyFixes(filteredData);
-  const transformed = fixes.filter(f => f.kind === "transformed").length;
-  const annotated = fixes.filter(f => f.kind === "annotated").length;
-  const skipped = fixes.filter(f => f.kind === "skipped").length;
+  const transformed = fixes.filter((f) => f.kind === "transformed").length;
+  const annotated = fixes.filter((f) => f.kind === "annotated").length;
+  const skipped = fixes.filter((f) => f.kind === "skipped").length;
 
   // Only "transformed" counts as a real fix. Annotations are advisory
   // TODOs that still need manual attention, so don't claim them as done.
@@ -133,7 +147,10 @@ async function stepFix(cwd: string, ctx: Map<string, string>): Promise<{ output:
   };
 }
 
-async function stepBuild(cwd: string, _ctx: Map<string, string>): Promise<{ output: string; success: boolean }> {
+async function stepBuild(
+  cwd: string,
+  _ctx: Map<string, string>,
+): Promise<{ output: string; success: boolean }> {
   const { tryLevel1 } = await import("./level1-handlers");
   const result = tryLevel1("build", cwd);
   if (!result.handled) return { output: "No build system detected", success: true };
@@ -141,7 +158,10 @@ async function stepBuild(cwd: string, _ctx: Map<string, string>): Promise<{ outp
   return { output: result.output.slice(0, 500), success };
 }
 
-async function stepTest(cwd: string, _ctx: Map<string, string>): Promise<{ output: string; success: boolean }> {
+async function stepTest(
+  cwd: string,
+  _ctx: Map<string, string>,
+): Promise<{ output: string; success: boolean }> {
   const { tryLevel1 } = await import("./level1-handlers");
   const result = tryLevel1("test", cwd);
   if (!result.handled) return { output: "No test runner detected", success: true };
@@ -149,7 +169,10 @@ async function stepTest(cwd: string, _ctx: Map<string, string>): Promise<{ outpu
   return { output: result.output.slice(0, 500), success };
 }
 
-async function stepLint(cwd: string, _ctx: Map<string, string>): Promise<{ output: string; success: boolean }> {
+async function stepLint(
+  cwd: string,
+  _ctx: Map<string, string>,
+): Promise<{ output: string; success: boolean }> {
   const { tryLevel1 } = await import("./level1-handlers");
   const result = tryLevel1("lint", cwd);
   if (!result.handled) return { output: "No linter detected", success: true };
@@ -157,7 +180,10 @@ async function stepLint(cwd: string, _ctx: Map<string, string>): Promise<{ outpu
   return { output: result.output.slice(0, 500), success };
 }
 
-async function stepCommit(cwd: string, ctx: Map<string, string>): Promise<{ output: string; success: boolean }> {
+async function stepCommit(
+  cwd: string,
+  ctx: Map<string, string>,
+): Promise<{ output: string; success: boolean }> {
   const findings = ctx.get("scan_findings") ?? "0";
   const fixes = ctx.get("fixes_applied") ?? "0";
   const msg = `fix: address ${findings} findings (${fixes} auto-fixed)\\n\\nAstrolexis.space -- Kulvex Code`;
@@ -191,9 +217,7 @@ const CHAINS: Record<WorkflowType, ChainConfig> = {
   },
   "fix-verify": {
     type: "fix-verify",
-    steps: [
-      { name: "Test", run: stepTest },
-    ],
+    steps: [{ name: "Test", run: stepTest }],
   },
   "refactor-safe": {
     type: "refactor-safe",
@@ -210,7 +234,7 @@ const CHAINS: Record<WorkflowType, ChainConfig> = {
       { name: "Test", run: stepTest },
     ],
   },
-  "custom": {
+  custom: {
     type: "custom",
     steps: [],
   },
@@ -227,7 +251,11 @@ export function detectChain(message: string): WorkflowType | null {
   }
 
   // "add X with tests" / "create X and test it"
-  if (/\b(?:add|create|implement|crea|agrega)\b.*\b(?:with tests|and test|con tests|y pruebas)/i.test(lower)) {
+  if (
+    /\b(?:add|create|implement|crea|agrega)\b.*\b(?:with tests|and test|con tests|y pruebas)/i.test(
+      lower,
+    )
+  ) {
     return "implement-full";
   }
 
@@ -237,7 +265,9 @@ export function detectChain(message: string): WorkflowType | null {
   }
 
   // "refactor X safely" / "refactoriza sin romper"
-  if (/\b(?:refactor|refactoriza)\b.*\b(?:safe|sin romper|without breaking|and test)/i.test(lower)) {
+  if (
+    /\b(?:refactor|refactoriza)\b.*\b(?:safe|sin romper|without breaking|and test)/i.test(lower)
+  ) {
     return "refactor-safe";
   }
 
@@ -256,7 +286,7 @@ export async function executeChain(
 
   const t0 = Date.now();
   const context = new Map<string, string>();
-  const steps: ChainStep[] = config.steps.map(s => ({
+  const steps: ChainStep[] = config.steps.map((s) => ({
     name: s.name,
     status: "pending" as const,
   }));
@@ -298,7 +328,7 @@ export async function executeChain(
 
   return {
     steps,
-    success: steps.every(s => s.status === "done" || s.status === "skipped"),
+    success: steps.every((s) => s.status === "done" || s.status === "skipped"),
     totalMs: Date.now() - t0,
   };
 }

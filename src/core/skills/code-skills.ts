@@ -106,7 +106,8 @@ If you couldn't find bugs after deep reading, say exactly which files you read a
   },
   {
     name: "pr",
-    description: "Create a PR from /scan + /fix findings (branch, commit, detailed description via LLM)",
+    description:
+      "Create a PR from /scan + /fix findings (branch, commit, detailed description via LLM)",
     aliases: ["pull-request", "submit"],
     args: ["project path (default: cwd) [--repo owner/repo]"],
     template: `__builtin_pr__`,
@@ -120,7 +121,8 @@ If you couldn't find bugs after deep reading, say exactly which files you read a
   },
   {
     name: "debug",
-    description: "Machine-first debugging: gathers evidence (file, errors, git blame, tests) then LLM diagnoses",
+    description:
+      "Machine-first debugging: gathers evidence (file, errors, git blame, tests) then LLM diagnoses",
     aliases: ["dbg", "fix-bug"],
     args: ["file path or error description"],
     template: `__builtin_debug__`,
@@ -155,7 +157,8 @@ If you couldn't find bugs after deep reading, say exactly which files you read a
   },
   {
     name: "cpp",
-    description: "Create a C/C++ project (library, server, CLI, game, embedded, system) with CMake, tests, CI",
+    description:
+      "Create a C/C++ project (library, server, CLI, game, embedded, system) with CMake, tests, CI",
     aliases: ["c", "create-cpp", "create-c"],
     args: ["description of the project"],
     template: `__builtin_cpp__`,
@@ -183,7 +186,8 @@ If you couldn't find bugs after deep reading, say exactly which files you read a
   },
   {
     name: "java",
-    description: "Create a Java project (API, CLI, microservice, library) with Spring Boot, Gradle, tests, CI",
+    description:
+      "Create a Java project (API, CLI, microservice, library) with Spring Boot, Gradle, tests, CI",
     aliases: ["jvm", "create-java", "spring"],
     args: ["description of the project"],
     template: `__builtin_java__`,
@@ -197,7 +201,8 @@ If you couldn't find bugs after deep reading, say exactly which files you read a
   },
   {
     name: "docker",
-    description: "Create a Docker project (Compose stack, multi-service, with networking and volumes)",
+    description:
+      "Create a Docker project (Compose stack, multi-service, with networking and volumes)",
     aliases: ["compose", "create-docker", "container"],
     args: ["description of the services/stack"],
     template: `__builtin_docker__`,
@@ -239,7 +244,8 @@ If you couldn't find bugs after deep reading, say exactly which files you read a
   },
   {
     name: "elixir",
-    description: "Create an Elixir project (Phoenix API, LiveView, CLI/escript, library, GenServer worker)",
+    description:
+      "Create an Elixir project (Phoenix API, LiveView, CLI/escript, library, GenServer worker)",
     aliases: ["ex", "create-elixir", "phoenix"],
     args: ["description of the project"],
     template: `__builtin_elixir__`,
@@ -295,14 +301,16 @@ If you couldn't find bugs after deep reading, say exactly which files you read a
   },
   {
     name: "db",
-    description: "Create a database project (Postgres/MySQL/SQLite/Mongo/Redis with Prisma/Drizzle/TypeORM/Knex/Mongoose)",
+    description:
+      "Create a database project (Postgres/MySQL/SQLite/Mongo/Redis with Prisma/Drizzle/TypeORM/Knex/Mongoose)",
     aliases: ["database", "create-db", "schema"],
     args: ["description with entities (e.g., 'Postgres with users, products, orders')"],
     template: `__builtin_db__`,
   },
   {
     name: "css",
-    description: "Create a CSS project (design system, component library, Tailwind plugin, animation lib, Sass framework)",
+    description:
+      "Create a CSS project (design system, component library, Tailwind plugin, animation lib, Sass framework)",
     aliases: ["design-system", "create-css", "tailwind-plugin"],
     args: ["description of the project"],
     template: `__builtin_css__`,

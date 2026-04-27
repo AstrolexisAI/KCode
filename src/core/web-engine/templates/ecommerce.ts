@@ -6,23 +6,108 @@
 import type { FileTemplate } from "../templates";
 
 const PRODUCTS = [
-  { id: 1, name: "Wireless Noise-Cancelling Headphones", price: 299.99, rating: 5, category: "Electronics", color: "from-violet-500 to-purple-600" },
-  { id: 2, name: "Slim Leather Wallet", price: 49.99, rating: 4, category: "Clothing", color: "from-amber-500 to-orange-600" },
-  { id: 3, name: "Smart Home Speaker", price: 129.99, rating: 4, category: "Electronics", color: "from-cyan-500 to-blue-600" },
-  { id: 4, name: "Organic Cotton T-Shirt", price: 34.99, rating: 5, category: "Clothing", color: "from-emerald-500 to-green-600" },
-  { id: 5, name: "Ceramic Pour-Over Set", price: 64.99, rating: 5, category: "Home", color: "from-rose-500 to-pink-600" },
-  { id: 6, name: "Running Shoes Pro", price: 159.99, rating: 4, category: "Sports", color: "from-sky-500 to-indigo-600" },
-  { id: 7, name: "The Art of Programming", price: 29.99, rating: 5, category: "Books", color: "from-yellow-500 to-amber-600" },
-  { id: 8, name: "Bamboo Desk Organizer", price: 39.99, rating: 4, category: "Home", color: "from-teal-500 to-emerald-600" },
-  { id: 9, name: "USB-C Charging Hub", price: 79.99, rating: 4, category: "Electronics", color: "from-fuchsia-500 to-purple-600" },
-  { id: 10, name: "Yoga Mat Premium", price: 89.99, rating: 5, category: "Sports", color: "from-lime-500 to-green-600" },
-  { id: 11, name: "Mindful Living Guide", price: 24.99, rating: 4, category: "Books", color: "from-orange-500 to-red-600" },
-  { id: 12, name: "Merino Wool Sweater", price: 119.99, rating: 5, category: "Clothing", color: "from-indigo-500 to-violet-600" },
+  {
+    id: 1,
+    name: "Wireless Noise-Cancelling Headphones",
+    price: 299.99,
+    rating: 5,
+    category: "Electronics",
+    color: "from-violet-500 to-purple-600",
+  },
+  {
+    id: 2,
+    name: "Slim Leather Wallet",
+    price: 49.99,
+    rating: 4,
+    category: "Clothing",
+    color: "from-amber-500 to-orange-600",
+  },
+  {
+    id: 3,
+    name: "Smart Home Speaker",
+    price: 129.99,
+    rating: 4,
+    category: "Electronics",
+    color: "from-cyan-500 to-blue-600",
+  },
+  {
+    id: 4,
+    name: "Organic Cotton T-Shirt",
+    price: 34.99,
+    rating: 5,
+    category: "Clothing",
+    color: "from-emerald-500 to-green-600",
+  },
+  {
+    id: 5,
+    name: "Ceramic Pour-Over Set",
+    price: 64.99,
+    rating: 5,
+    category: "Home",
+    color: "from-rose-500 to-pink-600",
+  },
+  {
+    id: 6,
+    name: "Running Shoes Pro",
+    price: 159.99,
+    rating: 4,
+    category: "Sports",
+    color: "from-sky-500 to-indigo-600",
+  },
+  {
+    id: 7,
+    name: "The Art of Programming",
+    price: 29.99,
+    rating: 5,
+    category: "Books",
+    color: "from-yellow-500 to-amber-600",
+  },
+  {
+    id: 8,
+    name: "Bamboo Desk Organizer",
+    price: 39.99,
+    rating: 4,
+    category: "Home",
+    color: "from-teal-500 to-emerald-600",
+  },
+  {
+    id: 9,
+    name: "USB-C Charging Hub",
+    price: 79.99,
+    rating: 4,
+    category: "Electronics",
+    color: "from-fuchsia-500 to-purple-600",
+  },
+  {
+    id: 10,
+    name: "Yoga Mat Premium",
+    price: 89.99,
+    rating: 5,
+    category: "Sports",
+    color: "from-lime-500 to-green-600",
+  },
+  {
+    id: 11,
+    name: "Mindful Living Guide",
+    price: 24.99,
+    rating: 4,
+    category: "Books",
+    color: "from-orange-500 to-red-600",
+  },
+  {
+    id: 12,
+    name: "Merino Wool Sweater",
+    price: 119.99,
+    rating: 5,
+    category: "Clothing",
+    color: "from-indigo-500 to-violet-600",
+  },
 ];
 
 function productsToTS(): string {
-  const lines = PRODUCTS.map(p =>
-    `  { id: ${p.id}, name: ${JSON.stringify(p.name)}, price: ${p.price}, rating: ${p.rating}, category: ${JSON.stringify(p.category)}, gradient: ${JSON.stringify(p.color)} },`
+  const lines = PRODUCTS.map(
+    (p) =>
+      `  { id: ${p.id}, name: ${JSON.stringify(p.name)}, price: ${p.price}, rating: ${p.rating}, category: ${JSON.stringify(p.category)}, gradient: ${JSON.stringify(p.color)} },`,
   );
   return `[\n${lines.join("\n")}\n]`;
 }

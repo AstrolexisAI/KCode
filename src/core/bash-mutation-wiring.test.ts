@@ -89,9 +89,7 @@ describe("bash mutation wiring (v289)", () => {
 
   describe("mv / touch / cp regex detection (raw patterns used in tool-executor)", () => {
     test("mv src dst captures dst", () => {
-      const m = "cd /proj && mv index.ts index.tsx".match(
-        /\bmv\s+(?:-[a-zA-Z]*\s+)?(\S+)\s+(\S+)/,
-      );
+      const m = "cd /proj && mv index.ts index.tsx".match(/\bmv\s+(?:-[a-zA-Z]*\s+)?(\S+)\s+(\S+)/);
       expect(m?.[2]).toBe("index.tsx");
     });
 
@@ -101,17 +99,13 @@ describe("bash mutation wiring (v289)", () => {
     });
 
     test("touch FILE is detected", () => {
-      const matches = [
-        ..."touch foo.py bar.ts".matchAll(/\btouch\s+([^\s;&|<>`]+)/g),
-      ];
+      const matches = [..."touch foo.py bar.ts".matchAll(/\btouch\s+([^\s;&|<>`]+)/g)];
       expect(matches.length).toBeGreaterThan(0);
       expect(matches[0]![1]).toBe("foo.py");
     });
 
     test("cp src dst captures dst", () => {
-      const m = "cp template.ts newfile.ts".match(
-        /\bcp\s+(?:-[a-zA-Z]*\s+)?(\S+)\s+(\S+)/,
-      );
+      const m = "cp template.ts newfile.ts".match(/\bcp\s+(?:-[a-zA-Z]*\s+)?(\S+)\s+(\S+)/);
       expect(m?.[2]).toBe("newfile.ts");
     });
   });

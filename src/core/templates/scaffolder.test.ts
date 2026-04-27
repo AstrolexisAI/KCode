@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { Scaffolder } from "./scaffolder";
 import type { Template } from "./types";
 
-
 const asFetch = (fn: unknown): typeof globalThis.fetch => fn as typeof globalThis.fetch;
 
 const TEST_OUTPUT = join(import.meta.dir, "__test_scaffold__");
@@ -70,24 +69,26 @@ describe("Scaffolder", () => {
   test("scaffold writes files from model response", async () => {
     // Mock fetch to return file markers
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = asFetch(async () =>
-      new Response(
-        JSON.stringify({
-          choices: [
-            {
-              message: {
-                content: `---FILE: src/index.ts---
+    globalThis.fetch = asFetch(
+      async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: `---FILE: src/index.ts---
 console.log("hello");
 ---END FILE---
 ---FILE: package.json---
 { "name": "test" }
 ---END FILE---`,
+                },
               },
-            },
-          ],
-        }),
-        { headers: { "Content-Type": "application/json" } },
-      ));
+            ],
+          }),
+          { headers: { "Content-Type": "application/json" } },
+        ),
+    );
 
     try {
       const result = await scaffolder.scaffold(
@@ -114,10 +115,12 @@ console.log("hello");
 
   test("scaffold throws on empty model response", async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = asFetch(async () =>
-      new Response(JSON.stringify({ choices: [{ message: { content: "No files here." } }] }), {
-        headers: { "Content-Type": "application/json" },
-      }));
+    globalThis.fetch = asFetch(
+      async () =>
+        new Response(JSON.stringify({ choices: [{ message: { content: "No files here." } }] }), {
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
 
     try {
       await expect(

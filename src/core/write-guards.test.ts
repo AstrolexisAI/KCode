@@ -244,10 +244,7 @@ describe("detectInPlaceShrinkage", () => {
     const dir = mkdtempSync(join(tmpdir(), "kcode-shrink-"));
     try {
       const target = join(dir, "f.ts");
-      writeFileSync(
-        target,
-        Array.from({ length: 400 }, (_, i) => `a ${i}`).join("\n"),
-      );
+      writeFileSync(target, Array.from({ length: 400 }, (_, i) => `a ${i}`).join("\n"));
       const newContent = Array.from({ length: 500 }, (_, i) => `a ${i}`).join("\n");
       const v = detectInPlaceShrinkage(target, newContent);
       expect(v.isShrinking).toBe(false);
@@ -261,10 +258,7 @@ describe("detectInPlaceShrinkage", () => {
     const dir = mkdtempSync(join(tmpdir(), "kcode-shrink-"));
     try {
       const target = join(dir, "small.ts");
-      writeFileSync(
-        target,
-        Array.from({ length: 200 }, (_, i) => `a ${i}`).join("\n"),
-      );
+      writeFileSync(target, Array.from({ length: 200 }, (_, i) => `a ${i}`).join("\n"));
       const newContent = "a\nb\nc\n"; // 4 lines — huge ratio drop
       const v = detectInPlaceShrinkage(target, newContent);
       expect(v.isShrinking).toBe(false);
@@ -278,10 +272,7 @@ describe("detectInPlaceShrinkage", () => {
     const dir = mkdtempSync(join(tmpdir(), "kcode-shrink-"));
     try {
       const target = join(dir, "f.ts");
-      writeFileSync(
-        target,
-        Array.from({ length: 500 }, (_, i) => `a ${i}`).join("\n"),
-      );
+      writeFileSync(target, Array.from({ length: 500 }, (_, i) => `a ${i}`).join("\n"));
       const newContent = Array.from({ length: 400 }, (_, i) => `a ${i}`).join("\n");
       const v = detectInPlaceShrinkage(target, newContent);
       expect(v.isShrinking).toBe(false);
@@ -383,11 +374,7 @@ describe("userAllowedDocs", () => {
 
   test("grants permission across multiple user messages", () => {
     // Earlier turn sets scope
-    const texts = [
-      "crea una app",
-      "ok ahora añádele un README",
-      "también",
-    ];
+    const texts = ["crea una app", "ok ahora añádele un README", "también"];
     expect(userAllowedDocs(texts).allowed).toBe(true);
   });
 });
@@ -415,21 +402,17 @@ describe("detectUnsolicitedDoc", () => {
   });
 
   test("does NOT fire on README.md when user explicitly asked for README", () => {
-    const v = detectUnsolicitedDoc("/tmp/README.md", [
-      "add a README with usage instructions",
-    ]);
+    const v = detectUnsolicitedDoc("/tmp/README.md", ["add a README with usage instructions"]);
     expect(v.isUnsolicitedDoc).toBe(false);
   });
 
   test("does NOT fire on non-doc files even without doc keywords", () => {
     expect(
-      detectUnsolicitedDoc("/tmp/orbital.html", ["crea un archivo html"])
-        .isUnsolicitedDoc,
+      detectUnsolicitedDoc("/tmp/orbital.html", ["crea un archivo html"]).isUnsolicitedDoc,
     ).toBe(false);
-    expect(
-      detectUnsolicitedDoc("/tmp/server.js", ["crea un servidor"])
-        .isUnsolicitedDoc,
-    ).toBe(false);
+    expect(detectUnsolicitedDoc("/tmp/server.js", ["crea un servidor"]).isUnsolicitedDoc).toBe(
+      false,
+    );
   });
 });
 

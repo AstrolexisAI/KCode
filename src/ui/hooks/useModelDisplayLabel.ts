@@ -26,12 +26,9 @@ export function useModelDisplayLabel(modelName: string): string {
         const all = await listModels();
         const m = all.find((x) => x.name === modelName);
         if (!m) return;
-        const isLocal =
-          m.baseUrl.includes("localhost") || m.baseUrl.includes("127.0.0.1");
+        const isLocal = m.baseUrl.includes("localhost") || m.baseUrl.includes("127.0.0.1");
         if (!isLocal) return;
-        const { getLocalModelLabel } = await import(
-          "../../core/model-local-discovery.js"
-        );
+        const { getLocalModelLabel } = await import("../../core/model-local-discovery.js");
         const derived = await getLocalModelLabel(m.baseUrl);
         if (!cancelled && derived) setLabel(derived);
       } catch {
