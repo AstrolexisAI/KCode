@@ -553,6 +553,33 @@ export async function processStreamEvents(
         }
         break;
 
+      // Standalone banners emitted by post-turn checks (stub markers,
+      // grounding-gate findings, scope-flagger warnings). Used to be
+      // silently dropped because the StreamEvent union didn't list them
+      // — they reached the UI loop but matched no case and fell through.
+      case "banner":
+        setCompleted((prev) => [
+          ...prev,
+          { kind: "banner", title: event.title, subtitle: event.subtitle },
+        ]);
+        break;
+
+      // Emitted from conversation-post-turn when truncation retries are
+      // exhausted but the response still looks incomplete.
+      case "incomplete_response":
+        setCompleted((prev) => {
+          if (prev.some((e) => e.kind === "incomplete_response")) return prev;
+          return [
+            ...prev,
+            {
+              kind: "incomplete_response" as const,
+              continuations: event.continuations,
+              stopReason: event.stopReason,
+            },
+          ];
+        });
+        break;
+
       case "turn_end":
         setLastKodiEvent({ type: "turn_end" });
         // Finalize any remaining thinking
