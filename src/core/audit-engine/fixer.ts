@@ -1554,13 +1554,40 @@ function applyRecipe(
   // drift of up to 3 positions from stale reports.
   const WINDOW = 3;
   let existingTag = false;
-  // Match either the new spelling-friendly `audit-note:` tag (current)
-  // or the legacy `KCODE-AUDIT:` tag (old runs) so re-runs against
-  // pre-existing annotations don't duplicate the warning.
-  const legacyTag = `KCODE-AUDIT:${finding.pattern_id}`;
+  // FIX.B (v2.10.381) — recognize ALL tag-prefix variants any prior /fix
+  // run could have left behind, and the short-form pattern id that
+  // bespoke fixers use (`audit-fix:fsw-005` from a `fsw-005-buffer-...`
+  // finding). Cross-mode `/fix` (recipe path) and `/fix --safe-only`
+  // (bespoke path) used different prefixes; without this regex they
+  // didn't recognize each other's output and duplicated annotations.
+  // Confirmed in fprime: GenericHub.cpp had three identical
+  // `FW_ASSERT(fwBuffer.getData() != nullptr)` lines because the
+  // bespoke `audit-fix:fsw-005` and legacy `KCODE-FIX:fsw-005` tags
+  // were invisible to the recipe's idempotency check.
+  //
+  // Matched prefixes (any of):
+  //   audit-note:   — current recipe form
+  //   audit-fix:    — current bespoke form
+  //   KCODE-AUDIT:  — legacy recipe (pre-v2.10.300)
+  //   KCODE-FIX:    — legacy bespoke
+  // Followed by either the full pattern id OR the short id
+  // (e.g. `fsw-005` from `fsw-005-buffer-getdata-unchecked`).
+  const fullId = finding.pattern_id;
+  const shortIdMatch = fullId.match(/^[a-z]+-\d+/);
+  const shortId = shortIdMatch ? shortIdMatch[0] : fullId;
+  // Build a regex that escapes the IDs (in case they ever contain
+  // regex metacharacters — current ids don't, but defensive).
+  const escape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const idPattern =
+    fullId === shortId
+      ? escape(fullId)
+      : `(?:${escape(fullId)}|${escape(shortId)})`;
+  const tagRegex = new RegExp(
+    `(?:audit-note|audit-fix|KCODE-AUDIT|KCODE-FIX):${idPattern}\\b`,
+  );
   for (let i = Math.max(0, idx - WINDOW); i <= Math.min(lines.length - 1, idx + WINDOW); i++) {
     const ln = lines[i]!;
-    if (ln.includes(tag) || ln.includes(legacyTag)) {
+    if (tagRegex.test(ln)) {
       existingTag = true;
       break;
     }
