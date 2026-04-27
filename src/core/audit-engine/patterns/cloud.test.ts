@@ -1,3 +1,4 @@
+// kcode-disable: audit
 // P2.1 (v2.10.389) — cloud pack regression tests.
 //
 // Each test asserts:

@@ -300,6 +300,7 @@ export const GO_PATTERNS: BugPattern[] = [
       "2. Is this in initialization code, not a hot path? → FALSE_POSITIVE\n" +
       "3. Is the Sprintf result needed for error formatting (rare path)? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if this is in a high-frequency loop where allocation matters.",
+    cwe: "CWE-1050",
     fix_template: "Use strconv.Itoa/FormatFloat, or strings.Builder for concatenation.",
   },
 

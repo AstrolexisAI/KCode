@@ -1,3 +1,4 @@
+// kcode-disable: audit
 // P2.3 (v2.10.391) — FastAPI framework pack tests.
 
 import { describe, expect, test } from "bun:test";

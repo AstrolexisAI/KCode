@@ -1,3 +1,4 @@
+// kcode-disable: audit
 // P2.2 (v2.10.389) — supply-chain pack regression tests.
 
 import { describe, expect, test } from "bun:test";

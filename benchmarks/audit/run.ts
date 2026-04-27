@@ -19,7 +19,20 @@
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { runAudit } from "../../src/core/audit-engine/audit-engine";
+import { ALL_PATTERNS } from "../../src/core/audit-engine/patterns";
 import type { AuditResult } from "../../src/core/audit-engine/types";
+
+// v2.10.394 — per-pack metrics (P-audit polish). External audit asked
+// for precision/recall/F1 per pack so users see "ai-ml: 100% / 100%"
+// instead of just an aggregate. Build a one-shot lookup of pattern_id
+// → pack so the benchmark can attribute each TP/FP/FN to a pack.
+const PACK_BY_ID = new Map<string, string>();
+for (const p of ALL_PATTERNS) {
+  PACK_BY_ID.set(p.id, p.pack ?? "general");
+}
+function packForPatternId(id: string): string {
+  return PACK_BY_ID.get(id) ?? "general";
+}
 
 const FIXTURES_ROOT = join(import.meta.dir, "vulnerable-apps");
 const RESULTS_DIR = join(import.meta.dir, "results");
@@ -179,6 +192,82 @@ function formatMetrics(runs: FixtureRun[]): {
   return { precision, recall, f1, totalTp, totalFp, totalFn, meanScanMs };
 }
 
+interface PackMetrics {
+  pack: string;
+  tp: number;
+  fp: number;
+  fn: number;
+  precision: number;
+  recall: number;
+  f1: number;
+}
+
+/**
+ * v2.10.394 (P-audit polish) — split TP/FP/FN by pack so the
+ * benchmark output reports per-pack precision/recall/F1 in addition
+ * to the aggregate. External audit asked for this so users see
+ * which packs are accurate vs noisy.
+ *
+ * Attribution model:
+ *   TP / FP — pack of the FINDING's pattern (what fired the match)
+ *   FN      — pack of the EXPECTED finding (what should have fired)
+ *
+ * A pack with FP=TP=FN=0 is omitted from the per-pack table.
+ */
+function computePerPackMetrics(runs: FixtureRun[]): PackMetrics[] {
+  const buckets = new Map<string, { tp: number; fp: number; fn: number }>();
+  const bump = (pack: string, key: "tp" | "fp" | "fn") => {
+    const b = buckets.get(pack) ?? { tp: 0, fp: 0, fn: 0 };
+    b[key]++;
+    buckets.set(pack, b);
+  };
+
+  for (const r of runs) {
+    // Re-classify against expected to attribute per-finding packs.
+    // We mirror the logic from classifyFindings but tag each TP/FP/FN
+    // with the relevant pack.
+    const matchedExpected = new Set<number>();
+    const creditedSites = new Set<string>();
+
+    for (const f of r.result.findings) {
+      const fileBase = f.file.split("/").pop() ?? f.file;
+      const siteKey = `${fileBase}:${f.line}`;
+      const expIdx = r.meta.expected.findIndex(
+        (e, i) => !matchedExpected.has(i) && e.file === fileBase && e.line === f.line,
+      );
+      if (expIdx !== -1) {
+        if (!creditedSites.has(siteKey)) {
+          bump(packForPatternId(f.pattern_id), "tp");
+          creditedSites.add(siteKey);
+        }
+        matchedExpected.add(expIdx);
+      } else if (!creditedSites.has(siteKey)) {
+        bump(packForPatternId(f.pattern_id), "fp");
+        creditedSites.add(siteKey);
+      }
+    }
+    // FNs: expected confirmed that weren't hit. Tag by the EXPECTED
+    // pattern's pack (which is the pack that SHOULD have matched).
+    for (let i = 0; i < r.meta.expected.length; i++) {
+      const e = r.meta.expected[i]!;
+      if (e.verdict !== "confirmed") continue;
+      if (matchedExpected.has(i)) continue;
+      bump(packForPatternId(e.pattern_id), "fn");
+    }
+  }
+
+  const out: PackMetrics[] = [];
+  for (const [pack, b] of buckets) {
+    const precision = b.tp + b.fp > 0 ? b.tp / (b.tp + b.fp) : 1;
+    const recall = b.tp + b.fn > 0 ? b.tp / (b.tp + b.fn) : 1;
+    const f1 = precision + recall > 0 ? (2 * precision * recall) / (precision + recall) : 0;
+    out.push({ pack, tp: b.tp, fp: b.fp, fn: b.fn, precision, recall, f1 });
+  }
+  // Stable order: alphabetical by pack name.
+  out.sort((a, b) => a.pack.localeCompare(b.pack));
+  return out;
+}
+
 function emitMarkdown(runs: FixtureRun[], withVerifier: boolean): string {
   const m = formatMetrics(runs);
   const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
@@ -196,6 +285,21 @@ function emitMarkdown(runs: FixtureRun[], withVerifier: boolean): string {
   lines.push(`- **F1:** ${m.f1.toFixed(3)}`);
   lines.push(`- **Mean scan time:** ${m.meanScanMs} ms / fixture`);
   lines.push("");
+  // v2.10.394 — per-pack table.
+  const perPack = computePerPackMetrics(runs);
+  if (perPack.length > 0) {
+    lines.push("## Per-pack metrics");
+    lines.push("");
+    lines.push("| Pack | TP | FP | FN | Precision | Recall | F1 |");
+    lines.push("|------|----|----|----|-----------|--------|-----|");
+    for (const p of perPack) {
+      lines.push(
+        `| ${p.pack} | ${p.tp} | ${p.fp} | ${p.fn} | ${pct(p.precision)} | ${pct(p.recall)} | ${p.f1.toFixed(3)} |`,
+      );
+    }
+    lines.push("");
+  }
+
   lines.push("## Per-fixture results");
   lines.push("");
   lines.push("| Fixture | Kind | TP | FP | FN | Time (ms) |");
@@ -221,6 +325,17 @@ interface JsonSummary {
     false_negatives: number;
     mean_scan_ms: number;
   };
+  // v2.10.394 — per-pack metrics for downstream tooling that wants
+  // to track regressions per audit lens.
+  per_pack: Array<{
+    pack: string;
+    tp: number;
+    fp: number;
+    fn: number;
+    precision: number;
+    recall: number;
+    f1: number;
+  }>;
   fixtures: Array<{
     name: string;
     kind: string;
@@ -234,6 +349,7 @@ interface JsonSummary {
 
 function emitJson(runs: FixtureRun[], withVerifier: boolean): JsonSummary {
   const m = formatMetrics(runs);
+  const perPack = computePerPackMetrics(runs);
   return {
     schema_version: 1,
     mode: withVerifier ? "verifier" : "static-only",
@@ -247,6 +363,15 @@ function emitJson(runs: FixtureRun[], withVerifier: boolean): JsonSummary {
       false_negatives: m.totalFn,
       mean_scan_ms: m.meanScanMs,
     },
+    per_pack: perPack.map((p) => ({
+      pack: p.pack,
+      tp: p.tp,
+      fp: p.fp,
+      fn: p.fn,
+      precision: Number(p.precision.toFixed(4)),
+      recall: Number(p.recall.toFixed(4)),
+      f1: Number(p.f1.toFixed(4)),
+    })),
     fixtures: runs.map((r) => ({
       name: r.name,
       kind: r.meta.kind,

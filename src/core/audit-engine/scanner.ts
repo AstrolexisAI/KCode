@@ -316,6 +316,27 @@ function isSkippedFilename(basename: string): boolean {
   return false;
 }
 
+/**
+ * Match an opt-in `kcode-disable: audit` marker in the first 1 KB of
+ * file content. Accepts the three common comment styles:
+ *
+ *   // kcode-disable: audit
+ *   # kcode-disable: audit
+ *   /\* kcode-disable: audit *\/
+ *
+ * A bare `audit` (no further qualifier) skips the entire file from the
+ * regex pre-pass. Implemented here rather than at file-enumeration
+ * time so the directive sees the actual file contents — discovery
+ * still runs over every source file regardless. v2.10.394 (P-audit
+ * polish — exclude pattern-test fixtures from KCode's own self-scan
+ * without baking project-specific paths into the engine).
+ */
+const AUDIT_DISABLE_MARKER = /(?:^|\n)\s*(?:\/\/|#|\/\*)\s*kcode-disable\s*:\s*audit\b/;
+export function hasAuditDisableMarker(content: string): boolean {
+  // First 1 KB is enough — the convention is "directive at file top".
+  return AUDIT_DISABLE_MARKER.test(content.slice(0, 1024));
+}
+
 function isSkippedPath(fullPath: string): boolean {
   // Normalize separators so the same substrings work on Windows-style paths.
   const p = fullPath.replace(/\\/g, "/");
@@ -827,6 +848,24 @@ export async function scanProject(
     }
     // Skip excessively large files
     if (content.length > 500_000) {
+      scanned++;
+      continue;
+    }
+    // v2.10.394 — opt-in audit-disable marker. Files that intentionally
+    // contain vulnerable example code (pattern-test fixtures, security
+    // training material, intentionally-broken examples for docs) can
+    // mark themselves with a directive in the first 1 KB of content:
+    //
+    //   // kcode-disable: audit
+    //   # kcode-disable: audit          (Python / shell / Ruby)
+    //   /* kcode-disable: audit */
+    //
+    // Any of those forms in the first 1 KB skips the file from the
+    // pattern scan. The directive is scoped: future versions may add
+    // `kcode-disable: audit pattern-id` for finer control, but a bare
+    // `audit` covers the common case of "this file is fixtures, don't
+    // grep me for bug shapes".
+    if (hasAuditDisableMarker(content)) {
       scanned++;
       continue;
     }
