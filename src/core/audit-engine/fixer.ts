@@ -1560,6 +1560,22 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "django-005-debug-true-in-settings": r("DEBUG = True in production settings", "Switch to `DEBUG = os.environ.get('DJANGO_DEBUG', '').lower() == 'true'` — env-controlled, defaults to False."),
   "django-006-allowed-hosts-wildcard": r("ALLOWED_HOSTS contains '*'", "List the exact hostnames the app serves; for multi-tenant generate from a config table at startup."),
   "django-007-eval-of-request": r("eval/exec on request.GET|POST data — RCE", W.EVAL),
+
+  // ── P2.3 (v2.10.391) — Rails framework pack ───────────────
+  "rails-002-send-to-dynamic-method": r("send/public_send with user-controlled method name — RCE", "Replace dynamic dispatch with a case statement or hash allowlist of allowed method names."),
+  "rails-003-mass-assignment": r("params.permit! or update_attributes(params[:user]) — mass assignment", "Use strong params: params.require(:user).permit(:name, :email). Never use params.permit!."),
+  "rails-004-eval-instance-eval": r("eval/instance_eval/class_eval with dynamic content — RCE", W.EVAL),
+  "rails-005-render-inline": r("render inline: with dynamic content — ERB injection (RCE)", "Use a partial with locals: { ... } instead of inline ERB. Never let user data into a template string."),
+
+  // ── P2.3 (v2.10.391) — Spring framework pack ──────────────
+  "spring-001-deserialization": r("ObjectInputStream.readObject() — Java deserialization RCE", "Replace with Jackson/JSON. If serialization must stay, override resolveClass to enforce a strict class allowlist."),
+  "spring-002-spel-from-input": r("SpEL parseExpression on user input — RCE", "Bind user values as variables (#var) inside a HARDCODED expression; never let users write the expression itself."),
+  "spring-003-request-mapping-no-auth": r("@PostMapping/@PutMapping without @PreAuthorize", "Add @PreAuthorize(\"isAuthenticated()\") above the mapping or class-level."),
+
+  // ── P2.3 (v2.10.391) — Laravel framework pack ─────────────
+  "laravel-001-mass-assignment-fillable-empty": r("Eloquent ::create($request->all()) — mass assignment", "Use $request->only(['name', 'email']) and set $fillable on the model."),
+  "laravel-002-eval-of-request": r("eval() with $request — RCE", W.EVAL),
+  "laravel-003-raw-db-query-with-input": r("DB::raw with $request interpolation — SQL injection", W.SQL),
 };
 
 function commentPrefix(path: string): string {
