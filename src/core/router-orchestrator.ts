@@ -251,7 +251,7 @@ async function runAgentLoopForSubTask(
   const messages: Message[] = [
     { role: "user", content: initialPrompt },
   ];
-  const systemPrompt = parentConfig._systemPrompt as string | undefined;
+  const systemPrompt = parentConfig.systemPrompt as string | undefined;
 
   // Exclude tools that create persistent multi-turn state. Sub-tasks are
   // isolated and turn-limited; if they call Plan or TaskCreate, the state
