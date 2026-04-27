@@ -4,7 +4,7 @@
 // Uses the LLM to write a professional PR description that explains
 // each bug found, its impact, and the fix applied.
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import type { AuditResult, Finding } from "./types";
@@ -33,12 +33,28 @@ export interface PrResult {
   pushError?: string;
 }
 
-function git(cwd: string, args: string): string {
-  return execSync(`git ${args}`, { cwd, encoding: "utf-8", timeout: 30_000, stdio: ["pipe", "pipe", "pipe"] }).trim();
+// HD.1 (v2.10.380) — argv-form helpers. Prior versions built shell
+// strings via template literals (`git ${args}`), which interpreted
+// shell metacharacters in any user-influenced arg (branch name,
+// repo, head ref, fork user, file path). For an audit tool, command
+// injection in our own PR generator is unacceptable. execFileSync
+// receives the args as an array and never invokes a shell.
+function git(cwd: string, args: string[]): string {
+  return execFileSync("git", args, {
+    cwd,
+    encoding: "utf-8",
+    timeout: 30_000,
+    stdio: ["pipe", "pipe", "pipe"],
+  }).trim();
 }
 
-function gh(cwd: string, args: string): string {
-  return execSync(`gh ${args}`, { cwd, encoding: "utf-8", timeout: 30_000, stdio: ["pipe", "pipe", "pipe"] }).trim();
+function gh(cwd: string, args: string[]): string {
+  return execFileSync("gh", args, {
+    cwd,
+    encoding: "utf-8",
+    timeout: 30_000,
+    stdio: ["pipe", "pipe", "pipe"],
+  }).trim();
 }
 
 /**
@@ -57,13 +73,13 @@ function gh(cwd: string, args: string): string {
  */
 function defaultBranch(cwd: string): string {
   try {
-    const ref = git(cwd, "symbolic-ref refs/remotes/origin/HEAD");
+    const ref = git(cwd, ["symbolic-ref", "refs/remotes/origin/HEAD"]);
     const m = ref.match(/^refs\/remotes\/origin\/(.+)$/);
     if (m) return m[1]!;
   } catch { /* origin/HEAD not set — try fallbacks */ }
   for (const candidate of ["main", "master", "devel", "develop", "trunk"]) {
     try {
-      execSync(`git rev-parse --verify --quiet ${candidate}`, {
+      execFileSync("git", ["rev-parse", "--verify", "--quiet", candidate], {
         cwd, encoding: "utf-8", timeout: 10_000, stdio: ["pipe", "pipe", "pipe"],
       });
       return candidate;
@@ -83,10 +99,10 @@ function defaultBranch(cwd: string): string {
 function runCapturing(
   bin: "git" | "gh",
   cwd: string,
-  args: string,
+  args: string[],
 ): { ok: boolean; stdout: string; stderr: string } {
   try {
-    const out = execSync(`${bin} ${args}`, {
+    const out = execFileSync(bin, args, {
       cwd,
       encoding: "utf-8",
       timeout: 30_000,
@@ -109,13 +125,13 @@ function runCapturing(
  * user can re-run after a transient push failure without losing state.
  */
 function remoteBranchExists(cwd: string, remote: string, branch: string): boolean {
-  const r = runCapturing("git", cwd, `ls-remote --heads ${remote} ${branch}`);
+  const r = runCapturing("git", cwd, ["ls-remote", "--heads", remote, branch]);
   return r.ok && r.stdout.length > 0;
 }
 
 function detectRemoteRepo(cwd: string): string | null {
   try {
-    const url = git(cwd, "remote get-url origin");
+    const url = git(cwd, ["remote", "get-url", "origin"]);
     // Extract owner/repo from various URL formats
     const m = url.match(/github\.com[:/]([^/]+\/[^/.]+)/);
     return m ? m[1]!.replace(/\.git$/, "") : null;
@@ -745,10 +761,10 @@ export async function createPr(opts: PrOptions): Promise<PrResult> {
   //   (B) clean tree but currently on a fix/kcode-audit-* branch with
   //       a recent commit → previous /pr run committed but couldn't
   //       push, resume from push step.
-  const status = git(projectRoot, "status --porcelain");
+  const status = git(projectRoot, ["status", "--porcelain"]);
   let resumeMode = false;
   if (!status) {
-    const currentBranch = git(projectRoot, "branch --show-current");
+    const currentBranch = git(projectRoot, ["branch", "--show-current"]);
     if (/^fix\/kcode-audit-/.test(currentBranch)) {
       resumeMode = true;
       // Use the branch we're already on instead of generating a new one,
@@ -768,7 +784,7 @@ export async function createPr(opts: PrOptions): Promise<PrResult> {
         const base = defaultBranch(projectRoot);
         try {
           return Number.parseInt(
-            git(projectRoot, `rev-list --count ${base}..HEAD`).trim() || "0",
+            git(projectRoot, ["rev-list", "--count", `${base}..HEAD`]).trim() || "0",
             10,
           ) || 0;
         } catch {
@@ -779,7 +795,7 @@ export async function createPr(opts: PrOptions): Promise<PrResult> {
 
   // Diff stat is captured for the commit message footer; the PR
   // body itself no longer needs it (structured body draws from JSON).
-  const diffStat = git(projectRoot, "diff --stat");
+  const diffStat = git(projectRoot, ["diff", "--stat"]);
   const fixes = diffStat.split("\n").filter((l) => l.includes("|")).map((l) => l.trim());
 
   // v2.10.329 (Sprint 4) — structured-first generation.
@@ -832,15 +848,15 @@ export async function createPr(opts: PrOptions): Promise<PrResult> {
       step("Resume mode: branch + commit already present, skipping to push...");
       // Capture the existing HEAD as the commit hash.
       try {
-        commitHash = git(projectRoot, "rev-parse --short HEAD");
+        commitHash = git(projectRoot, ["rev-parse", "--short", "HEAD"]);
       } catch { /* ignore */ }
     } else {
       // Create branch
       step("Creating branch...");
       try {
-        git(projectRoot, `checkout -b ${branchName}`);
+        git(projectRoot, ["checkout", "-b", branchName]);
       } catch {
-        try { git(projectRoot, `checkout ${branchName}`); } catch { /* ignore */ }
+        try { git(projectRoot, ["checkout", branchName]); } catch { /* ignore */ }
       }
 
       // Stage only the files that the audit actually modified, NOT the
@@ -860,19 +876,26 @@ export async function createPr(opts: PrOptions): Promise<PrResult> {
           ? f.file.slice(projectRoot.length + 1)
           : f.file,
       );
-      // Dedupe and quote to survive paths with spaces / special chars.
+      // HD.1 — argv-form passes path as one argument; spaces and
+      // special chars no longer require manual JSON.stringify quoting.
       const uniquePaths = Array.from(new Set(auditFiles)).filter(Boolean);
       for (const p of uniquePaths) {
-        runCapturing("git", projectRoot, `add -- ${JSON.stringify(p)}`);
+        runCapturing("git", projectRoot, ["add", "--", p]);
       }
       // Belt-and-suspenders: forcibly un-stage anything else that may
       // have crept in (e.g. user had pre-existing dirty state, or a
       // stray .kcode-* tempfile).
-      runCapturing(
-        "git",
-        projectRoot,
-        `reset HEAD -- AUDIT_REPORT.json AUDIT_REPORT.md AUDIT_REPORT.sarif .kcode-pr-body .kcode-pr-comment .kcode-commit-msg`,
-      );
+      runCapturing("git", projectRoot, [
+        "reset",
+        "HEAD",
+        "--",
+        "AUDIT_REPORT.json",
+        "AUDIT_REPORT.md",
+        "AUDIT_REPORT.sarif",
+        ".kcode-pr-body",
+        ".kcode-pr-comment",
+        ".kcode-commit-msg",
+      ]);
 
       // Commit
       step("Committing...");
@@ -886,7 +909,7 @@ Signed-off-by: Astrolexis.space — Kulvex Code
       const msgFile = resolve(projectRoot, ".kcode-commit-msg");
       writeFileSync(msgFile, commitMsg);
       try {
-        commitHash = git(projectRoot, `commit -F ${msgFile}`);
+        commitHash = git(projectRoot, ["commit", "-F", msgFile]);
         const hashMatch = commitHash.match(/\[[\w/]+ ([a-f0-9]+)\]/);
         commitHash = hashMatch ? hashMatch[1]! : "";
       } finally {
@@ -901,7 +924,7 @@ Signed-off-by: Astrolexis.space — Kulvex Code
 
     // Resolve forkUser early so we can short-circuit when the branch
     // is already pushed to the user's fork.
-    const userQ = runCapturing("gh", projectRoot, "api user --jq .login");
+    const userQ = runCapturing("gh", projectRoot, ["api", "user", "--jq", ".login"]);
     if (userQ.ok) forkUser = userQ.stdout;
 
     // Resume / idempotent path: if the branch is already on the user's
@@ -919,11 +942,12 @@ Signed-off-by: Astrolexis.space — Kulvex Code
 
     if (!pushedToFork) {
       step("Pushing to origin...");
-      const originPush = runCapturing(
-        "git",
-        projectRoot,
-        `push -u origin ${branchName}`,
-      );
+      const originPush = runCapturing("git", projectRoot, [
+        "push",
+        "-u",
+        "origin",
+        branchName,
+      ]);
       if (!originPush.ok) {
         // Origin push failed (likely 403 — no write access). Try fork workflow.
         if (upstreamRepo) {
@@ -935,16 +959,17 @@ Signed-off-by: Astrolexis.space — Kulvex Code
             // Fork the repo (or confirm it exists). gh's "already exists"
             // failure is non-fatal — we just want the fork to exist.
             step(`Forking ${upstreamRepo}...`);
-            runCapturing("gh", projectRoot, `repo fork ${upstreamRepo} --clone=false`);
+            runCapturing("gh", projectRoot, ["repo", "fork", upstreamRepo, "--clone=false"]);
 
             // Always ensure the "fork" remote points to our fork.
             step("Configuring fork remote...");
-            runCapturing("git", projectRoot, `remote remove fork`);
-            const addRemote = runCapturing(
-              "git",
-              projectRoot,
-              `remote add fork https://github.com/${forkUser}/${repoName}.git`,
-            );
+            runCapturing("git", projectRoot, ["remote", "remove", "fork"]);
+            const addRemote = runCapturing("git", projectRoot, [
+              "remote",
+              "add",
+              "fork",
+              `https://github.com/${forkUser}/${repoName}.git`,
+            ]);
             if (!addRemote.ok) {
               pushError = `Could not configure fork remote: ${addRemote.stderr}`;
             }
@@ -962,11 +987,13 @@ Signed-off-by: Astrolexis.space — Kulvex Code
                 step("Waiting for fork to provision (retry)...");
                 await new Promise((r) => setTimeout(r, 5000));
               }
-              const r = runCapturing(
-                "git",
-                projectRoot,
-                `push -u fork ${branchName} --force`,
-              );
+              const r = runCapturing("git", projectRoot, [
+                "push",
+                "-u",
+                "fork",
+                branchName,
+                "--force",
+              ]);
               if (r.ok) {
                 pushedToFork = true;
                 break;
@@ -998,21 +1025,39 @@ Signed-off-by: Astrolexis.space — Kulvex Code
       // Detect existing PR for this branch first — if one is already
       // open we can't create a duplicate.
       const head = pushedToFork && forkUser ? `${forkUser}:${branchName}` : branchName;
-      const existingPr = runCapturing(
-        "gh",
-        projectRoot,
-        `pr list --repo ${upstreamRepo} --head ${head} --state open --json url --jq ".[0].url"`,
-      );
+      const existingPr = runCapturing("gh", projectRoot, [
+        "pr",
+        "list",
+        "--repo",
+        upstreamRepo,
+        "--head",
+        head,
+        "--state",
+        "open",
+        "--json",
+        "url",
+        "--jq",
+        ".[0].url",
+      ]);
       if (existingPr.ok && existingPr.stdout && existingPr.stdout !== "null") {
         prUrl = existingPr.stdout;
       } else {
-        const create = runCapturing(
-          "gh",
-          projectRoot,
-          pushedToFork && forkUser
-            ? `pr create --title "${prTitle}" --body-file ${bodyFile} --repo ${upstreamRepo} --head ${forkUser}:${branchName}`
-            : `pr create --title "${prTitle}" --body-file ${bodyFile} --repo ${upstreamRepo}`,
-        );
+        // HD.1 — argv form. Title and bodyFile path no longer require
+        // shell quoting; gh handles each argument as a literal.
+        const createArgs = [
+          "pr",
+          "create",
+          "--title",
+          prTitle,
+          "--body-file",
+          bodyFile,
+          "--repo",
+          upstreamRepo,
+        ];
+        if (pushedToFork && forkUser) {
+          createArgs.push("--head", `${forkUser}:${branchName}`);
+        }
+        const create = runCapturing("gh", projectRoot, createArgs);
         if (create.ok) {
           prUrl = create.stdout;
         } else {
@@ -1034,11 +1079,13 @@ Signed-off-by: Astrolexis.space — Kulvex Code
         const commentFile = resolve(projectRoot, ".kcode-pr-comment");
         try {
           writeFileSync(commentFile, commentBody);
-          runCapturing(
-            "gh",
-            projectRoot,
-            `pr comment ${prUrl} --body-file ${commentFile}`,
-          );
+          runCapturing("gh", projectRoot, [
+            "pr",
+            "comment",
+            prUrl,
+            "--body-file",
+            commentFile,
+          ]);
         } catch { /* non-fatal */ }
         finally { try { unlinkSync(commentFile); } catch { /* ignore */ } }
       }

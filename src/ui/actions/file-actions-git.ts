@@ -2,6 +2,7 @@
 // Split out of file-actions.ts.
 
 import type { ActionContext } from "./action-helpers.js";
+import { tokenize } from "./argv-parser.js";
 
 export async function handleGitAction(
   action: string,
@@ -11,11 +12,25 @@ export async function handleGitAction(
 
   switch (action) {
     case "pr": {
-      const tokens = (args ?? "").trim().split(/\s+/).filter(Boolean);
+      // HD.2 (v2.10.380) — shell-quote-aware tokenizer, same one
+      // /scan, /review, /fix already use. Fixes paths with spaces
+      // and lets `--repo "owner/repo with spaces"` parse correctly
+      // (rare but possible). Unterminated quotes return a friendly
+      // message instead of crashing.
+      let tokens: string[];
+      try {
+        tokens = tokenize(args);
+      } catch (err) {
+        return `  ${(err as Error).message}`;
+      }
       const dryRun = tokens.includes("--dry-run");
       const repoFlag = tokens.indexOf("--repo");
       const repo = repoFlag >= 0 ? tokens[repoFlag + 1] : undefined;
-      const pathToken = tokens.find((t) => !t.startsWith("--") && t !== repo) ?? ".";
+      // pathToken is the first non-flag, non-flag-value token. Skip
+      // the value token after --repo so `/pr --repo owner/x .` picks
+      // `.` as path, not `owner/x`.
+      const pathToken =
+        tokens.find((t, i) => !t.startsWith("--") && i !== repoFlag + 1) ?? ".";
       const { resolve: resolvePath } = await import("node:path");
       const projectRoot = resolvePath(appConfig.workingDirectory, pathToken);
 
