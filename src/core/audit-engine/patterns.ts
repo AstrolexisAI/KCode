@@ -73,6 +73,12 @@ import { FASTAPI_PATTERNS } from "./patterns/fastapi";
 import { EXPRESS_PATTERNS } from "./patterns/express";
 // P2.3 (v2.10.391) — Django framework pack.
 import { DJANGO_PATTERNS } from "./patterns/django";
+// P2.3 (v2.10.391) — Rails framework pack.
+import { RAILS_PATTERNS } from "./patterns/rails";
+// P2.3 (v2.10.391) — Spring framework pack.
+import { SPRING_PATTERNS } from "./patterns/spring";
+// P2.3 (v2.10.391) — Laravel framework pack.
+import { LARAVEL_PATTERNS } from "./patterns/laravel";
 
 // Re-export every per-language array so existing imports keep working.
 export {
@@ -107,6 +113,9 @@ export {
   FASTAPI_PATTERNS,
   EXPRESS_PATTERNS,
   DJANGO_PATTERNS,
+  RAILS_PATTERNS,
+  SPRING_PATTERNS,
+  LARAVEL_PATTERNS,
 };
 
 export const ALL_PATTERNS: BugPattern[] = [
@@ -141,6 +150,9 @@ export const ALL_PATTERNS: BugPattern[] = [
   ...FASTAPI_PATTERNS,
   ...EXPRESS_PATTERNS,
   ...DJANGO_PATTERNS,
+  ...RAILS_PATTERNS,
+  ...SPRING_PATTERNS,
+  ...LARAVEL_PATTERNS,
 ];
 
 /** Return all patterns applicable to the given language. */
