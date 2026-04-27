@@ -198,20 +198,31 @@ export async function handleAuditAction(
               scanState.total = 0;
               scanState.escalated = 0;
 
-              // Re-run full scan with cloud as primary. Wrapped in
+              // Re-run scan with cloud as primary. Wrapped in
               // try/catch because the verifier now aborts after 3
               // consecutive transport / 401 / 404 errors instead of
               // silently bucketing every candidate as needs_context.
               // When that happens we keep the primary pass result and
               // surface a clear error in scanState. v2.10.312.
+              //
+              // HD.3 (v2.10.380) — pass through the user's original
+              // scope (--since, --pack, --max-files) so the cloud
+              // pass doesn't widen scope past what the primary
+              // scanned. Earlier code hardcoded maxFiles to MAX
+              // and dropped the diff/pack filters, which mixed
+              // out-of-scope findings into the merged result.
               let cloudResult: typeof result | null = null;
               let cloudAbortError: string | null = null;
               try {
                 cloudResult = await runAudit({
                   projectRoot,
                   llmCallback: fallbackCallback,
-                  maxFiles: Number.MAX_SAFE_INTEGER,
+                  maxFiles: parsedMaxFiles ?? Number.MAX_SAFE_INTEGER,
                   skipVerification: false,
+                  ...(sinceRef ? { since: sinceRef } : {}),
+                  ...(packArg
+                    ? { pack: packArg as "web" | "ai-ml" | "cloud" | "supply-chain" | "embedded" }
+                    : {}),
                   onPhase: (phase, detail) => {
                     scanState.phase = `☁ ${phase}${detail ? ": " + detail : ""}`;
                     if (phase === "verifying" && detail) {
@@ -234,12 +245,19 @@ export async function handleAuditAction(
                 );
               }
 
-              // Merge: keep original confirmed + add cloud-confirmed (dedup by file:line).
-              // Skip the merge entirely if the cloud pass aborted —
-              // primary results stay untouched and the error is surfaced.
+              // Merge: keep original confirmed + add cloud-confirmed.
+              // HD.3 — dedup by finding_id when present (refactor-tolerant
+              // identity from CL.2) with file:line as fallback for legacy
+              // findings. Skip the merge entirely if the cloud pass
+              // aborted — primary results stay untouched and the error
+              // is surfaced.
               if (cloudResult) {
+              const sameFinding = (a: typeof result.findings[number], b: typeof result.findings[number]): boolean => {
+                if (a.finding_id && b.finding_id) return a.finding_id === b.finding_id;
+                return a.file === b.file && a.line === b.line;
+              };
               for (const f of cloudResult.findings) {
-                if (!result.findings.some((e) => e.file === f.file && e.line === f.line)) {
+                if (!result.findings.some((e) => sameFinding(e, f))) {
                   f.verification.reasoning = `[☁ second opinion] ${f.verification.reasoning}`;
                   result.findings.push(f);
                 }
@@ -251,18 +269,19 @@ export async function handleAuditAction(
               // "false_positives: 33" and "false_positives_detail: []" — a
               // contradiction that made the rejections unauditable. Issue
               // #111 v2.10.309.
+              // HD.3 — dedupe by finding_id when present.
+              const sameAsConfirmed = (entry: { finding_id?: string; file: string; line: number }): boolean =>
+                result.findings.some((conf) =>
+                  conf.finding_id && entry.finding_id
+                    ? conf.finding_id === entry.finding_id
+                    : conf.file === entry.file && conf.line === entry.line,
+                );
               result.false_positives_detail = cloudResult.false_positives_detail.filter(
-                (fp) =>
-                  !result.findings.some(
-                    (conf) => conf.file === fp.file && conf.line === fp.line,
-                  ),
+                (fp) => !sameAsConfirmed(fp),
               );
               result.false_positives = result.false_positives_detail.length;
               result.needs_context_detail = (cloudResult.needs_context_detail ?? []).filter(
-                (nc) =>
-                  !result.findings.some(
-                    (conf) => conf.file === nc.file && conf.line === nc.line,
-                  ),
+                (nc) => !sameAsConfirmed(nc),
               );
               result.needs_context = result.needs_context_detail.length;
               } // end if (cloudResult)
