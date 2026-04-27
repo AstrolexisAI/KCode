@@ -112,6 +112,13 @@ export function registerAuditCommand(program: Command): void {
         "Never executes anything — just structured PoC data. P1.3 (v2.10.389).",
       false,
     )
+    .option(
+      "--deps",
+      "Also scan dependency manifests (package.json) against a curated advisory database. " +
+        "Each known-vulnerable dependency becomes a confirmed finding alongside source-code findings. " +
+        "P2.4 slice 1 (v2.10.392+). Currently npm-only; future slices add pip / cargo / go / etc.",
+      false,
+    )
     .action(async (path: string, opts: {
       output?: string;
       model?: string;
@@ -128,6 +135,7 @@ export function registerAuditCommand(program: Command): void {
       sarif: boolean;
       ci: boolean;
       exploits: boolean;
+      deps: boolean;
     }) => {
       const projectRoot = pathResolve(path);
       const outputPath = opts.output ?? pathResolve(projectRoot, "AUDIT_REPORT.md");
@@ -249,6 +257,7 @@ export function registerAuditCommand(program: Command): void {
         maxFiles,
         skipVerification: opts.skipVerify,
         generateExploits: opts.exploits,
+        includeDeps: opts.deps,
         since: opts.since,
         ...(opts.pack
           ? { pack: opts.pack as "web" | "ai-ml" | "cloud" | "supply-chain" | "embedded" }

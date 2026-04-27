@@ -62,6 +62,17 @@ export interface AuditEngineOptions {
    */
   generateExploits?: boolean;
   /**
+   * P2.4 slice 1 (v2.10.392+) — opt-in dependency manifest scan.
+   * When true, the orchestrator parses package.json files under the
+   * project root, matches each dependency against a curated advisory
+   * database (currently bundled-static; future slices wire to
+   * osv.dev / GHSA), and appends each match as a finding with
+   * severity from the advisory. Off by default — keeps the regular
+   * /scan focused on source code; enable with /scan --deps for
+   * supply-chain context.
+   */
+  includeDeps?: boolean;
+  /**
    * Optional cancellation signal. The pipeline checks it at every
    * phase boundary and propagates it into verification so an in-flight
    * /scan can be interrupted from the TUI (Esc) without killing the
@@ -549,6 +560,43 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     if (m.unique_sites > 0) {
       m.confirmed_rate = m.confirmed / m.unique_sites;
       m.false_positive_rate = m.false_positive / m.unique_sites;
+    }
+  }
+
+  // P2.4 slice 1 (v2.10.392+) — opt-in SBOM dependency scan. We
+  // run BEFORE the exploit generator so the appended findings flow
+  // through the same downstream wiring (fix_support, exploit-gen
+  // template lookup, report rendering). Each SbomFinding is mapped
+  // to a standard Finding so existing report templates work without
+  // a special section.
+  if (opts.includeDeps) {
+    opts.onPhase?.("verifying", "scanning dependency manifests");
+    try {
+      const { scanDependencies } = await import("./sbom");
+      const sbomFindings = scanDependencies(opts.projectRoot);
+      for (const sf of sbomFindings) {
+        findings.push({
+          pattern_id: sf.pattern_id,
+          pattern_title: `${sf.package}@${sf.installed_spec} — ${sf.summary.slice(0, 80)}`,
+          severity: sf.severity,
+          file: sf.manifest,
+          line: 1,
+          matched_text: `"${sf.package}": "${sf.installed_spec}"`,
+          context: `Dependency ${sf.package} (${sf.source}) — affected range ${sf.affected}`,
+          verification: {
+            verdict: "confirmed",
+            reasoning: sf.summary,
+          },
+          ...(sf.cwe ? { cwe: sf.cwe } : {}),
+          fix_support: "manual" as const,
+        });
+      }
+      // Keep these out of patternMetrics — they're not regex-pattern
+      // hits, they're CVE matches with their own provenance shape.
+    } catch (err) {
+      // SBOM scan is additive; failure must not break the audit.
+      // eslint-disable-next-line no-console
+      console.warn(`[audit-engine] SBOM scan failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

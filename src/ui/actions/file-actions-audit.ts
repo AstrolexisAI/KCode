@@ -29,6 +29,9 @@ export async function handleAuditAction(
       // default; enabled with /scan --exploits to produce PoC data
       // for confirmed findings (security-review / customer-report flow).
       const generateExploits = tokens.includes("--exploits") || tokens.includes("--proofs");
+      // P2.4 slice 1 (v2.10.392+) — opt-in dependency manifest scan
+      // against a curated advisory list. /scan --deps enables.
+      const includeDeps = tokens.includes("--deps") || tokens.includes("--sbom");
       // CL.6 (v2.10.376) — /scan now passes through engine flags that
       // were previously CLI-only. Same parser shape as the audit
       // command in cli/commands/audit.ts so users get one mental
@@ -166,6 +169,7 @@ export async function handleAuditAction(
             maxFiles: parsedMaxFiles ?? Number.MAX_SAFE_INTEGER,
             skipVerification: skipVerify,
             generateExploits,
+            includeDeps,
             // CL.6 — pass through diff-based audit and pack filter.
             ...(sinceRef ? { since: sinceRef } : {}),
             ...(packArg
