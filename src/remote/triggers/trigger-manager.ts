@@ -37,7 +37,8 @@ export function validateCron(expression: string): void {
   ];
 
   for (let i = 0; i < 5; i++) {
-    validateCronField(fields[i], fieldDefs[i].name, fieldDefs[i].min, fieldDefs[i].max);
+    const def = fieldDefs[i]!;
+    validateCronField(fields[i]!, def.name, def.min, def.max);
   }
 }
 

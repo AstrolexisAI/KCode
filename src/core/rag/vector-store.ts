@@ -119,7 +119,7 @@ export class VectorStore {
       sql += " WHERE " + conditions.join(" AND ");
     }
 
-    const rows = this.db.prepare(sql).all(...params) as Array<{
+    const rows = this.db.prepare(sql).all(...(params as (string | number | null)[])) as Array<{
       id: string;
       file_path: string;
       relative_path: string;

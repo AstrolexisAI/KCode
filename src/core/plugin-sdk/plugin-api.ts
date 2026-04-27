@@ -61,9 +61,9 @@ export class PluginAPI {
       return this.configStore.get(scopedKey);
     }
     try {
-      const { getConfig } = await import("../config");
-      const settings = getConfig();
-      return (settings as Record<string, unknown>)[scopedKey] ?? null;
+      const { loadUserSettingsRaw } = await import("../config");
+      const settings = await loadUserSettingsRaw();
+      return settings[scopedKey] ?? null;
     } catch {
       return null;
     }
@@ -141,10 +141,9 @@ export class PluginAPI {
   async executeTool(name: string, input: Record<string, unknown>): Promise<ToolResult> {
     const start = Date.now();
     try {
-      const tools = await import("../../tools/index");
-      const allTools = tools.getRegisteredTools?.() ?? tools.default ?? [];
-      const tool = Array.isArray(allTools) ? allTools.find((t: any) => t.name === name) : null;
-      if (!tool) {
+      const { registerBuiltinTools } = await import("../../tools/index");
+      const registry = registerBuiltinTools();
+      if (!registry.has(name)) {
         return {
           success: false,
           output: "",
@@ -152,7 +151,7 @@ export class PluginAPI {
         };
       }
       this.log.debug(`Executing tool: ${name}`);
-      const result = await tool.handler(input);
+      const result = await registry.execute(name, input);
       const duration = Date.now() - start;
       return {
         success: true,
@@ -226,8 +225,8 @@ export class PluginAPI {
 function parseMemoryFile(content: string): MemoryEntry | null {
   const fmMatch = content.match(/^---\n([\s\S]*?)\n---\n\n?([\s\S]*)$/);
   if (!fmMatch) return null;
-  const frontmatter = fmMatch[1];
-  const body = fmMatch[2].trim();
+  const frontmatter = fmMatch[1]!;
+  const body = fmMatch[2]!.trim();
   const meta: Record<string, string> = {};
   for (const line of frontmatter.split("\n")) {
     const colonIdx = line.indexOf(":");

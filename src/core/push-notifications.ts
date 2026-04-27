@@ -349,7 +349,7 @@ export async function sendPushNotification(
         TTL: "86400",
         "Content-Length": String(encrypted.body.length),
       },
-      body: encrypted.body,
+      body: encrypted.body as BodyInit,
     });
 
     if (response.status === 201 || response.status === 200) {

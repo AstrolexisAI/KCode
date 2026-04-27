@@ -602,7 +602,7 @@ export async function buildRequestForModel(
         // Find the last text block in this message
         for (let j = msg.content.length - 1; j >= 0; j--) {
           if (msg.content[j]!.type === "text") {
-            msg.content[j]!.cache_control = { type: "ephemeral" };
+            (msg.content[j] as Record<string, unknown>).cache_control = { type: "ephemeral" };
             break;
           }
         }
@@ -797,7 +797,7 @@ export async function executeModelRequest(
   }
 
   // Log message structure at debug level for diagnosing tool_use/tool_result pairing
-  if (log.isDebugEnabled?.()) {
+  if ((log as { isDebugEnabled?: () => boolean }).isDebugEnabled?.()) {
     const msgs = Array.isArray(req.body.messages) ? req.body.messages as Array<{role: string; content: unknown}> : [];
     const summary = msgs.map((m, i) => {
       if (typeof m.content === "string") return `${i}:${m.role}(text)`;

@@ -194,7 +194,7 @@ export function validateSAMLResponse(samlResponse: string, config: SSOConfig): S
   const certMatch = xml.match(/<(?:ds:)?X509Certificate>([^<]+)<\/(?:ds:)?X509Certificate>/);
   if (certMatch && config.certificate) {
     const responseCertFingerprint = createHash("sha256")
-      .update(certMatch[1].replace(/\s/g, ""))
+      .update(certMatch[1]!.replace(/\s/g, ""))
       .digest("hex");
     const configCertFingerprint = createHash("sha256")
       .update(config.certificate.replace(/\s/g, ""))
@@ -232,15 +232,15 @@ export function validateSAMLResponse(samlResponse: string, config: SSOConfig): S
   while ((groupBlock = groupRegex.exec(xml)) !== null) {
     const valueRegex = /<(?:saml2?:)?AttributeValue[^>]*>([^<]+)/g;
     let valueMatch: RegExpExecArray | null;
-    while ((valueMatch = valueRegex.exec(groupBlock[1])) !== null) {
-      groups.push(valueMatch[1].trim());
+    while ((valueMatch = valueRegex.exec(groupBlock[1]!)) !== null) {
+      groups.push(valueMatch[1]!.trim());
     }
   }
 
   // Extract session expiry from Conditions or SubjectConfirmationData
   const notOnOrAfterMatch = xml.match(/NotOnOrAfter="([^"]+)"/);
   const expiresAt = notOnOrAfterMatch
-    ? new Date(notOnOrAfterMatch[1]).getTime()
+    ? new Date(notOnOrAfterMatch[1]!).getTime()
     : Date.now() + 8 * 60 * 60 * 1000; // Default: 8 hours
 
   const userId = createHash("sha256").update(email.toLowerCase()).digest("hex").slice(0, 16);
@@ -535,7 +535,7 @@ export function decodeJWTPayload(token: string): Record<string, unknown> {
   try {
     const parts = token.split(".");
     if (parts.length !== 3) return {};
-    const payload = Buffer.from(parts[1], "base64url").toString("utf-8");
+    const payload = Buffer.from(parts[1]!, "base64url").toString("utf-8");
     return JSON.parse(payload);
   } catch {
     return {};

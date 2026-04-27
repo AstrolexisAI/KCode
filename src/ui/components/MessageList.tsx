@@ -206,7 +206,7 @@ function EntryRenderer({ entry }: { entry: MessageEntry }) {
   }
 }
 
-function TextMessage({ role, text }: { role: "user" | "assistant"; text: string }) {
+function TextMessage({ role, text }: { role: "user" | "assistant" | "system"; text: string }) {
   const { theme } = useTheme();
 
   if (role === "user") {

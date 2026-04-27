@@ -74,7 +74,8 @@ export function mergeConsecutiveAssistant(messages: Message[]): {
       if (typeof prev.content === "string") {
         prev.content = merged;
       } else if (Array.isArray(prev.content) && prev.content.length > 0) {
-        prev.content[0] = { ...prev.content[0], text: merged };
+        const first = prev.content[0]!;
+        prev.content[0] = { ...first, type: first.type ?? "text", text: merged };
       }
 
       // Update finish_reason to the continuation's
@@ -120,9 +121,9 @@ export function mergeParts(parts: string[]): MergeResult {
     };
   }
 
-  let result = parts[0];
+  let result = parts[0]!;
   for (let i = 1; i < parts.length; i++) {
-    result = smartJoin(result, parts[i]);
+    result = smartJoin(result, parts[i]!);
   }
 
   return {

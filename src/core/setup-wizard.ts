@@ -138,7 +138,9 @@ async function lazyDownloadModel(
 export async function runSetup(options?: {
   model?: string;
   force?: boolean;
-}): Promise<{ model: string; enginePath: string; modelPath: string }> {
+  /** Skip the download-confirmation prompt (CI / scripted installs). */
+  yes?: boolean;
+}): Promise<{ model: string; enginePath: string; modelPath: string } | undefined> {
   const C = {
     reset: "\x1b[0m",
     bold: "\x1b[1m",
