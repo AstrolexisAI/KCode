@@ -218,7 +218,7 @@ function findMatchingFiles(dir: string, pattern: string): string[] {
 
   try {
     const entries = readdirSync(targetDir);
-    const regex = new RegExp("^" + filePart.replace(/\*/g, ".*").replace(/\?/g, ".") + "$");
+    const regex = new RegExp("^" + filePart!.replace(/\*/g, ".*").replace(/\?/g, ".") + "$");
     return entries.filter((e) => regex.test(e)).map((e) => (dirPart ? `${dirPart}/${e}` : e));
   } catch {
     return [];
@@ -234,7 +234,7 @@ function validateFrontmatter(content: string): string[] {
   }
 
   const fm = match[1];
-  const lines = fm.split("\n").filter((l) => l.trim());
+  const lines = fm!.split("\n").filter((l) => l.trim());
   const fields: Record<string, string> = {};
 
   for (const line of lines) {

@@ -90,7 +90,7 @@ export function microcompactToolResults(messages: Message[]): number {
   const toClear = toolResults.slice(0, -MICROCOMPACT_KEEP_RECENT);
   let cleared = 0;
   for (const { mi, bi } of toClear) {
-    const block = (messages[mi]!.content as Array<Record<string, unknown>>)[bi]!;
+    const block = (messages[mi]!.content as unknown as Array<Record<string, unknown>>)[bi]!;
     block.content = CLEARED_SENTINEL;
     cleared++;
   }

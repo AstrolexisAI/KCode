@@ -27,7 +27,7 @@ describe("KulvexSink", () => {
   });
 
   test("send does not throw", async () => {
-    await expect(sink.send(makeEvent("test.event"))).resolves.toBeUndefined();
+    await expect(sink.send([makeEvent("test.event")])).resolves.toBeUndefined();
   });
 
   test("flush with no events does not throw", async () => {
@@ -35,7 +35,7 @@ describe("KulvexSink", () => {
   });
 
   test("shutdown does not throw", async () => {
-    await sink.send(makeEvent("test.event"));
+    await sink.send([makeEvent("test.event")]);
     await expect(sink.shutdown()).resolves.toBeUndefined();
   });
 

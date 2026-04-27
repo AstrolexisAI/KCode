@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "mode": "static-only",
+  "date": "2026-04-27T17:25:27.405Z",
+  "metrics": {
+    "precision": 1,
+    "recall": 0.9231,
+    "f1": 0.96,
+    "true_positives": 12,
+    "false_positives": 0,
+    "false_negatives": 1,
+    "mean_scan_ms": 13
+  },
+  "per_pack": [
+    {
+      "pack": "ai-ml",
+      "tp": 2,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1
+    },
+    {
+      "pack": "general",
+      "tp": 9,
+      "fp": 0,
+      "fn": 1,
+      "precision": 1,
+      "recall": 0.9,
+      "f1": 0.9474
+    },
+    {
+      "pack": "web",
+      "tp": 1,
+      "fp": 0,
+      "fn": 0,
+      "precision": 1,
+      "recall": 1,
+      "f1": 1
+    }
+  ],
+  "fixtures": [
+    {
+      "name": "ambiguous-eval-config-js",
+      "kind": "ambiguous",
+      "true_positives": 1,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "duration_ms": 40,
+      "findings_count": 1
+    },
+    {
+      "name": "clean-utility-js",
+      "kind": "negative",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "duration_ms": 12,
+      "findings_count": 0
+    },
+    {
+      "name": "eval-js",
+      "kind": "positive",
+      "true_positives": 2,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "duration_ms": 12,
+      "findings_count": 5
+    },
+    {
+      "name": "innerhtml-js",
+      "kind": "positive",
+      "true_positives": 2,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "duration_ms": 11,
+      "findings_count": 3
+    },
+    {
+      "name": "path-traversal-py",
+      "kind": "positive",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 1,
+      "duration_ms": 9,
+      "findings_count": 0
+    },
+    {
+      "name": "pickle-py",
+      "kind": "positive",
+      "true_positives": 2,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "duration_ms": 8,
+      "findings_count": 6
+    },
+    {
+      "name": "propagation-js",
+      "kind": "positive",
+      "true_positives": 2,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "duration_ms": 13,
+      "findings_count": 4
+    },
+    {
+      "name": "sanitized-eval-js",
+      "kind": "negative",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "duration_ms": 10,
+      "findings_count": 0
+    },
+    {
+      "name": "sanitized-pickle-py",
+      "kind": "negative",
+      "true_positives": 0,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "duration_ms": 7,
+      "findings_count": 0
+    },
+    {
+      "name": "shell-js",
+      "kind": "positive",
+      "true_positives": 1,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "duration_ms": 10,
+      "findings_count": 1
+    },
+    {
+      "name": "sqli-py",
+      "kind": "positive",
+      "true_positives": 2,
+      "false_positives": 0,
+      "false_negatives": 0,
+      "duration_ms": 8,
+      "findings_count": 5
+    }
+  ]
+}

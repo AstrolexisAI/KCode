@@ -10,6 +10,7 @@ const mockConfig: KCodeConfig = {
   permissionMode: "ask",
   maxTokens: 4096,
   version: "test",
+  systemPrompt: "",
 };
 
 function makeMockPlan(steps: PlanStep[]): Plan {

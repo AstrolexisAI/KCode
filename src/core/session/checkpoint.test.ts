@@ -80,7 +80,7 @@ describe("CheckpointManager", () => {
       }
       const list = manager.listForConversation("conv-1");
       expect(list).toHaveLength(3);
-      expect(list[0].timestamp).toBeGreaterThan(list[1].timestamp);
+      expect(list[0]!.timestamp).toBeGreaterThan(list[1]!.timestamp);
     });
 
     test("returns empty for unknown conversation", () => {

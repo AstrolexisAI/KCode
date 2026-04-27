@@ -69,8 +69,8 @@ export class PerformanceMonitor {
       {
         tokensPerSecond: 0,
         timeToFirstToken: 0,
-        gpuUtilization: this.history[0].gpuUtilization !== undefined ? 0 : undefined,
-        gpuMemoryUsed: this.history[0].gpuMemoryUsed !== undefined ? 0 : undefined,
+        gpuUtilization: this.history[0]!.gpuUtilization !== undefined ? 0 : undefined,
+        gpuMemoryUsed: this.history[0]!.gpuMemoryUsed !== undefined ? 0 : undefined,
         ramUsed: 0,
         cpuUtilization: 0,
       } as PerformanceMetrics,

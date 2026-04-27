@@ -70,7 +70,7 @@ describe("convertToOpenAIMessages", () => {
     const result = convertToOpenAIMessages("", messages);
     // Thinking blocks now go into reasoning_content (for providers like Kimi/DeepSeek)
     // not embedded in text content via <thinking> tags
-    expect((result[0] as Record<string, unknown>).reasoning_content).toBe("step by step");
+    expect((result[0] as unknown as Record<string, unknown>).reasoning_content).toBe("step by step");
     expect(result[0]!.content).toBe("Answer");
   });
 

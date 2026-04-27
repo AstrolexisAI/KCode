@@ -303,7 +303,7 @@ export async function handleWebhookEvent(event: WebhookEvent): Promise<void> {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as Record<string, unknown> | undefined;
-      const email = (session?.customer_email ?? session?.customer_details?.email) as
+      const email = (session?.customer_email ?? (session?.customer_details as { email?: string } | undefined)?.email) as
         | string
         | undefined;
       const customerId = session?.customer as string | undefined;

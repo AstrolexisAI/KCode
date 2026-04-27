@@ -91,7 +91,7 @@ async function deriveKey(teamToken: string, salt: Uint8Array): Promise<CryptoKey
   return crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
-      salt,
+      salt: salt as BufferSource,
       iterations: 100_000,
       hash: "SHA-256",
     },
@@ -111,7 +111,7 @@ export async function encryptData(data: Uint8Array, teamToken: string): Promise<
   const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
   const key = await deriveKey(teamToken, salt);
 
-  const ciphertext = await crypto.subtle.encrypt({ name: AES_ALGORITHM, iv }, key, data);
+  const ciphertext = await crypto.subtle.encrypt({ name: AES_ALGORITHM, iv }, key, data as BufferSource);
 
   // Concatenate: salt + iv + ciphertext
   const result = new Uint8Array(salt.length + iv.length + ciphertext.byteLength);

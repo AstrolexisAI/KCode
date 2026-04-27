@@ -16,18 +16,19 @@ export class KulvexSink implements TelemetrySink {
 
   constructor(private installId?: string) {}
 
-  async send(event: TelemetryEvent): Promise<void> {
+  async send(events: TelemetryEvent[]): Promise<void> {
     // Strip any potentially sensitive attributes — only keep safe fields
-    const safe: TelemetryEvent = {
-      name: event.name,
-      timestamp: event.timestamp,
-      traceId: "",
-      spanId: "",
-      attributes: this.sanitizeAttributes(event.attributes),
-      duration: event.duration,
-    };
-
-    this.batch.push(safe);
+    for (const event of events) {
+      const safe: TelemetryEvent = {
+        name: event.name,
+        timestamp: event.timestamp,
+        traceId: "",
+        spanId: "",
+        attributes: this.sanitizeAttributes(event.attributes),
+        duration: event.duration,
+      };
+      this.batch.push(safe);
+    }
 
     // Flush if batch is full or interval has passed
     if (this.batch.length >= MAX_BATCH_SIZE) {

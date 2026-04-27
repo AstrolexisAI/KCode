@@ -42,7 +42,7 @@ function makeImageMsg(index: number): Message {
   return {
     role: "user" as const,
     content: [
-      { type: "image" as any, data: "base64data" },
+      { type: "image", data: "base64data" } as any,
       { type: "text" as const, text: `Message ${index}` },
     ],
   };

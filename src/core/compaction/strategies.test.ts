@@ -34,7 +34,7 @@ function makeDocMsg(text: string): Message {
   return {
     role: "user" as const,
     content: [
-      { type: "document" as any, data: "pdfdata" },
+      { type: "document", data: "pdfdata" } as any,
       { type: "text" as const, text },
     ],
   };

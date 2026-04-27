@@ -823,7 +823,7 @@ export async function handleModelConfigAction(
         const { listModels } = await import("../../core/models.js");
         const models = await listModels();
         const LOCAL = /localhost|127\.0\.0\.1/;
-        const cloudWithTags = models.filter((m) => !LOCAL.test(m.baseUrl) && (m as Record<string,unknown>).tags);
+        const cloudWithTags = models.filter((m) => !LOCAL.test(m.baseUrl) && (m as unknown as Record<string,unknown>).tags);
         const local = models.find((m) => LOCAL.test(m.baseUrl));
         const lines = [
           "  ✅ Multi-model routing ENABLED",
@@ -832,7 +832,7 @@ export async function handleModelConfigAction(
           `  ${local ? `  🖥  Local: ${local.name} → chat, simple questions` : "  (no local model — cloud only)"}`,
         ];
         for (const m of cloudWithTags.slice(0, 6)) {
-          const tags: string[] = (m as Record<string,unknown>).tags as string[] ?? [];
+          const tags: string[] = (m as unknown as Record<string,unknown>).tags as string[] ?? [];
           lines.push(`  ☁  ${m.name} → ${tags.join(", ")}`);
         }
         lines.push("", "  Use /multimodel off to disable.");

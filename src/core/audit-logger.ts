@@ -225,7 +225,7 @@ export function getAuditEntries(opts?: {
     query += " ORDER BY id DESC LIMIT ?";
     params.push(limit);
 
-    return _db.prepare(query).all(...params) as Array<Record<string, unknown>>;
+    return _db.prepare(query).all(...(params as (string | number | null)[])) as Array<Record<string, unknown>>;
   } catch {
     return [];
   }

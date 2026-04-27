@@ -289,7 +289,7 @@ describe("remote-settings", () => {
     });
 
     test("sends auth header when KCODE_AUTH_TOKEN is set", async () => {
-      let receivedAuth: string | null = null;
+      let receivedAuth = null as string | null;
       const server = Bun.serve({
         port: 19506,
         hostname: "127.0.0.1",
@@ -316,7 +316,7 @@ describe("remote-settings", () => {
     });
 
     test("sends X-KCode-OS header", async () => {
-      let receivedOS: string | null = null;
+      let receivedOS = null as string | null;
       const server = Bun.serve({
         port: 19507,
         hostname: "127.0.0.1",

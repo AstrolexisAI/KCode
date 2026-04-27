@@ -84,7 +84,7 @@ export function convertToOpenAIMessages(
       // Include reasoning_content when present so providers that require it
       // (Kimi, DeepSeek-R1) don't reject the conversation history with 400.
       if (reasoningContent) {
-        (assistantMsg as Record<string, unknown>).reasoning_content = reasoningContent;
+        (assistantMsg as unknown as Record<string, unknown>).reasoning_content = reasoningContent;
       }
       result.push(assistantMsg);
     } else if (msg.role === "user") {

@@ -134,9 +134,9 @@ describe("OfflineMode", () => {
   describe("auditLocalResources", () => {
     test("returns resource inventory", async () => {
       const mode = new OfflineMode({
-        fetchFn: async () => {
+        fetchFn: (async () => {
           throw new Error("no server");
-        },
+        }) as unknown as typeof fetch,
       });
       const resources = await mode.auditLocalResources();
       expect(resources).toHaveProperty("hasLocalModel");

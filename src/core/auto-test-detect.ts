@@ -249,7 +249,7 @@ export function buildTestCommand(modifiedFiles: string[], projectDir: string): T
       } else if (detected.framework === "pytest") {
         runCommand += " " + testFiles.join(" ");
       } else if (detected.framework === "go-test") {
-        const pkg = dirname(testFiles[0]).replace(projectDir, ".");
+        const pkg = dirname(testFiles[0]!).replace(projectDir, ".");
         runCommand = `go test ${pkg}`;
       }
 

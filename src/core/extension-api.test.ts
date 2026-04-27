@@ -54,7 +54,7 @@ describe("extension-api", () => {
       ],
     });
     expect(getExtensionTools()).toHaveLength(1);
-    expect(getExtensionTools()[0].name).toBe("MyTool");
+    expect(getExtensionTools()[0]!.name).toBe("MyTool");
   });
 
   test("registerExtension with commands", () => {
@@ -87,6 +87,6 @@ describe("extension-api", () => {
     });
     expect(getExtensions()).toHaveLength(1);
     expect(getExtensionTools()).toHaveLength(1);
-    expect(getExtensionTools()[0].name).toBe("NewTool");
+    expect(getExtensionTools()[0]!.name).toBe("NewTool");
   });
 });

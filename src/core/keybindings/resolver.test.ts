@@ -101,7 +101,7 @@ describe("KeybindingResolver", () => {
 
   describe("events", () => {
     test("emits action event on match", () => {
-      let emitted: string | null = null;
+      let emitted = null as string | null;
       resolver.on("action", (action: string) => {
         emitted = action;
       });

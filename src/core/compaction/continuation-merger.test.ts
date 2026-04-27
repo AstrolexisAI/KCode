@@ -88,8 +88,8 @@ describe("continuation-merger", () => {
       const { messages, mergeCount } = mergeConsecutiveAssistant(msgs);
       expect(mergeCount).toBe(1);
       expect(messages).toHaveLength(2);
-      expect(messages[1].content as string).toContain("truncat");
-      expect(messages[1].content as string).toContain("ed and continued");
+      expect(messages[1]!.content as string).toContain("truncat");
+      expect(messages[1]!.content as string).toContain("ed and continued");
     });
 
     test("does not merge when first is not truncated", () => {

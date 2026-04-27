@@ -55,7 +55,7 @@ export function globMatch(value: string, pattern: string): boolean {
     } else if (ch === "?") {
       regexStr += ".";
       i++;
-    } else if (".+^${}()|[]\\".includes(ch)) {
+    } else if (".+^${}()|[]\\".includes(ch!)) {
       regexStr += "\\" + ch;
       i++;
     } else {

@@ -381,7 +381,7 @@ async function downloadVerified(opts: {
   let downloaded = 0;
 
   try {
-    for await (const chunk of resp.body as AsyncIterable<Uint8Array>) {
+    for await (const chunk of resp.body as unknown as AsyncIterable<Uint8Array>) {
       writer.write(chunk);
       downloaded += chunk.length;
       if (onProgress && totalSize > 0) {

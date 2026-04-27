@@ -151,7 +151,7 @@ export async function runCodeEngine(engine: EngineId, userRequest: string, cwd: 
   const result = mod[entry.fn](userRequest, cwd);
 
   // Build enriched prompt from engine result
-  const files = result.files?.length ?? result.totalFiles ?? (result.machineFiles + result.llmFiles) ?? 0;
+  const files = result.files?.length ?? result.totalFiles ?? (result.machineFiles ?? 0) + (result.llmFiles ?? 0);
   const machine = result.files?.filter((f: any) => !f.needsLlm)?.length ?? result.machineFiles ?? 0;
   const llmFiles = result.files?.filter((f: any) => f.needsLlm) ?? [];
   const projectPath = result.projectPath ?? result.name ?? "";

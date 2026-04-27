@@ -59,8 +59,8 @@ export class RagAutoIndexer {
     this.pendingFiles.clear();
 
     try {
-      const { getRagEngine } = await import("./engine");
-      const engine = getRagEngine(this.projectDir);
+      const { getRAGEngine } = await import("./engine");
+      const engine = getRAGEngine(this.projectDir);
       const report = await engine.updateIndex(this.projectDir);
 
       this.totalReindexed += report.filesProcessed;

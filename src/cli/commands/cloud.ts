@@ -91,7 +91,7 @@ export function registerCloudCommand(program: Command): void {
       const { CloudClient } = await import("../../core/cloud/client");
       const client = new CloudClient();
       try {
-        await client.inviteMember(email, opts.role);
+        await client.inviteMember(email, opts.role as "admin" | "member" | undefined);
         console.log(`\u2713 Invitation sent to ${email}`);
       } catch (err: any) {
         console.error(`\u2717 ${err.message}`);

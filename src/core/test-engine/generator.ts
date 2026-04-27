@@ -77,7 +77,7 @@ function extractFunctions(content: string, language: string): FunctionInfo[] {
     // Go
     if (language === "go") {
       const m = line.match(/^func\s+(?:\(\w+\s+\*?\w+\)\s+)?(\w+)\s*\(([^)]*)\)\s*(.*)/);
-      if (m && m[1]![0] === m[1]![0].toUpperCase()) { // exported = capitalized
+      if (m && m[1]![0] === m[1]![0]!.toUpperCase()) { // exported = capitalized
         fns.push({
           name: m[1]!,
           params: m[2] ?? "",

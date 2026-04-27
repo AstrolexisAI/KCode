@@ -14,7 +14,7 @@ export function detectLocale(): string {
   const envLang = process.env.LANG || process.env.LC_ALL || process.env.LC_MESSAGES;
   if (envLang) {
     const match = envLang.match(/^([a-z]{2})([_-][A-Za-z]{2})?/i);
-    if (match) return match[1].toLowerCase();
+    if (match) return match[1]!.toLowerCase();
   }
 
   // 3. Default to English
@@ -23,7 +23,7 @@ export function detectLocale(): string {
 
 export function normalizeLocale(locale: string): string {
   const match = locale.match(/^([a-z]{2})([_-][a-z]{2})?/i);
-  return match ? match[1].toLowerCase() : "en";
+  return match ? match[1]!.toLowerCase() : "en";
 }
 
 export function isSupportedLocale(locale: string): locale is SupportedLocale {

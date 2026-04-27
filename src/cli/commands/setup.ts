@@ -86,12 +86,12 @@ export function registerSetupCommand(
           }
 
           for (let i = 0; i < recs.length; i++) {
-            console.log(formatRecommendation(recs[i], i, i === 0));
+            console.log(formatRecommendation(recs[i]!, i, i === 0));
             console.log();
           }
 
           // Show the optimized config for the top recommendation
-          const topRec = recs[0];
+          const topRec = recs[0]!;
           const llamaConfig = optimizer.generateLlamaCppConfig(topRec, profile);
 
           console.log("Optimized llama.cpp config for #1:");

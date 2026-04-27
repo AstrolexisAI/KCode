@@ -72,7 +72,7 @@ export async function detectCrash(db: Database): Promise<CrashInfo | null> {
 
   let checkpoint: SessionCheckpoint | null = null;
   if (recoverable.length > 0) {
-    checkpoint = manager.getLatest(recoverable[0].conversationId);
+    checkpoint = manager.getLatest(recoverable[0]!.conversationId);
   }
 
   return {

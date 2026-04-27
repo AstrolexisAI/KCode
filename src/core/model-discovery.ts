@@ -58,7 +58,7 @@ const ANTHROPIC: ProviderSpec = {
   id: "anthropic",
   label: "Anthropic",
   endpoint: "https://api.anthropic.com/v1/models",
-  headers: (apiKey) => {
+  headers: (apiKey): Record<string, string> => {
     // OAuth access tokens (sk-ant-oat01-*) use Authorization: Bearer
     // + the oauth beta header. Real API keys (sk-ant-api03-*) use
     // x-api-key. Detecting by prefix matches what request-builder.ts

@@ -76,7 +76,7 @@ describe("analyzeInsights", () => {
     const priorities = insights.map((i) => i.priority);
     const order = { high: 3, medium: 2, low: 1 };
     for (let i = 1; i < priorities.length; i++) {
-      expect(order[priorities[i]]).toBeLessThanOrEqual(order[priorities[i - 1]]);
+      expect(order[priorities[i]!]).toBeLessThanOrEqual(order[priorities[i - 1]!]);
     }
   });
 

@@ -843,7 +843,7 @@ export async function* executeToolsSequential(
       try {
         ctx.hooks.fireAndForget("PostBash", {
           command: effectiveInput.command as string,
-          exitCode: result.exitCode ?? 0,
+          exitCode: (result as { exitCode?: number }).exitCode ?? 0,
         });
       } catch (err) {
         log.debug("hooks", `PostBash hook failed: ${err}`);

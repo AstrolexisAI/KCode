@@ -18,7 +18,7 @@ describe("findListeningPid", () => {
 
   test("returns a PID when the port is bound", () => {
     server = Bun.serve({ port: 0, fetch: () => new Response("hi") });
-    const pid = findListeningPid(server.port);
+    const pid = findListeningPid(server.port!);
     // Bun's process always owns the listener — should match our PID
     // unless ss can't see it (insufficient privs → returns -1, also a hit).
     expect(pid).not.toBeNull();

@@ -19,6 +19,7 @@ function makeChanges(n: number, baseName: string): FileChangeEvent[] {
     events.push({
       type: "modify",
       path: `/project/src/${baseName}-${i}.test.ts`,
+      relativePath: `src/${baseName}-${i}.test.ts`,
       timestamp: Date.now(),
     });
   }

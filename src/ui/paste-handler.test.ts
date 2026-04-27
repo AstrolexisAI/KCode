@@ -13,7 +13,7 @@ describe("paste-handler", () => {
   });
 
   test("setPasteHandler registers callback", () => {
-    let received: string | null = null;
+    let received = null as string | null;
     setPasteHandler((text) => {
       received = text;
     });
@@ -47,7 +47,7 @@ describe("paste-handler", () => {
   });
 
   test("handler receives multiline pastes intact", () => {
-    let received: string | null = null;
+    let received = null as string | null;
     setPasteHandler((text) => {
       received = text;
     });

@@ -357,7 +357,7 @@ function ToolResultMessage({
   );
 }
 
-function ThinkingMessage({ text, blockCount = 1, totalChars }: ThinkingEntry) {
+function ThinkingMessage({ text, blockCount = 1, totalChars }: Omit<ThinkingEntry, "kind">) {
   const { theme } = useTheme();
   const chars = totalChars ?? text.length;
   const tok = Math.round(chars / CHARS_PER_TOKEN);
