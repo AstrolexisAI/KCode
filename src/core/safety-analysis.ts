@@ -3,6 +3,7 @@
 
 import { existsSync, realpathSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
+import { scanCommand as scanRegistryPatterns } from "./dangerous-patterns";
 import { log } from "./logger";
 import type { PermissionResult } from "./permissions";
 
@@ -420,10 +421,30 @@ export function analyzeBashCommand(command: string): {
   const scaffoldConflict = detectScaffoldConflict(command);
   if (scaffoldConflict) issues.push(scaffoldConflict);
 
+  // Pull in the centralized registry: git destructive ops, cloud
+  // destructive APIs (Railway volumeDelete, kubectl delete, terraform
+  // destroy, aws s3 rm --recursive, ...), database DROP/TRUNCATE,
+  // disk/filesystem destruction (dd to /dev/sd*, mkfs), privilege
+  // escalation (chmod +s), exfiltration (nc to IP, curl POST),
+  // obfuscation (base64-decode-pipe-shell). Without this, the
+  // registry was orphan code: defined and tested but never on the
+  // critical path. Same shape as the 2026-04-25 Cursor/Railway
+  // incident where guardrails existed in marketing but not in the
+  // execution path.
+  const registryMatches = scanRegistryPatterns(command);
+  let registryHasCritical = false;
+  for (const m of registryMatches) {
+    issues.push(`${m.description} [${m.patternId}]`);
+    if (m.severity === "critical" || m.severity === "danger") {
+      registryHasCritical = true;
+    }
+  }
+
   let riskLevel: "safe" | "moderate" | "dangerous" =
     issues.length === 0
       ? "safe"
-      : issues.some(
+      : registryHasCritical ||
+          issues.some(
             (i) =>
               i.includes("injection") ||
               i.includes("shell invocation") ||
