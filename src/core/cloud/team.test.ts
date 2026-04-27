@@ -70,8 +70,8 @@ describe("TeamMemory", () => {
 
       const result = teamMemory.mergeMemories(local, remote);
       expect(result).toHaveLength(1);
-      expect(result[0].key).toBe("key-a");
-      expect(result[0].value).toBe("local-val");
+      expect(result[0]!.key).toBe("key-a");
+      expect(result[0]!.value).toBe("local-val");
     });
 
     test("keeps remote-only entries", () => {
@@ -80,8 +80,8 @@ describe("TeamMemory", () => {
 
       const result = teamMemory.mergeMemories(local, remote);
       expect(result).toHaveLength(1);
-      expect(result[0].key).toBe("key-b");
-      expect(result[0].value).toBe("remote-val");
+      expect(result[0]!.key).toBe("key-b");
+      expect(result[0]!.value).toBe("remote-val");
     });
 
     test("gives precedence to newer remote entry", () => {
@@ -90,7 +90,7 @@ describe("TeamMemory", () => {
 
       const result = teamMemory.mergeMemories(local, remote);
       expect(result).toHaveLength(1);
-      expect(result[0].value).toBe("new-remote");
+      expect(result[0]!.value).toBe("new-remote");
     });
 
     test("keeps newer local entry over older remote", () => {
@@ -99,7 +99,7 @@ describe("TeamMemory", () => {
 
       const result = teamMemory.mergeMemories(local, remote);
       expect(result).toHaveLength(1);
-      expect(result[0].value).toBe("new-local");
+      expect(result[0]!.value).toBe("new-local");
     });
 
     test("remote wins on equal timestamps (tie-break)", () => {
@@ -109,7 +109,7 @@ describe("TeamMemory", () => {
 
       const result = teamMemory.mergeMemories(local, remote);
       expect(result).toHaveLength(1);
-      expect(result[0].value).toBe("remote-val");
+      expect(result[0]!.value).toBe("remote-val");
     });
 
     test("merges multiple entries correctly", () => {
@@ -162,7 +162,7 @@ describe("TeamMemory", () => {
 
       await teamMemory.syncMemories(localMemories);
 
-      const [, opts] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const [, opts] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
       const body = JSON.parse(opts.body as string);
       expect(body.memories).toHaveLength(1);
       expect(body.memories[0].key).toBe("k1");
@@ -195,7 +195,7 @@ describe("TeamMemory", () => {
 
       await teamMemory.updateTeamPolicies({ maxCostPerSession: 20 });
 
-      const [url, opts] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const [url, opts] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
       expect(url).toContain("/policies");
       expect(opts.method).toBe("PATCH");
     });

@@ -63,8 +63,8 @@ describe("policy-limits", () => {
 
       const result = await loadPolicyCache();
       expect(result).not.toBeNull();
-      expect(result!.response.restrictions.allow_web_access.allowed).toBe(true);
-      expect(result!.response.restrictions.allow_feedback.allowed).toBe(false);
+      expect(result!.response.restrictions.allow_web_access!.allowed).toBe(true);
+      expect(result!.response.restrictions.allow_feedback!.allowed).toBe(false);
     });
 
     test("returns null for invalid cache", async () => {
@@ -230,8 +230,8 @@ describe("policy-limits", () => {
         process.env.KCODE_SETTINGS_URL = "http://127.0.0.1:19510";
         const result = await fetchPolicyLimits();
         expect(result).not.toBeNull();
-        expect(result!.restrictions.allow_web_access.allowed).toBe(false);
-        expect(result!.restrictions.max_sessions_per_day.limit).toBe(100);
+        expect(result!.restrictions.allow_web_access!.allowed).toBe(false);
+        expect(result!.restrictions.max_sessions_per_day!.limit).toBe(100);
 
         // Verify cache was written
         clearPolicyCache();

@@ -14,8 +14,8 @@ describe("TemporaryGrants", () => {
     grants.grant("Bash", "allow");
     const listed = grants.list();
     expect(listed.length).toBe(1);
-    expect(listed[0].toolName).toBe("Bash");
-    expect(listed[0].action).toBe("allow");
+    expect(listed[0]!.toolName).toBe("Bash");
+    expect(listed[0]!.action).toBe("allow");
   });
 
   test("check returns grant for matching tool", () => {
@@ -116,7 +116,7 @@ describe("TemporaryGrants", () => {
     const removed = grants.cleanup();
     expect(removed).toBe(1);
     expect(grants.list().length).toBe(1);
-    expect(grants.list()[0].toolName).toBe("Write");
+    expect(grants.list()[0]!.toolName).toBe("Write");
   });
 
   test("duration-based expiry works", () => {
@@ -134,7 +134,7 @@ describe("TemporaryGrants", () => {
   test("default duration is Infinity (session lifetime)", () => {
     grants.grant("Bash", "allow");
     const listed = grants.list();
-    expect(listed[0].expiresAt).toBe(Infinity);
+    expect(listed[0]!.expiresAt).toBe(Infinity);
   });
 
   test("revoke also removes field-level grants for the tool", () => {

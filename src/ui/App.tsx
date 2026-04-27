@@ -774,7 +774,7 @@ export default function App({ config, conversationManager, tools, initialSession
           if (provider.id === "anthropic") {
             config.anthropicApiKey = result.apiKey;
           } else if (provider.settingsKey && provider.settingsKey in config) {
-            (config as Record<string, unknown>)[provider.settingsKey] = result.apiKey;
+            (config as unknown as Record<string, unknown>)[provider.settingsKey] = result.apiKey;
           } else {
             config.apiKey = result.apiKey;
           }

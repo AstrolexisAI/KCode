@@ -103,14 +103,14 @@ describe("PeerDiscovery - getAvailablePeers", () => {
     discovery.updatePeer(makePeer({ nodeId: "p2", status: "offline" }));
     discovery.updatePeer(makePeer({ nodeId: "p3", status: "busy" }));
     expect(discovery.getAvailablePeers()).toHaveLength(1);
-    expect(discovery.getAvailablePeers()[0].nodeId).toBe("p1");
+    expect(discovery.getAvailablePeers()[0]!.nodeId).toBe("p1");
   });
 
   test("excludes the local node", () => {
     discovery.updatePeer(makePeer({ nodeId: "local-node", status: "online" }));
     discovery.updatePeer(makePeer({ nodeId: "remote-1", status: "online" }));
     expect(discovery.getAvailablePeers()).toHaveLength(1);
-    expect(discovery.getAvailablePeers()[0].nodeId).toBe("remote-1");
+    expect(discovery.getAvailablePeers()[0]!.nodeId).toBe("remote-1");
   });
 
   test("sorts by GPU VRAM descending", () => {
@@ -138,9 +138,9 @@ describe("PeerDiscovery - getAvailablePeers", () => {
 
     const available = discovery.getAvailablePeers();
     expect(available).toHaveLength(3);
-    expect(available[0].nodeId).toBe("high-vram");
-    expect(available[1].nodeId).toBe("mid-vram");
-    expect(available[2].nodeId).toBe("low-vram");
+    expect(available[0]!.nodeId).toBe("high-vram");
+    expect(available[1]!.nodeId).toBe("mid-vram");
+    expect(available[2]!.nodeId).toBe("low-vram");
   });
 
   test("returns empty array when no peers are available", () => {

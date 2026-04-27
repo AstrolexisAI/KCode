@@ -60,8 +60,8 @@ describe("startup-profiler", () => {
       profileCheckpoint("test_end");
       const report = getProfileReport();
       expect(report).toHaveLength(2);
-      expect(report[0].name).toBe("test_start");
-      expect(report[1].name).toBe("test_end");
+      expect(report[0]!.name).toBe("test_start");
+      expect(report[1]!.name).toBe("test_end");
     });
 
     test("does not record when profiling is disabled", () => {
@@ -78,15 +78,15 @@ describe("startup-profiler", () => {
       profileCheckpoint("b");
       profileCheckpoint("c");
       const report = getProfileReport();
-      expect(report[1].timestamp).toBeGreaterThanOrEqual(report[0].timestamp);
-      expect(report[2].timestamp).toBeGreaterThanOrEqual(report[1].timestamp);
+      expect(report[1]!.timestamp).toBeGreaterThanOrEqual(report[0]!.timestamp);
+      expect(report[2]!.timestamp).toBeGreaterThanOrEqual(report[1]!.timestamp);
     });
 
     test("delta is non-negative for first checkpoint", () => {
       process.env.KCODE_PROFILE_STARTUP = "1";
       profileCheckpoint("first");
       const report1 = getProfileReport();
-      expect(report1[0].deltaMs).toBeGreaterThanOrEqual(0);
+      expect(report1[0]!.deltaMs).toBeGreaterThanOrEqual(0);
     });
   });
 
@@ -95,7 +95,7 @@ describe("startup-profiler", () => {
       process.env.KCODE_PROFILE_STARTUP = "1";
       profileCheckpoint("x");
       const report = getProfileReport();
-      report.push({ name: "fake", timestamp: 999, deltaMs: 0 });
+      report.push({ name: "fake", timestamp: 999, deltaMs: 0, memoryMB: 0, importsLoaded: 0 });
       expect(getProfileReport()).toHaveLength(1); // original unaffected
     });
 

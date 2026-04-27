@@ -22,6 +22,12 @@ import {
 } from "./model-discovery";
 import { _setModelsPathForTest, type ModelsConfig } from "./models";
 
+
+// Cast helper: bun:test's mock and async functions don't include
+// fetch's `preconnect` static method; the runtime wires through fine,
+// but `globalThis.fetch =` requires the full typeof fetch shape.
+const asFetch = (fn: unknown): typeof globalThis.fetch => fn as typeof globalThis.fetch;
+
 // Test isolation
 let testHome: string;
 let testModelsPath: string;
@@ -40,7 +46,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  globalThis.fetch = originalFetch;
+  globalThis.fetch = asFetch(originalFetch);
   _setModelsPathForTest(undefined);
   if (originalKcodeHome === undefined) {
     delete process.env.KCODE_HOME;
@@ -160,19 +166,19 @@ describe("Provider spec parse", () => {
 
 describe("fetchProviderModels (with mocked fetch)", () => {
   test("returns IDs on a 200 response", async () => {
-    globalThis.fetch = async () =>
+    globalThis.fetch = asFetch(async () =>
       new Response(
         JSON.stringify({ data: [{ id: "claude-opus-4-7" }, { id: "claude-sonnet-4-6" }] }),
         { status: 200, headers: { "content-type": "application/json" } },
-      );
+      ));
     const anthropic = ALL_PROVIDERS.find((p) => p.id === "anthropic")!;
     const ids = await fetchProviderModels(anthropic, "test-key");
     expect(ids).toEqual(["claude-opus-4-7", "claude-sonnet-4-6"]);
   });
 
   test("throws on non-200 response", async () => {
-    globalThis.fetch = async () =>
-      new Response("unauthorized", { status: 401 });
+    globalThis.fetch = asFetch(async () =>
+      new Response("unauthorized", { status: 401 }));
     const openai = ALL_PROVIDERS.find((p) => p.id === "openai")!;
     await expect(fetchProviderModels(openai, "bad-key")).rejects.toThrow(/HTTP 401/);
   });
@@ -182,11 +188,11 @@ describe("fetchProviderModels (with mocked fetch)", () => {
 
 describe("discoverFromProvider", () => {
   test("adds new models to an empty config", async () => {
-    globalThis.fetch = async () =>
+    globalThis.fetch = asFetch(async () =>
       new Response(
         JSON.stringify({ data: [{ id: "claude-opus-4-7" }, { id: "claude-sonnet-4-6" }] }),
         { status: 200 },
-      );
+      ));
     const config: ModelsConfig = { models: [] };
     const anthropic = ALL_PROVIDERS.find((p) => p.id === "anthropic")!;
     const r = await discoverFromProvider(anthropic, "test-key", config);
@@ -199,11 +205,11 @@ describe("discoverFromProvider", () => {
   });
 
   test("never overwrites existing entries (user customization preserved)", async () => {
-    globalThis.fetch = async () =>
+    globalThis.fetch = asFetch(async () =>
       new Response(
         JSON.stringify({ data: [{ id: "claude-opus-4-7" }] }),
         { status: 200 },
-      );
+      ));
     const config: ModelsConfig = {
       models: [
         {
@@ -226,8 +232,8 @@ describe("discoverFromProvider", () => {
   });
 
   test("records the error and returns empty added on fetch failure", async () => {
-    globalThis.fetch = async () =>
-      new Response("server error", { status: 500 });
+    globalThis.fetch = asFetch(async () =>
+      new Response("server error", { status: 500 }));
     const config: ModelsConfig = { models: [] };
     const openai = ALL_PROVIDERS.find((p) => p.id === "openai")!;
     const r = await discoverFromProvider(openai, "test-key", config);
@@ -314,7 +320,7 @@ describe("Anthropic headers auto-switch on OAuth vs API key", () => {
 describe("runModelDiscovery", () => {
   test("discovers from all providers with keys", async () => {
     writeFileSync(testModelsPath, JSON.stringify({ models: [] }), "utf-8");
-    globalThis.fetch = async (input: string | URL | Request) => {
+    globalThis.fetch = asFetch(async (input: string | URL | Request) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url.includes("anthropic.com")) {
         return new Response(JSON.stringify({ data: [{ id: "claude-opus-4-7" }] }), { status: 200 });
@@ -323,7 +329,7 @@ describe("runModelDiscovery", () => {
         return new Response(JSON.stringify({ data: [{ id: "gpt-4o-2026-preview" }] }), { status: 200 });
       }
       return new Response("not mocked", { status: 404 });
-    };
+    });
     const keys = new Map([
       ["anthropic", "a"],
       ["openai", "o"],
@@ -347,8 +353,8 @@ describe("runModelDiscovery", () => {
 
   test("providerFilter limits which providers are queried", async () => {
     writeFileSync(testModelsPath, JSON.stringify({ models: [] }), "utf-8");
-    globalThis.fetch = async () =>
-      new Response(JSON.stringify({ data: [{ id: "some-model" }] }), { status: 200 });
+    globalThis.fetch = asFetch(async () =>
+      new Response(JSON.stringify({ data: [{ id: "some-model" }] }), { status: 200 }));
     const keys = new Map([
       ["anthropic", "a"],
       ["openai", "o"],
@@ -378,10 +384,10 @@ describe("maybeAutoDiscover throttle", () => {
 
     // Fetch should NOT be called since we're within the interval
     let fetchCalls = 0;
-    globalThis.fetch = async () => {
+    globalThis.fetch = asFetch(async () => {
       fetchCalls++;
       return new Response(JSON.stringify({ data: [] }), { status: 200 });
-    };
+    });
 
     const added = await maybeAutoDiscover({ minIntervalMs: 60_000 });
     expect(added).toEqual([]);
@@ -392,7 +398,7 @@ describe("maybeAutoDiscover throttle", () => {
     process.env.ANTHROPIC_API_KEY = "test-key";
     writeFileSync(testModelsPath, JSON.stringify({ models: [] }), "utf-8");
 
-    globalThis.fetch = async (input: string | URL | Request) => {
+    globalThis.fetch = asFetch(async (input: string | URL | Request) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (url.includes("anthropic.com")) {
         return new Response(
@@ -401,7 +407,7 @@ describe("maybeAutoDiscover throttle", () => {
         );
       }
       return new Response("not mocked", { status: 404 });
-    };
+    });
 
     const added = await maybeAutoDiscover();
     expect(added).toContain("claude-opus-4-7");
@@ -424,10 +430,10 @@ describe("maybeAutoDiscover throttle", () => {
     );
 
     let fetchCalls = 0;
-    globalThis.fetch = async () => {
+    globalThis.fetch = asFetch(async () => {
       fetchCalls++;
       return new Response(JSON.stringify({ data: [{ id: "fresh-model" }] }), { status: 200 });
-    };
+    });
 
     const added = await maybeAutoDiscover({ force: true });
     expect(fetchCalls).toBeGreaterThan(0); // at least one provider queried
@@ -437,9 +443,9 @@ describe("maybeAutoDiscover throttle", () => {
   test("network failure returns empty array instead of throwing", async () => {
     process.env.ANTHROPIC_API_KEY = "test-key";
     writeFileSync(testModelsPath, JSON.stringify({ models: [] }), "utf-8");
-    globalThis.fetch = async () => {
+    globalThis.fetch = asFetch(async () => {
       throw new Error("network down");
-    };
+    });
     // Should not throw
     const added = await maybeAutoDiscover({ force: true });
     expect(added).toEqual([]);

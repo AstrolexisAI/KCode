@@ -91,7 +91,7 @@ describe("InteractiveQuestion render", () => {
   });
 
   test("number key selects directly", async () => {
-    let selected: string | null = null;
+    let selected = null as string | null;
     instance = renderWithTheme(
       <InteractiveQuestion
         question="Q"
@@ -109,7 +109,7 @@ describe("InteractiveQuestion render", () => {
   });
 
   test("Enter selects current option", async () => {
-    let selected: string | null = null;
+    let selected = null as string | null;
     instance = renderWithTheme(
       <InteractiveQuestion
         question="Q"
@@ -145,7 +145,7 @@ describe("InteractiveQuestion render", () => {
   });
 
   test("arrow down changes selection", async () => {
-    let selected: string | null = null;
+    let selected = null as string | null;
     instance = renderWithTheme(
       <InteractiveQuestion
         question="Q"
@@ -166,7 +166,7 @@ describe("InteractiveQuestion render", () => {
   });
 
   test("j/k vim keys navigate", async () => {
-    let selected: string | null = null;
+    let selected = null as string | null;
     instance = renderWithTheme(
       <InteractiveQuestion
         question="Q"

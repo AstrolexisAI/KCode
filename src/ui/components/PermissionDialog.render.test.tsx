@@ -79,7 +79,7 @@ describe("PermissionDialog render", () => {
   });
 
   test("calls onChoice('allow') on y key", async () => {
-    let choice: string | null = null;
+    let choice = null as string | null;
     instance = renderWithTheme(
       <PermissionDialog
         request={{ toolName: "Bash", description: "x" }}
@@ -95,7 +95,7 @@ describe("PermissionDialog render", () => {
   });
 
   test("calls onChoice('deny') on n key", async () => {
-    let choice: string | null = null;
+    let choice = null as string | null;
     instance = renderWithTheme(
       <PermissionDialog
         request={{ toolName: "Bash", description: "x" }}
@@ -111,7 +111,7 @@ describe("PermissionDialog render", () => {
   });
 
   test("calls onChoice('allow_always') on a key", async () => {
-    let choice: string | null = null;
+    let choice = null as string | null;
     instance = renderWithTheme(
       <PermissionDialog
         request={{ toolName: "Bash", description: "x" }}
@@ -127,7 +127,7 @@ describe("PermissionDialog render", () => {
   });
 
   test("ignores keys when inactive", async () => {
-    let choice: string | null = null;
+    let choice = null as string | null;
     instance = renderWithTheme(
       <PermissionDialog
         request={{ toolName: "Bash", description: "x" }}

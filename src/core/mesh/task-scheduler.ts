@@ -99,10 +99,10 @@ export class TaskScheduler {
 
     log.debug(
       "mesh-scheduler",
-      `Scheduled task ${task.id} to peer ${ranked[0].peer.nodeId} (score: ${ranked[0].score.toFixed(2)})`,
+      `Scheduled task ${task.id} to peer ${ranked[0]!.peer.nodeId} (score: ${ranked[0]!.score.toFixed(2)})`,
     );
 
-    return ranked[0].peer;
+    return ranked[0]!.peer;
   }
 
   // ─── Distributed Execution ────────────────────────────────────

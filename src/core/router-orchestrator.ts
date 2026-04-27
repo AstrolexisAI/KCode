@@ -313,7 +313,7 @@ async function runAgentLoopForSubTask(
       abortController,
     );
 
-    const cumulativeUsage = { inputTokens: 0, outputTokens: 0 };
+    const cumulativeUsage = { inputTokens: 0, outputTokens: 0, cacheCreationInputTokens: 0, cacheReadInputTokens: 0 };
     const streamGen = processSSEStream({
       sseStream,
       tools,

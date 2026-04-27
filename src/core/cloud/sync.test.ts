@@ -59,14 +59,14 @@ describe("SessionSync", () => {
       const msg = { role: "assistant", content: longContent };
       const result = sync.sanitizeMessage(msg);
 
-      expect(result.content.length).toBeLessThanOrEqual(2048 + " [truncated]".length);
-      expect(result.content).toEndWith("[truncated]");
+      expect((result.content as string).length).toBeLessThanOrEqual(2048 + " [truncated]".length);
+      expect(result.content)!.toEndWith("[truncated]");
     });
 
     test("preserves short content unchanged", () => {
       const msg = { role: "user", content: "Hello, world!" };
       const result = sync.sanitizeMessage(msg);
-      expect(result.content).toBe("Hello, world!");
+      expect(result.content)!.toBe("Hello, world!");
     });
 
     test("truncates array content parts", () => {
@@ -79,9 +79,9 @@ describe("SessionSync", () => {
       };
       const result = sync.sanitizeMessage(msg);
 
-      expect(result.content[0].text).toEndWith("[truncated]");
-      expect(result.content[0].text.length).toBeLessThanOrEqual(2048 + " [truncated]".length);
-      expect(result.content[1].text).toBe("short");
+      expect((result.content as Array<{ text: string }>)[0]!.text).toEndWith("[truncated]");
+      expect((result.content as Array<{ text: string }>)[0]!.text.length).toBeLessThanOrEqual(2048 + " [truncated]".length);
+      expect((result.content as Array<{ text: string }>)[1]!.text).toBe("short");
     });
 
     test("strips tool call input/output fields", () => {
@@ -99,12 +99,12 @@ describe("SessionSync", () => {
       const result = sync.sanitizeMessage(msg);
 
       expect(result.tool_calls).toHaveLength(1);
-      expect(result.tool_calls[0].id).toBe("call-001");
-      expect(result.tool_calls[0].name).toBe("Read");
+      expect(result.tool_calls![0]!.id).toBe("call-001");
+      expect(result.tool_calls![0]!.name).toBe("Read");
       // Stripped fields
-      expect(result.tool_calls[0].input).toBeUndefined();
-      expect(result.tool_calls[0].function).toBeUndefined();
-      expect(result.tool_calls[0].arguments).toBeUndefined();
+      expect(result.tool_calls![0]!.input).toBeUndefined();
+      expect(result.tool_calls![0]!.function).toBeUndefined();
+      expect(result.tool_calls![0]!.arguments).toBeUndefined();
     });
 
     test("strips tool result fields except truncated content", () => {
@@ -116,14 +116,14 @@ describe("SessionSync", () => {
       };
       const result = sync.sanitizeMessage(msg);
 
-      expect(result.content).toEndWith("[truncated]");
+      expect(result.content)!.toEndWith("[truncated]");
       expect(result.output).toBeUndefined();
       expect(result.result).toBeUndefined();
     });
 
     test("handles null/undefined input gracefully", () => {
-      expect(sync.sanitizeMessage(null)).toBeNull();
-      expect(sync.sanitizeMessage(undefined)).toBeUndefined();
+      expect(sync.sanitizeMessage(null as unknown as Parameters<typeof sync.sanitizeMessage>[0])).toBeNull();
+      expect(sync.sanitizeMessage(undefined as unknown as Parameters<typeof sync.sanitizeMessage>[0])).toBeUndefined();
     });
 
     test("preserves role and metadata fields", () => {
@@ -160,7 +160,7 @@ describe("SessionSync", () => {
       expect(result.sessionId).toBe("sess-001");
       expect(fetchFn).toHaveBeenCalled();
 
-      const [, opts] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const [, opts] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
       const body = JSON.parse(opts.body as string);
       expect(body.fullSync).toBe(true);
       expect(body.messages).toHaveLength(3);
@@ -187,7 +187,7 @@ describe("SessionSync", () => {
 
       await sync.syncSession("sess-003", messages, null);
 
-      const [, opts] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const [, opts] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
       const body = JSON.parse(opts.body as string);
       expect(body.messages[0].content).toEndWith("[truncated]");
     });
@@ -209,7 +209,7 @@ describe("SessionSync", () => {
 
       await sync.syncDelta("sess-004", messages, 2);
 
-      const [, opts] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const [, opts] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
       const body = JSON.parse(opts.body as string);
       expect(body.fullSync).toBe(false);
       expect(body.startIndex).toBe(2);
@@ -231,7 +231,7 @@ describe("SessionSync", () => {
 
       await sync.syncDelta("sess-005", messages, 0);
 
-      const [, opts] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const [, opts] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
       const body = JSON.parse(opts.body as string);
       expect(body.fullSync).toBe(true);
       expect(body.messages).toHaveLength(2);

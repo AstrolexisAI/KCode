@@ -58,9 +58,9 @@ describe("wildcard", () => {
     emitter.emit({ type: "error", data: { message: "fail", code: "ERR" } });
 
     expect(received).toHaveLength(3);
-    expect(received[0].type).toBe("message.created");
-    expect(received[1].type).toBe("tool.started");
-    expect(received[2].type).toBe("error");
+    expect(received[0]!.type).toBe("message.created");
+    expect(received[1]!.type).toBe("tool.started");
+    expect(received[2]!.type).toBe("error");
   });
 
   test("specific and wildcard listeners both fire", () => {

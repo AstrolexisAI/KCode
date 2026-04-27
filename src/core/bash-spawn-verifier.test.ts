@@ -1,6 +1,9 @@
 // Tests for bash-spawn-verifier — operator-mind post-spawn HTTP probe.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+
+const asFetch = (fn: unknown): typeof globalThis.fetch => fn as typeof globalThis.fetch;
+
 import {
   detectServerSpawn,
   extractDeclaredPort,
@@ -183,7 +186,7 @@ describe("probeServer", () => {
 
   test("returns ok for 200 response", async () => {
     server = Bun.serve({ port: 0, fetch: () => new Response("hi") });
-    port = server.port;
+    port = server.port!;
     const result = await probeServer(port);
     expect(result.ok).toBe(true);
     expect(result.rawStatusCode).toBe("200");
@@ -191,7 +194,7 @@ describe("probeServer", () => {
 
   test("treats 404 as ok (server is up, just no route)", async () => {
     server = Bun.serve({ port: 0, fetch: () => new Response("nope", { status: 404 }) });
-    port = server.port;
+    port = server.port!;
     const result = await probeServer(port);
     expect(result.ok).toBe(true);
     expect(result.rawStatusCode).toBe("404");
@@ -199,7 +202,7 @@ describe("probeServer", () => {
 
   test("treats 500 as failure", async () => {
     server = Bun.serve({ port: 0, fetch: () => new Response("boom", { status: 500 }) });
-    port = server.port;
+    port = server.port!;
     const result = await probeServer(port);
     expect(result.ok).toBe(false);
     expect(result.rawStatusCode).toBe("500");
@@ -230,7 +233,7 @@ describe("verifyBackgroundSpawn — integration", () => {
 
   beforeEach(() => {
     server = Bun.serve({ port: 0, fetch: () => new Response("artemis") });
-    port = server.port;
+    port = server.port!;
   });
 
   afterEach(() => {

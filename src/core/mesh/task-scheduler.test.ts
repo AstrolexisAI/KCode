@@ -172,8 +172,8 @@ describe("TaskScheduler - rankPeers", () => {
     const ranked = await scheduler.rankPeers(task);
 
     expect(ranked).toHaveLength(2);
-    expect(ranked[0].peer.nodeId).toBe("peer-a");
-    expect(ranked[0].score).toBeGreaterThan(ranked[1].score);
+    expect(ranked[0]!.peer.nodeId).toBe("peer-a");
+    expect(ranked[0]!.score).toBeGreaterThan(ranked[1]!.score);
   });
 });
 

@@ -308,7 +308,7 @@ describe("Tool E2E: Safety net for thrown errors", () => {
       abortController: undefined,
       toolUseCount: 0,
       debugTracer: undefined,
-    };
+    } as any;
 
     const guardState = {
       recordToolError: () => {},
@@ -339,7 +339,7 @@ describe("Tool E2E: Safety net for thrown errors", () => {
 
     // The returned toolResultBlocks must also include a block
     const { toolResultBlocks } = result.value;
-    const block = toolResultBlocks.find(
+    const block: any = toolResultBlocks.find(
       (b: any) => b.tool_use_id === "call_throwing_1",
     );
     expect(block).toBeDefined();

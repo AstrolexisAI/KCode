@@ -257,7 +257,7 @@ describe("TriggerManager", () => {
     await manager.pause("trg_001");
 
     expect(mockApi.updateTrigger).toHaveBeenCalledTimes(1);
-    const callArgs = mockApi.updateTrigger.mock.calls[0];
+    const callArgs = mockApi.updateTrigger.mock.calls[0]!;
     expect(callArgs[0]).toBe("trg_001");
     expect(callArgs[1]).toEqual({ status: "paused" });
   });
@@ -266,7 +266,7 @@ describe("TriggerManager", () => {
     await manager.resume("trg_001");
 
     expect(mockApi.updateTrigger).toHaveBeenCalledTimes(1);
-    const callArgs = mockApi.updateTrigger.mock.calls[0];
+    const callArgs = mockApi.updateTrigger.mock.calls[0]!;
     expect(callArgs[0]).toBe("trg_001");
     expect(callArgs[1]).toEqual({ status: "active" });
   });
@@ -283,20 +283,20 @@ describe("TriggerManager", () => {
     const results = await manager.getHistory("trg_001", 5);
 
     expect(results).toHaveLength(1);
-    expect(results[0].triggerId).toBe("trg_001");
+    expect(results[0]!.triggerId).toBe("trg_001");
     expect(mockApi.getTriggerHistory).toHaveBeenCalledTimes(1);
-    expect(mockApi.getTriggerHistory.mock.calls[0][1]).toBe(5);
+    expect(mockApi.getTriggerHistory.mock.calls[0]![1]).toBe(5);
   });
 
   test("getHistory works without limit", async () => {
     await manager.getHistory("trg_001");
     expect(mockApi.getTriggerHistory).toHaveBeenCalledTimes(1);
-    expect(mockApi.getTriggerHistory.mock.calls[0][1]).toBeUndefined();
+    expect(mockApi.getTriggerHistory.mock.calls[0]![1]).toBeUndefined();
   });
 
   test("delete delegates to API", async () => {
     await manager.delete("trg_001");
     expect(mockApi.deleteTrigger).toHaveBeenCalledTimes(1);
-    expect(mockApi.deleteTrigger.mock.calls[0][0]).toBe("trg_001");
+    expect(mockApi.deleteTrigger.mock.calls[0]![0]).toBe("trg_001");
   });
 });

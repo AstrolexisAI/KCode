@@ -207,7 +207,7 @@ export const HARDWARE_PROFILES = {
  * Get a named hardware profile by key.
  */
 export function getHardwareProfile(name: string): HardwareProfile | undefined {
-  return HARDWARE_PROFILES[name];
+  return (HARDWARE_PROFILES as Record<string, HardwareProfile>)[name];
 }
 
 /**

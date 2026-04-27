@@ -59,7 +59,7 @@ describe("MergeResolver component logic", () => {
 
     test("each conflict has ours, theirs, and base fields", () => {
       const result = makeConflictResult();
-      const conflict = result.conflicts[0];
+      const conflict = result.conflicts[0]!;
       expect(conflict.ours).toBeDefined();
       expect(conflict.theirs).toBeDefined();
       expect(conflict.base).toBeDefined();
@@ -70,14 +70,14 @@ describe("MergeResolver component logic", () => {
 
     test("conflict contains the correct content from each side", () => {
       const result = makeConflictResult();
-      const conflict = result.conflicts[0];
+      const conflict = result.conflicts[0]!;
       expect(conflict.ours).toContain("our change");
       expect(conflict.theirs).toContain("their change");
     });
 
     test("conflicts have line number information", () => {
       const result = makeConflictResult();
-      const conflict = result.conflicts[0];
+      const conflict = result.conflicts[0]!;
       expect(conflict.startLine).toBeGreaterThan(0);
       expect(conflict.endLine).toBeGreaterThanOrEqual(conflict.startLine);
     });
@@ -94,47 +94,47 @@ describe("MergeResolver component logic", () => {
   describe("resolution selection", () => {
     test("choosing 'ours' sets resolution correctly", () => {
       let result = makeConflictResult();
-      const id = result.conflicts[0].id;
+      const id = result.conflicts[0]!.id;
       result = merger.resolveConflict(result, id, "ours");
-      expect(result.conflicts[0].resolution).toBe("ours");
+      expect(result.conflicts[0]!.resolution).toBe("ours");
     });
 
     test("choosing 'theirs' sets resolution correctly", () => {
       let result = makeConflictResult();
-      const id = result.conflicts[0].id;
+      const id = result.conflicts[0]!.id;
       result = merger.resolveConflict(result, id, "theirs");
-      expect(result.conflicts[0].resolution).toBe("theirs");
+      expect(result.conflicts[0]!.resolution).toBe("theirs");
     });
 
     test("choosing 'both' sets resolution correctly", () => {
       let result = makeConflictResult();
-      const id = result.conflicts[0].id;
+      const id = result.conflicts[0]!.id;
       result = merger.resolveConflict(result, id, "both");
-      expect(result.conflicts[0].resolution).toBe("both");
+      expect(result.conflicts[0]!.resolution).toBe("both");
     });
 
     test("choosing 'custom' stores custom content", () => {
       let result = makeConflictResult();
-      const id = result.conflicts[0].id;
+      const id = result.conflicts[0]!.id;
       result = merger.resolveConflict(result, id, "custom", "custom text");
-      expect(result.conflicts[0].resolution).toBe("custom");
-      expect(result.conflicts[0].customContent).toBe("custom text");
+      expect(result.conflicts[0]!.resolution).toBe("custom");
+      expect(result.conflicts[0]!.customContent).toBe("custom text");
     });
 
     test("changing resolution overwrites previous choice", () => {
       let result = makeConflictResult();
-      const id = result.conflicts[0].id;
+      const id = result.conflicts[0]!.id;
       result = merger.resolveConflict(result, id, "ours");
-      expect(result.conflicts[0].resolution).toBe("ours");
+      expect(result.conflicts[0]!.resolution).toBe("ours");
       result = merger.resolveConflict(result, id, "theirs");
-      expect(result.conflicts[0].resolution).toBe("theirs");
+      expect(result.conflicts[0]!.resolution).toBe("theirs");
     });
 
     test("resolving a non-existent conflict ID does nothing", () => {
       let result = makeConflictResult();
-      const before = result.conflicts[0].resolution;
+      const before = result.conflicts[0]!.resolution;
       result = merger.resolveConflict(result, "nonexistent-id", "ours");
-      expect(result.conflicts[0].resolution).toBe(before);
+      expect(result.conflicts[0]!.resolution).toBe(before);
     });
   });
 
@@ -169,7 +169,7 @@ describe("MergeResolver component logic", () => {
 
       // Resolve first conflict
       if (result.conflicts.length > 0) {
-        result = merger.resolveConflict(result, result.conflicts[0].id, "ours");
+        result = merger.resolveConflict(result, result.conflicts[0]!.id, "ours");
       }
 
       const resolvedAfter = result.conflicts.filter((c) => c.resolution != null).length;
@@ -180,7 +180,7 @@ describe("MergeResolver component logic", () => {
   describe("save produces correct output", () => {
     test("applying 'ours' resolution produces our content", () => {
       let result = makeConflictResult();
-      const id = result.conflicts[0].id;
+      const id = result.conflicts[0]!.id;
       result = merger.resolveConflict(result, id, "ours");
 
       const final = merger.applyResolutions(result);
@@ -191,7 +191,7 @@ describe("MergeResolver component logic", () => {
 
     test("applying 'theirs' resolution produces their content", () => {
       let result = makeConflictResult();
-      const id = result.conflicts[0].id;
+      const id = result.conflicts[0]!.id;
       result = merger.resolveConflict(result, id, "theirs");
 
       const final = merger.applyResolutions(result);
@@ -201,7 +201,7 @@ describe("MergeResolver component logic", () => {
 
     test("applying 'both' concatenates both sides", () => {
       let result = makeConflictResult();
-      const id = result.conflicts[0].id;
+      const id = result.conflicts[0]!.id;
       result = merger.resolveConflict(result, id, "both");
 
       const final = merger.applyResolutions(result);
@@ -221,7 +221,7 @@ describe("MergeResolver component logic", () => {
       let result = makeMultiConflictResult();
       if (result.conflicts.length >= 2) {
         // Resolve first, leave second unresolved
-        result = merger.resolveConflict(result, result.conflicts[0].id, "ours");
+        result = merger.resolveConflict(result, result.conflicts[0]!.id, "ours");
 
         const final = merger.applyResolutions(result);
         // First conflict resolved
@@ -232,7 +232,7 @@ describe("MergeResolver component logic", () => {
 
     test("preserving non-conflicting lines in output", () => {
       let result = makeConflictResult();
-      const id = result.conflicts[0].id;
+      const id = result.conflicts[0]!.id;
       result = merger.resolveConflict(result, id, "ours");
 
       const final = merger.applyResolutions(result);

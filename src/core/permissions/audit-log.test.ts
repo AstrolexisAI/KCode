@@ -32,17 +32,17 @@ describe("AuditLog", () => {
     audit.log(makeEntry());
     const history = audit.getHistory();
     expect(history.length).toBe(1);
-    expect(history[0].toolName).toBe("Bash");
-    expect(history[0].action).toBe("allowed");
-    expect(history[0].inputSummary).toBe("echo hello");
+    expect(history[0]!.toolName).toBe("Bash");
+    expect(history[0]!.action).toBe("allowed");
+    expect(history[0]!.inputSummary).toBe("echo hello");
   });
 
   test("log truncates long inputSummary", () => {
     const longSummary = "x".repeat(500);
     audit.log(makeEntry({ inputSummary: longSummary }));
     const history = audit.getHistory();
-    expect(history[0].inputSummary.length).toBe(200);
-    expect(history[0].inputSummary.endsWith("...")).toBe(true);
+    expect(history[0]!.inputSummary.length).toBe(200);
+    expect(history[0]!.inputSummary.endsWith("...")).toBe(true);
   });
 
   test("getHistory returns entries in reverse chronological order", () => {
@@ -51,8 +51,8 @@ describe("AuditLog", () => {
     audit.log(makeEntry({ timestamp: 3000, toolName: "Third" }));
     const history = audit.getHistory();
     expect(history.length).toBe(3);
-    expect(history[0].toolName).toBe("Third");
-    expect(history[2].toolName).toBe("First");
+    expect(history[0]!.toolName).toBe("Third");
+    expect(history[2]!.toolName).toBe("First");
   });
 
   test("getHistory filters by toolName", () => {
@@ -139,7 +139,7 @@ describe("AuditLog", () => {
     audit.clear(2500);
     const history = audit.getHistory();
     expect(history.length).toBe(1);
-    expect(history[0].timestamp).toBe(3000);
+    expect(history[0]!.timestamp).toBe(3000);
   });
 
   test("clear returns correct count", () => {
@@ -162,13 +162,13 @@ describe("AuditLog", () => {
   test("reason is preserved", () => {
     audit.log(makeEntry({ reason: "dangerous command detected" }));
     const history = audit.getHistory();
-    expect(history[0].reason).toBe("dangerous command detected");
+    expect(history[0]!.reason).toBe("dangerous command detected");
   });
 
   test("reason is undefined when not provided", () => {
     audit.log(makeEntry({ reason: undefined }));
     const history = audit.getHistory();
-    expect(history[0].reason).toBeUndefined();
+    expect(history[0]!.reason).toBeUndefined();
   });
 
   test("formatSummary produces readable output", () => {
@@ -200,9 +200,9 @@ describe("AuditLog", () => {
   test("getHistory entries include HMAC", () => {
     audit.log(makeEntry());
     const history = audit.getHistory();
-    expect(history[0].hmac).toBeDefined();
-    expect(typeof history[0].hmac).toBe("string");
-    expect(history[0].hmac!.length).toBe(16);
+    expect(history[0]!.hmac).toBeDefined();
+    expect(typeof history[0]!.hmac).toBe("string");
+    expect(history[0]!.hmac!.length).toBe(16);
   });
 
   test("HMAC is deterministic for same entry", () => {
@@ -219,13 +219,13 @@ describe("AuditLog", () => {
 
   test("verifyEntryHmac validates correct entries", () => {
     audit.log(makeEntry({ timestamp: 5000, sessionId: "s1" }));
-    const entry = audit.getHistory()[0];
+    const entry = audit.getHistory()[0]!;
     expect(verifyEntryHmac(entry)).toBe(true);
   });
 
   test("verifyEntryHmac rejects tampered entries", () => {
     audit.log(makeEntry({ timestamp: 5000, sessionId: "s1" }));
-    const entry = audit.getHistory()[0];
+    const entry = audit.getHistory()[0]!;
     entry.action = "denied"; // tamper
     expect(verifyEntryHmac(entry)).toBe(false);
   });
@@ -238,7 +238,7 @@ describe("AuditLog", () => {
     const json = audit.exportJSON();
     const lines = json.split("\n");
     expect(lines).toHaveLength(2);
-    const parsed = JSON.parse(lines[0]);
+    const parsed = JSON.parse(lines[0]!);
     expect(parsed["@timestamp"]).toBeDefined();
     expect(parsed.event.action).toBeDefined();
     expect(parsed.tool.name).toBeDefined();
