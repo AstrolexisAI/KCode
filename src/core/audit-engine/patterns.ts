@@ -63,6 +63,8 @@ import { FLIGHT_SOFTWARE_PATTERNS } from "./patterns/flight-software";
 import { AI_ML_PATTERNS } from "./patterns/ai-ml";
 // P2.1 (v2.10.389) — Cloud / IaC at-rest pack.
 import { CLOUD_PATTERNS } from "./patterns/cloud";
+// P2.2 (v2.10.389) — Supply-chain pack.
+import { SUPPLY_CHAIN_PATTERNS } from "./patterns/supply-chain";
 
 // Re-export every per-language array so existing imports keep working.
 export {
@@ -92,6 +94,7 @@ export {
   FLIGHT_SOFTWARE_PATTERNS,
   AI_ML_PATTERNS,
   CLOUD_PATTERNS,
+  SUPPLY_CHAIN_PATTERNS,
 };
 
 export const ALL_PATTERNS: BugPattern[] = [
@@ -121,6 +124,7 @@ export const ALL_PATTERNS: BugPattern[] = [
   ...FLIGHT_SOFTWARE_PATTERNS,
   ...AI_ML_PATTERNS,
   ...CLOUD_PATTERNS,
+  ...SUPPLY_CHAIN_PATTERNS,
 ];
 
 /** Return all patterns applicable to the given language. */
