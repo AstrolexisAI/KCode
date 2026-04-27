@@ -47,8 +47,12 @@ describe("pattern_metrics", () => {
     }
   });
 
-  it("hits and unique_sites diverge when the same pattern fires multiple times in one file", async () => {
-    // Three strcpy calls in one file → 1 verifier site, 3 hits.
+  it("unique_sites = matches on distinct lines (site-level dedupe, v2.10.389)", async () => {
+    // Three strcpy calls on three distinct lines → 3 verifier sites
+    // (one per line), 3 hits. Prior to v2.10.389 (P1.1) all three
+    // collapsed into one verifier site under (pattern, file) keying;
+    // we now keep them distinct because each is a genuinely separate
+    // bug worth verifying.
     w(
       "multi.c",
       `void f(const char* a, const char* b, const char* c) {
@@ -65,9 +69,9 @@ describe("pattern_metrics", () => {
     });
     const m = (result.pattern_metrics ?? {})["cpp-006-strcpy-family"];
     if (m) {
-      // The dedupe should leave exactly one verifier call for this
-      // (pattern, file) site, but hits should reflect all three matches.
-      expect((m as { unique_sites?: number }).unique_sites).toBe(1);
+      // With site-level dedupe each distinct line is its own verifier
+      // call, so unique_sites equals the number of matched lines.
+      expect((m as { unique_sites?: number }).unique_sites).toBe(3);
       expect(m.hits).toBeGreaterThanOrEqual(3);
     }
   });

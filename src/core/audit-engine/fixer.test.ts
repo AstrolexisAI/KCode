@@ -114,8 +114,14 @@ describe("fixer", () => {
     });
     const fixes = applyFixes(result);
     const skipped = fixes.filter((f) => !f.applied);
-    expect(skipped.length).toBe(1);
-    expect(skipped[0]!.description).toContain("already exists");
+    // v2.10.389 (P1.1) — site-level dedupe means data[2] and data[13]
+    // are two distinct findings on different lines instead of one
+    // collapsed pattern. Each one independently sees the upstream
+    // size check and skips its own fix attempt.
+    expect(skipped.length).toBe(2);
+    for (const s of skipped) {
+      expect(s.description).toContain("already exists");
+    }
   });
 
   // Coverage gate: any pattern registered in patterns.ts must have a

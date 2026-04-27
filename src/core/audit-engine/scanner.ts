@@ -857,19 +857,27 @@ export function groupCandidatesByFile(candidates: Candidate[]): Map<string, Cand
 }
 
 /**
- * Deduplicate candidates by (pattern_id, file). When many matches of the
- * same pattern exist in one file, verify ONE representative and carry
- * the count forward. This keeps verification tractable on large codebases.
+ * Deduplicate candidates by (pattern_id, file, line). v2.10.389 (P1.1):
+ * previously the key was (pattern_id, file) — same pattern matching
+ * 5 distinct sites in one file became ONE finding with a "+4 more"
+ * annotation, which lost recall on real multi-bug files. The line
+ * granularity is the right grouping: same pattern, same file,
+ * different lines = distinct vulnerabilities each worth verifying.
+ * Same pattern, same file, same line (rare — multiple matches in a
+ * minified line) still folds, with the count exposed via `multiples`
+ * for the verifier reasoning annotation and for raw-hit metrics.
  *
- * Returns { dedup, multiples } where `multiples` maps (pattern+file) to
- * the total count of matches in that file.
+ * Returns { dedup, multiples } where `multiples` maps
+ * `${pattern_id}|${file}|${line}` to the total count of matches at
+ * that exact site (≥2 means there were multiple matches on the same
+ * line).
  */
 export function dedupByPatternAndFile(
   candidates: Candidate[],
 ): { dedup: Candidate[]; multiples: Map<string, number> } {
   const byKey = new Map<string, Candidate[]>();
   for (const c of candidates) {
-    const key = `${c.pattern_id}|${c.file}`;
+    const key = `${c.pattern_id}|${c.file}|${c.line}`;
     const arr = byKey.get(key) ?? [];
     arr.push(c);
     byKey.set(key, arr);
