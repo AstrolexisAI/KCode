@@ -435,10 +435,14 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
   const { computeFindingId } = await import("./finding-id");
   for (const r of verified) {
     const pattern = getPatternById(r.candidate.pattern_id);
-    const key = `${r.candidate.pattern_id}|${r.candidate.file}`;
+    // v2.10.389 (P1.1) — site-level key matches the new dedupe key
+    // shape `pattern|file|line`. The "+N more" annotation now reads
+    // "matches at this line" not "in the same file" because each
+    // distinct line is its own finding.
+    const key = `${r.candidate.pattern_id}|${r.candidate.file}|${r.candidate.line}`;
     const count = multiples.get(key);
     const extraReasoning = count
-      ? `${r.verification.reasoning} (+${count - 1} more matches of this pattern in the same file)`
+      ? `${r.verification.reasoning} (+${count - 1} more matches of this pattern at the same site)`
       : r.verification.reasoning;
     const base = {
       pattern_id: r.candidate.pattern_id,
