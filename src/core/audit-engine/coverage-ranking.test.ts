@@ -184,20 +184,20 @@ describe("selectFilesForAudit", () => {
 // ─── scanProject coverage ────────────────────────────────────────
 
 describe("scanProject → coverage", () => {
-  it("reports truncated=false for small repos", () => {
+  it("reports truncated=false for small repos", async () => {
     w("a.c", "int a;\n");
     w("b.c", "int b;\n");
     w("c.c", "int c;\n");
-    const { coverage } = scanProject(TMP);
+    const { coverage } = await scanProject(TMP);
     expect(coverage.totalCandidateFiles).toBe(3);
     expect(coverage.scannedFiles).toBe(3);
     expect(coverage.skippedByLimit).toBe(0);
     expect(coverage.truncated).toBe(false);
   });
 
-  it("reports truncated=true + skippedByLimit when user caps below total", () => {
+  it("reports truncated=true + skippedByLimit when user caps below total", async () => {
     for (let i = 0; i < 15; i++) w(`f${i}.c`, `int v${i};\n`);
-    const { coverage } = scanProject(TMP, { maxFiles: 5 });
+    const { coverage } = await scanProject(TMP, { maxFiles: 5 });
     expect(coverage.totalCandidateFiles).toBe(15);
     expect(coverage.scannedFiles).toBe(5);
     expect(coverage.skippedByLimit).toBe(10);
@@ -206,16 +206,16 @@ describe("scanProject → coverage", () => {
     expect(coverage.maxFiles).toBe(5);
   });
 
-  it("capSource='adaptive' when no explicit cap passed", () => {
+  it("capSource='adaptive' when no explicit cap passed", async () => {
     w("a.c");
     w("b.c");
-    const { coverage } = scanProject(TMP);
+    const { coverage } = await scanProject(TMP);
     expect(coverage.capSource).toBe("adaptive");
   });
 
-  it("adaptive cap does not truncate a small project", () => {
+  it("adaptive cap does not truncate a small project", async () => {
     for (let i = 0; i < 20; i++) w(`f${i}.c`);
-    const { coverage } = scanProject(TMP);
+    const { coverage } = await scanProject(TMP);
     expect(coverage.truncated).toBe(false);
     expect(coverage.maxFiles).toBe(20);
   });

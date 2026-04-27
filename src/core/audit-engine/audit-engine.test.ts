@@ -97,7 +97,7 @@ describe("scanner", () => {
     expect(files[0]!.endsWith("main.cpp")).toBe(true);
   });
 
-  test("scanProject detects NASA IDF pointer arithmetic bug", () => {
+  test("scanProject detects NASA IDF pointer arithmetic bug", async () => {
     // Recreate the EthernetDevice.cpp:160 pattern
     writeFileSync(
       join(tmp, "EthernetDevice.cpp"),
@@ -111,13 +111,13 @@ describe("scanner", () => {
 }`,
     );
 
-    const { candidates } = scanProject(tmp);
+    const { candidates } = await scanProject(tmp);
     const ptrArithHits = candidates.filter((c) => c.pattern_id === "cpp-001-ptr-address-index");
     expect(ptrArithHits.length).toBe(1);
     expect(ptrArithHits[0]!.file).toContain("EthernetDevice.cpp");
   });
 
-  test("scanProject detects unreachable code after return", () => {
+  test("scanProject detects unreachable code after return", async () => {
     writeFileSync(
       join(tmp, "peek.cpp"),
       `size_t peek() {
@@ -130,12 +130,12 @@ describe("scanner", () => {
 }`,
     );
 
-    const { candidates } = scanProject(tmp);
+    const { candidates } = await scanProject(tmp);
     const hits = candidates.filter((c) => c.pattern_id === "cpp-002-unreachable-after-return");
     expect(hits.length).toBe(1);
   });
 
-  test("scanProject detects unchecked data[N] access", () => {
+  test("scanProject detects unchecked data[N] access", async () => {
     writeFileSync(
       join(tmp, "UsbXBox.cpp"),
       `void decode(const std::vector<unsigned char>& data) {
@@ -144,12 +144,12 @@ describe("scanner", () => {
 }`,
     );
 
-    const { candidates } = scanProject(tmp);
+    const { candidates } = await scanProject(tmp);
     const hits = candidates.filter((c) => c.pattern_id === "cpp-003-unchecked-data-index");
     expect(hits.length).toBeGreaterThanOrEqual(2);
   });
 
-  test("scanProject detects unsafe string functions", () => {
+  test("scanProject detects unsafe string functions", async () => {
     writeFileSync(
       join(tmp, "unsafe.cpp"),
       `void copy(char* dst, const char* src) {
@@ -159,7 +159,7 @@ describe("scanner", () => {
 }`,
     );
 
-    const { candidates } = scanProject(tmp);
+    const { candidates } = await scanProject(tmp);
     const hits = candidates.filter((c) => c.pattern_id === "cpp-006-strcpy-family");
     expect(hits.length).toBe(2);
   });
