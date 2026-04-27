@@ -156,6 +156,15 @@ async function main() {
   // This is what the running CLI talks to when checking for updates.
   if (passed > 0 && buildAll) {
     await generateManifest(targets, results);
+    // v2.10.384 — auto-publish to GitHub Releases page.
+    // Self-hosted CDN above is the primary distribution path (auto-updater
+    // talks to kulvex.ai). GitHub Releases is the secondary, manual-download
+    // channel. Prior to v2.10.384 this was a manual `gh release create` +
+    // `gh release upload` step that was easy to forget; v2.10.383 shipped
+    // to the CDN but missed the GitHub release until the user noticed.
+    // The publish.yml workflow exists but Actions runners stay queued for
+    // 1+ hr on free tier, so we publish from this machine via the gh CLI.
+    await publishToGitHub(targets, results);
   } else if (!buildAll) {
     console.log("(manifest skipped — partial build)\n");
   }
@@ -459,6 +468,307 @@ async function generateManifest(
     console.log(`  (CDN dir ${cdnDir} not found — copy manually)`);
   }
   console.log(`  ${Object.keys(platforms).length} platform(s), v${VERSION}\n`);
+}
+
+// ─── GitHub Release Publishing ──────────────────────────────────
+//
+// Publishes a GitHub Release with .tar.gz tarballs for the 4 unix-shaped
+// platforms (linux-x64, linux-arm64, darwin-x64, darwin-arm64). Windows
+// is excluded to match the prior publish.yml workflow's matrix and keep
+// the surface small — Windows users are served by the auto-updater.
+//
+// Skip conditions (each prints a clear note and returns):
+//   - KCODE_SKIP_GH_RELEASE=1 in env
+//   - gh CLI not on PATH
+//   - gh auth status non-zero (not logged in)
+//   - git working tree dirty (would tag against unstable state)
+//   - release notes generation fails (no commits since prior tag)
+//
+// The manifest write above already happened, so the auto-updater is
+// already live regardless of what this function does. A failure here
+// is recoverable by re-running release.ts (idempotent: existing tag /
+// release are reused via --clobber).
+
+const GH_RELEASE_TARGETS: Array<{ stagingSuffix: string; releaseName: string }> = [
+  { stagingSuffix: "linux-x64", releaseName: "linux-x64" },
+  { stagingSuffix: "linux-arm64", releaseName: "linux-arm64" },
+  { stagingSuffix: "macos-x64", releaseName: "darwin-x64" },
+  { stagingSuffix: "macos-arm64", releaseName: "darwin-arm64" },
+];
+
+function shellOk(cmd: string, args: string[]): boolean {
+  try {
+    const r = Bun.spawnSync([cmd, ...args], { stdout: "ignore", stderr: "ignore" });
+    return r.exitCode === 0;
+  } catch {
+    return false;
+  }
+}
+
+function shellCapture(cmd: string, args: string[]): { ok: boolean; stdout: string; stderr: string } {
+  try {
+    const r = Bun.spawnSync([cmd, ...args], { stdout: "pipe", stderr: "pipe" });
+    return {
+      ok: r.exitCode === 0,
+      stdout: r.stdout.toString().trim(),
+      stderr: r.stderr.toString().trim(),
+    };
+  } catch (err) {
+    return { ok: false, stdout: "", stderr: String(err) };
+  }
+}
+
+/** True if the working tree has uncommitted changes (excluding untracked). */
+function isWorkingTreeDirty(): boolean {
+  const r = shellCapture("git", ["status", "--porcelain", "--untracked-files=no"]);
+  return r.ok && r.stdout.length > 0;
+}
+
+/** True if the git tag already exists locally OR on origin. */
+function tagExists(tag: string): { local: boolean; remote: boolean } {
+  const local = shellOk("git", ["rev-parse", "-q", "--verify", `refs/tags/${tag}`]);
+  // ls-remote returns 0 even if no match — check stdout for the tag ref
+  const remote = shellCapture("git", ["ls-remote", "--tags", "origin", tag]);
+  return { local, remote: remote.ok && remote.stdout.includes(tag) };
+}
+
+/** True if a GitHub release with this tag already exists. */
+function releaseExists(tag: string): boolean {
+  return shellOk("gh", ["release", "view", tag, "-R", "AstrolexisAI/KCode"]);
+}
+
+/** Find the most recent prior release tag in vX.Y.Z form. */
+function findPriorTag(currentTag: string): string | null {
+  const r = shellCapture("git", ["tag", "-l", "v*", "--sort=-v:refname"]);
+  if (!r.ok) return null;
+  for (const tag of r.stdout.split("\n").map((t) => t.trim()).filter(Boolean)) {
+    if (tag === currentTag) continue;
+    if (/^v\d+\.\d+\.\d+$/.test(tag)) return tag;
+  }
+  return null;
+}
+
+/** Build the release notes body. Uses release/notes-vX.Y.Z.md if present, otherwise falls back to commit log + delta size summary. */
+function buildReleaseNotes(version: string): string {
+  const overridePath = join(RELEASE_DIR, `notes-v${version}.md`);
+  if (existsSync(overridePath)) {
+    console.log(`  using release notes from ${overridePath}`);
+    return readFileSync(overridePath, "utf-8");
+  }
+
+  const tag = `v${version}`;
+  const priorTag = findPriorTag(tag);
+  const commitsRange = priorTag ? `${priorTag}..HEAD` : "HEAD";
+
+  const log = shellCapture("git", ["log", commitsRange, "--oneline", "--no-decorate"]);
+  const lines = log.ok ? log.stdout.split("\n").filter(Boolean) : [];
+
+  const out: string[] = [];
+  out.push(`## What changed`);
+  out.push("");
+  if (lines.length === 0) {
+    out.push("(no commits range available)");
+  } else {
+    for (const line of lines) out.push(`- ${line}`);
+  }
+  out.push("");
+  out.push(`## Update`);
+  out.push("");
+  out.push("```");
+  out.push("kcode update");
+  out.push("```");
+  out.push("");
+  out.push("For 99% smaller downloads: `apt install bsdiff` / `brew install bsdiff` / `dnf install bsdiff`.");
+  out.push("");
+  out.push("---");
+  out.push("");
+  out.push("Co-Authored-By: Kulvex Code <contact@astrolexis.space>");
+  return out.join("\n");
+}
+
+interface PackedAsset {
+  tarballPath: string;
+  shaPath: string;
+  releaseName: string;
+}
+
+/** Pack each unix binary as kcode-VERSION-RELEASENAME.tar.gz with sha256 sidecar. Returns a list of packed asset paths. */
+function packTarballs(targets: Target[], results: Array<{ name: string; ok: boolean }>): PackedAsset[] {
+  const stagingDir = join(RELEASE_DIR, ".github-release-staging");
+  if (!existsSync(stagingDir)) mkdirSync(stagingDir, { recursive: true });
+
+  const out: PackedAsset[] = [];
+  for (const map of GH_RELEASE_TARGETS) {
+    const stagingFile = `kcode-${VERSION}-${map.stagingSuffix}`;
+    const stagingPath = join(RELEASE_DIR, stagingFile);
+    if (!existsSync(stagingPath)) {
+      console.log(`  skip ${map.releaseName}: ${stagingFile} not built`);
+      continue;
+    }
+    // Confirm that the corresponding target actually built successfully —
+    // prevents packing a stale binary from a prior run.
+    const targetMatch = targets.find((t) => t.outFile === stagingFile);
+    const ok = targetMatch && results.find((r) => r.name === targetMatch.name)?.ok;
+    if (!ok) {
+      console.log(`  skip ${map.releaseName}: build failed or stale`);
+      continue;
+    }
+
+    const tarballName = `kcode-${VERSION}-${map.releaseName}.tar.gz`;
+    const shaName = `${tarballName}.sha256`;
+    const tarballPath = join(stagingDir, tarballName);
+    const shaPath = join(stagingDir, shaName);
+
+    // Stage the binary as `kcode` so the tarball's contained name is
+    // platform-agnostic and matches what install.sh extracts.
+    const stagedKcode = join(stagingDir, "kcode");
+    copyFileSync(stagingPath, stagedKcode);
+    try {
+      execSync(`chmod +x ${JSON.stringify(stagedKcode)}`);
+    } catch {
+      // chmod is best-effort; on systems where the tar already preserves perms it's redundant
+    }
+
+    const tarRes = shellCapture("tar", ["czf", tarballPath, "-C", stagingDir, "kcode"]);
+    if (!tarRes.ok) {
+      console.log(`  ✗ ${map.releaseName}: tar failed: ${tarRes.stderr.slice(0, 120)}`);
+      continue;
+    }
+
+    // Cleanup the staged kcode so the next iteration packs cleanly
+    try {
+      execSync(`rm -f ${JSON.stringify(stagedKcode)}`);
+    } catch {
+      // non-fatal
+    }
+
+    // Compute SHA256 in the format `gh release download --pattern *.sha256` consumers expect:
+    // "<hex>  <filename>"
+    const hash = createHash("sha256").update(readFileSync(tarballPath)).digest("hex");
+    writeFileSync(shaPath, `${hash}  ${tarballName}\n`);
+
+    const sizeMB = (statSync(tarballPath).size / (1024 * 1024)).toFixed(1);
+    console.log(`  ✓ ${map.releaseName.padEnd(14)} ${sizeMB.padStart(6)} MB`);
+    out.push({ tarballPath, shaPath, releaseName: map.releaseName });
+  }
+  return out;
+}
+
+async function publishToGitHub(
+  targets: Target[],
+  results: Array<{ name: string; ok: boolean }>,
+): Promise<void> {
+  console.log("\nGitHub Release Publishing");
+
+  // ─── Skip checks ───
+  if (process.env.KCODE_SKIP_GH_RELEASE === "1") {
+    console.log("  KCODE_SKIP_GH_RELEASE=1 — skipping.\n");
+    return;
+  }
+  if (!shellOk("which", ["gh"])) {
+    console.log("  gh CLI not on PATH — skipping. (Install from https://cli.github.com)\n");
+    return;
+  }
+  if (!shellOk("gh", ["auth", "status"])) {
+    console.log("  gh auth status non-zero — skipping. (Run `gh auth login` then re-run.)\n");
+    return;
+  }
+  if (isWorkingTreeDirty()) {
+    console.log("  working tree dirty — skipping tag/release. Commit changes and re-run.\n");
+    return;
+  }
+
+  const tag = `v${VERSION}`;
+  const tagState = tagExists(tag);
+
+  // ─── Tag ───
+  if (!tagState.local) {
+    const r = shellCapture("git", ["tag", "-a", tag, "-m", `KCode ${tag}`]);
+    if (!r.ok) {
+      console.log(`  ✗ git tag failed: ${r.stderr.slice(0, 200)}`);
+      console.log("  Manifest already live on CDN. Re-run release.ts to retry.\n");
+      return;
+    }
+    console.log(`  ✓ created local tag ${tag}`);
+  } else {
+    console.log(`  · local tag ${tag} already exists`);
+  }
+  if (!tagState.remote) {
+    const r = shellCapture("git", ["push", "origin", tag]);
+    if (!r.ok) {
+      console.log(`  ✗ git push tag failed: ${r.stderr.slice(0, 200)}`);
+      console.log("  Manifest already live on CDN. Re-run release.ts to retry.\n");
+      return;
+    }
+    console.log(`  ✓ pushed tag ${tag}`);
+  } else {
+    console.log(`  · remote tag ${tag} already present`);
+  }
+
+  // ─── Pack tarballs ───
+  console.log("  Packing tarballs:");
+  const assets = packTarballs(targets, results);
+  if (assets.length === 0) {
+    console.log("  ✗ no tarballs packed — nothing to upload\n");
+    return;
+  }
+
+  // include install.sh as a one-line installer for new users
+  const installShPath = "install.sh";
+  const installShExists = existsSync(installShPath);
+
+  // ─── Create or reuse release ───
+  let createdNew = false;
+  if (!releaseExists(tag)) {
+    const notesBody = buildReleaseNotes(VERSION);
+    const notesPath = join(RELEASE_DIR, `.github-release-staging/notes-${tag}.md`);
+    writeFileSync(notesPath, notesBody);
+
+    const title = `KCode ${tag}`;
+    const create = shellCapture("gh", [
+      "release",
+      "create",
+      tag,
+      "-R",
+      "AstrolexisAI/KCode",
+      "--title",
+      title,
+      "--notes-file",
+      notesPath,
+    ]);
+    if (!create.ok) {
+      console.log(`  ✗ gh release create failed: ${create.stderr.slice(0, 200)}`);
+      console.log("  Tag pushed; release page not created. Re-run release.ts to retry.\n");
+      return;
+    }
+    console.log(`  ✓ created release ${tag}`);
+    createdNew = true;
+  } else {
+    console.log(`  · release ${tag} already exists — uploading assets with --clobber`);
+  }
+
+  // ─── Upload assets ───
+  const uploadArgs = [
+    "release",
+    "upload",
+    tag,
+    "-R",
+    "AstrolexisAI/KCode",
+    ...assets.flatMap((a) => [a.tarballPath, a.shaPath]),
+    ...(installShExists ? [installShPath] : []),
+    "--clobber",
+  ];
+  const upload = shellCapture("gh", uploadArgs);
+  if (!upload.ok) {
+    console.log(`  ✗ gh release upload failed: ${upload.stderr.slice(0, 300)}`);
+    if (createdNew) {
+      console.log("  Release page exists but assets are missing. Re-run release.ts to retry.\n");
+    }
+    return;
+  }
+  const assetCount = assets.length * 2 + (installShExists ? 1 : 0);
+  console.log(`  ✓ uploaded ${assetCount} assets to ${tag}`);
+  console.log(`  https://github.com/AstrolexisAI/KCode/releases/tag/${tag}\n`);
 }
 
 main();
