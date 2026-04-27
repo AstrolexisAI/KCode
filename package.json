@@ -50,6 +50,7 @@
     "format": "biome format --write src/",
     "prepublishOnly": "bun run build",
     "test": "bun test",
+    "test:ci": "bun test --timeout=30000",
     "version:patch": "bun run --bun npm version patch",
     "version:minor": "bun run --bun npm version minor",
     "version:major": "bun run --bun npm version major"

@@ -23,7 +23,7 @@ jobs:
         run: bun run lint
       - name: Typecheck
         run: bun run typecheck
-      - run: bun test
+      - run: bun run test:ci
 
   test-windows:
     name: Test (Windows)
@@ -35,7 +35,7 @@ jobs:
           bun-version: latest
       - run: bun install
       - name: Run tests (Windows)
-        run: bun test
+        run: bun run test:ci
         env:
           # Skip Linux-only tests on Windows
           KCODE_SKIP_PLATFORM_TESTS: "1"

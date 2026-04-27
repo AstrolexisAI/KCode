@@ -2,6 +2,10 @@
 # Limit parallel workers to prevent OOM — 244 test files each load full module graph
 # Each worker loads ~7GB+ of module graph. 60GB system RAM = max 2 safe workers.
 workers = 2
-timeout = 30000
+# Note: `timeout` here is NOT recognized by bun (the field is silently ignored).
+# Per-test timeout is configured via `--timeout=<ms>` on the bun test CLI —
+# see the `test` script in package.json which passes --timeout=30000. The 5s
+# default kept timing out the E2E harness tests on slower CI runners; 30s
+# matches the upper bound observed locally (8-9s for the slowest E2E flows).
 # RAG tests restored 2026-04-21: infinite loop in chunkLineRange fixed (overlap guard).
 # Root cause: i = lineEnd + 1 - OVERLAP_LINES could regress when trailing block < OVERLAP_LINES lines.

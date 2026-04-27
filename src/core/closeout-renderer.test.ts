@@ -53,6 +53,18 @@ describe("renderCloseoutFromScope", () => {
 
   test("renders 'none' for zero files written", () => {
     mgr.beginNewScope({ type: "scaffold", userPrompt: "x" });
+    // Push the scope into "execution" mode (a runtime command was issued)
+    // so the renderer emits the "none created or edited" line. Informational
+    // turns (no files, no runtime) suppress that diagnostic — issue #111
+    // v2.10.306. The test name still applies: when execution happened but
+    // no files landed, the renderer must explicitly say "none".
+    mgr.recordRuntimeCommand({
+      command: "echo hello",
+      exitCode: 0,
+      output: "hello",
+      runtimeFailed: false,
+      timestamp: 1,
+    });
     mgr.update({ phase: "partial" });
     const out = renderCloseoutFromScope(mgr.current()!)!;
     expect(out).toContain("none created or edited");
