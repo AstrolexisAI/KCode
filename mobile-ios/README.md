@@ -23,7 +23,7 @@ KCode conversation manager → Anthropic API
 On your main machine:
 
 ```bash
-kcode serve --port 10100
+kcode serve --port 10101
 ```
 
 The server exposes `/api/prompt` with SSE streaming.
@@ -60,7 +60,7 @@ Requires: Xcode 15+ on a Mac
 
 On first launch, tap ⋯ → Settings:
 
-- **Server URL**: `http://192.168.1.42:10100` (LAN) or `http://100.64.0.5:10100` (Tailscale)
+- **Server URL**: `http://192.168.1.42:10101` (LAN) or `http://100.64.0.5:10101` (Tailscale)
 - **Model**: any model ID your KCode server has configured (run `kcode models list`)
 - **Working Directory**: `/home/curly/projects/myproject` (absolute path)
 

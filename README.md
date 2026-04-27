@@ -504,10 +504,12 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines. Report security issues 
 embedded, CI/CD, fork it — no restrictions, no copyleft viral clauses.
 See [LICENSE](./LICENSE).
 
-### Pro features (separate repo, commercial license)
+### Pro features (same repo, runtime-gated)
 
-Certain advanced features live in a **separate commercial repository**
-and are not covered by Apache 2.0:
+Certain advanced features ship in this repo but are gated at runtime
+behind an `isPro()` license check (see [`LICENSE-COMMERCIAL.md`](./LICENSE-COMMERCIAL.md)
+for the licensing terms). The Apache-2.0 license covers the source;
+running these specific features in production requires a Pro key.
 
 - **Multi-Model Orchestrator** — DAG decomposition, conductor, parallel sub-tasks on specialized models
 - **Multi-agent swarm** — parallel sub-agents for divide-and-conquer workflows

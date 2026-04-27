@@ -66,7 +66,7 @@ class AppSettings: ObservableObject {
     }
 
     init() {
-        self.serverURL = UserDefaults.standard.string(forKey: "serverURL") ?? "http://localhost:10100"
+        self.serverURL = UserDefaults.standard.string(forKey: "serverURL") ?? "http://localhost:10101"
         self.model = UserDefaults.standard.string(forKey: "model") ?? "mnemo:mark6-mid"
         self.cwd = UserDefaults.standard.string(forKey: "cwd") ?? ""
         self.sessionId = KeychainHelper.load(key: "sessionId")

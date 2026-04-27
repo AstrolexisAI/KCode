@@ -83,7 +83,10 @@ export class KCodeApiClient {
 
   private getServerUrl(): string {
     const config = vscode.workspace.getConfiguration("kcode");
-    return config.get<string>("serverUrl", "http://localhost:10091");
+    // 10101 is the canonical port for `kcode serve` (HTTP API).
+    // 10091 is the LLM model server. v2.10.396 corrected the
+    // historic typo across all three VS Code references.
+    return config.get<string>("serverUrl", "http://localhost:10101");
   }
 
   public updateBaseUrl(): void {

@@ -405,13 +405,18 @@ function startKCodeServer(): void {
   }
 
   const config = vscode.workspace.getConfiguration("kcode");
-  const serverUrl = config.get<string>("serverUrl", "http://localhost:10091");
+  // 10101 is the canonical port for `kcode serve` (the HTTP API
+  // server consumed by the extension). 10091 is the LLM model
+  // server (separate surface). Earlier versions of this extension
+  // launched `kcode serve --port 10091` by mistake — it would race
+  // with the LLM server and fail. Fixed to 10101 in v2.10.396.
+  const serverUrl = config.get<string>("serverUrl", "http://localhost:10101");
 
   // Parse port from the URL
-  let port = "10091";
+  let port = "10101";
   try {
     const url = new URL(serverUrl);
-    port = url.port || "10091";
+    port = url.port || "10101";
   } catch {
     // Default port
   }
