@@ -428,97 +428,160 @@ function buildStructuredPrBody(
   lines.push(SUMMARY_PLACEHOLDER);
   lines.push("");
 
-  lines.push("### Findings and fixes");
-  lines.push("");
-  // v2.10.351 P0 — render only actionable findings (excludes
-  // ignored and any stray demoted_fp). Counts in the header above
-  // still come from result.confirmed_findings; if the reviewer
-  // wants the header to follow review state, see P0.9.
+  // CL.7 (v2.10.377) — three explicit buckets the reviewer can
+  // skim without parsing prose:
+  //
+  //   Fixed:   confirmed findings whose fix_support is "rewrite"
+  //            (the ones /fix can mechanically apply with no human
+  //            judgment needed)
+  //   Manual:  confirmed findings whose fix_support is "annotate"
+  //            or "manual" — the rewriter can't act, the human
+  //            needs to read and patch
+  //   Ignored: findings the reviewer flagged as `ignored`, plus
+  //            FP-detail entries flagged as `demoted_fp` (the
+  //            human disagreed with the verifier's verdict)
+  //
+  // Counts must be internally consistent so a CI gate can compare
+  // them against AUDIT_REPORT.json fields:
+  //   fixed.length + manual.length === actionableFindings(result).length
+  //   ignored count === findings.filter(ignored) + fp_detail.filter(demoted_fp)
   const renderableFindings = actionableFindings(result);
-  if (renderableFindings.length === 0) {
-    lines.push("_No confirmed findings — see the methodology section for what was checked._");
-    lines.push("");
-  } else {
-    for (let i = 0; i < renderableFindings.length; i++) {
-      const f = renderableFindings[i]!;
-      const rel = f.file.startsWith(projectRoot + "/")
-        ? f.file.slice(projectRoot.length + 1)
-        : f.file.replace(result.project + "/", "");
-      const fSupport = (f as { fix_support?: "rewrite" | "annotate" | "manual" }).fix_support;
-      const reviewReason = (f as { review_reason?: string }).review_reason;
-
-      lines.push(
-        `#### ${i + 1}. [${f.severity.toUpperCase()}] ${f.pattern_title} — \`${rel}:${f.line}\``,
-      );
-      lines.push("");
-      const meta: string[] = [];
-      meta.push(`Pattern \`${f.pattern_id}\``);
-      if (f.cwe) meta.push(f.cwe);
-      if (fSupport) meta.push(`fix-support: \`${fSupport}\``);
-      if (reviewReason) meta.push(`reviewer: \`${reviewReason}\``);
-      lines.push(meta.join(" · "));
-      lines.push("");
-      if (f.verification.reasoning) {
-        lines.push(`**Bug.** ${f.verification.reasoning.slice(0, 500).replace(/\n/g, " ")}`);
-      }
-      // Evidence Pack (v2.10.361+) — terse one-line-per-field on PR
-      // body to keep review-time scanning fast. Falls back to legacy
-      // string fields when evidence is absent.
-      const ev = f.verification.evidence;
-      if (ev?.sink) {
-        lines.push("");
-        lines.push(`**Sink.** \`${ev.sink}\``);
-      }
-      if (ev?.input_boundary) {
-        lines.push("");
-        lines.push(`**Input boundary.** ${ev.input_boundary}`);
-      }
-      if (ev?.execution_path_steps && ev.execution_path_steps.length > 0) {
-        lines.push("");
-        lines.push(
-          `**Execution path.** ${ev.execution_path_steps.join(" → ").slice(0, 500)}`,
-        );
-      } else if (f.verification.execution_path) {
-        lines.push("");
-        lines.push(
-          `**Execution path.** ${f.verification.execution_path.slice(0, 500).replace(/\n/g, " ")}`,
-        );
-      }
-      const fixText = ev?.suggested_fix ?? f.verification.suggested_fix;
-      if (fixText) {
-        lines.push("");
-        lines.push(`**Fix applied.** ${fixText.slice(0, 500).replace(/\n/g, " ")}`);
-      }
-      if (ev?.test_suggestion) {
-        lines.push("");
-        lines.push(
-          `**Regression test.** ${ev.test_suggestion.slice(0, 300).replace(/\n/g, " ")}`,
-        );
-      }
-      lines.push("");
-    }
-  }
-
-  // Surface findings reviewers explicitly demoted/promoted so the
-  // PR makes the human triage visible rather than hiding it in JSON.
-  const reviewedFps = (result.false_positives_detail ?? []).filter(
+  const fixedFindings = renderableFindings.filter(
+    (f) => (f as { fix_support?: string }).fix_support === "rewrite",
+  );
+  const manualFindings = renderableFindings.filter(
+    (f) => (f as { fix_support?: string }).fix_support !== "rewrite",
+  );
+  const ignoredFromFindings = result.findings.filter(
+    (f) => (f as { review_state?: string }).review_state === "ignored",
+  );
+  const demotedFromFps = (result.false_positives_detail ?? []).filter(
     (fp) => (fp as { review_state?: string }).review_state === "demoted_fp",
   );
-  if (reviewedFps.length > 0) {
-    lines.push("### Findings demoted by reviewer");
-    lines.push("");
+
+  /** Render one finding card. Shared between the Fixed and Manual sections. */
+  const renderFindingCard = (f: Finding, i: number): void => {
+    const rel = f.file.startsWith(projectRoot + "/")
+      ? f.file.slice(projectRoot.length + 1)
+      : f.file.replace(result.project + "/", "");
+    const fSupport = (f as { fix_support?: "rewrite" | "annotate" | "manual" }).fix_support;
+    const reviewReason = (f as { review_reason?: string }).review_reason;
+
     lines.push(
-      reviewedFps.length === 1
-        ? "1 candidate was dropped from the confirmed list during human triage:"
-        : `${reviewedFps.length} candidates were dropped from the confirmed list during human triage:`,
+      `#### ${i + 1}. [${f.severity.toUpperCase()}] ${f.pattern_title} — \`${rel}:${f.line}\``,
     );
     lines.push("");
-    for (const fp of reviewedFps) {
+    const meta: string[] = [];
+    meta.push(`Pattern \`${f.pattern_id}\``);
+    if (f.cwe) meta.push(f.cwe);
+    if (fSupport) meta.push(`fix-support: \`${fSupport}\``);
+    if (reviewReason) meta.push(`reviewer: \`${reviewReason}\``);
+    lines.push(meta.join(" · "));
+    lines.push("");
+    if (f.verification.reasoning) {
+      lines.push(`**Bug.** ${f.verification.reasoning.slice(0, 500).replace(/\n/g, " ")}`);
+    }
+    // Evidence Pack (v2.10.361+) — terse one-line-per-field. Falls
+    // back to legacy string fields when evidence is absent.
+    const ev = f.verification.evidence;
+    if (ev?.sink) {
+      lines.push("");
+      lines.push(`**Sink.** \`${ev.sink}\``);
+    }
+    if (ev?.input_boundary) {
+      lines.push("");
+      lines.push(`**Input boundary.** ${ev.input_boundary}`);
+    }
+    if (ev?.execution_path_steps && ev.execution_path_steps.length > 0) {
+      lines.push("");
+      lines.push(
+        `**Execution path.** ${ev.execution_path_steps.join(" → ").slice(0, 500)}`,
+      );
+    } else if (f.verification.execution_path) {
+      lines.push("");
+      lines.push(
+        `**Execution path.** ${f.verification.execution_path.slice(0, 500).replace(/\n/g, " ")}`,
+      );
+    }
+    const fixText = ev?.suggested_fix ?? f.verification.suggested_fix;
+    if (fixText) {
+      lines.push("");
+      lines.push(`**Fix applied.** ${fixText.slice(0, 500).replace(/\n/g, " ")}`);
+    }
+    if (ev?.test_suggestion) {
+      lines.push("");
+      lines.push(
+        `**Regression test.** ${ev.test_suggestion.slice(0, 300).replace(/\n/g, " ")}`,
+      );
+    }
+    lines.push("");
+  };
+
+  // ── Fixed (auto-applied rewrites) ─────────────────────────
+  lines.push(`### Fixed findings (${fixedFindings.length})`);
+  lines.push("");
+  if (fixedFindings.length === 0) {
+    lines.push("_None — no rewrite-tier findings in this run._");
+    lines.push("");
+  } else {
+    lines.push(
+      "_These were patched mechanically by `/fix`. Each finding has a fix recipe in the `rewrite` tier._",
+    );
+    lines.push("");
+    fixedFindings.forEach((f, i) => renderFindingCard(f, i));
+  }
+
+  // ── Manual (needs human attention) ───────────────────────
+  lines.push(`### Manual findings (${manualFindings.length})`);
+  lines.push("");
+  if (manualFindings.length === 0) {
+    lines.push(
+      "_None — every confirmed finding had a rewrite-tier fix recipe._",
+    );
+    lines.push("");
+  } else {
+    lines.push(
+      "_These need human review — either `/fix` only inserts an audit-note " +
+        "comment (annotate tier) or there's no automated fix recipe (manual tier). " +
+        "Read the evidence below and patch by hand._",
+    );
+    lines.push("");
+    manualFindings.forEach((f, i) =>
+      // Continue numbering so reviewers can reference findings by
+      // index across both sections without ambiguity.
+      renderFindingCard(f, i + fixedFindings.length),
+    );
+  }
+
+  // ── Ignored / demoted ────────────────────────────────────
+  // Combines reviewer-ignored confirmed findings AND verifier-FPs
+  // the reviewer explicitly demoted. Surfacing them in the PR
+  // makes the human triage visible without rooting through JSON.
+  const totalIgnored = ignoredFromFindings.length + demotedFromFps.length;
+  if (totalIgnored > 0) {
+    lines.push(`### Ignored / demoted (${totalIgnored})`);
+    lines.push("");
+    lines.push(
+      "_Findings the reviewer explicitly chose not to act on. " +
+        "Excluded from `/fix`, the actionable count, and SARIF output, " +
+        "but kept here for the audit trail._",
+    );
+    lines.push("");
+    for (const f of ignoredFromFindings) {
+      const rel = f.file.startsWith(projectRoot + "/")
+        ? f.file.slice(projectRoot.length + 1)
+        : f.file;
+      const note = (f as { review_note?: string }).review_note;
+      const reason = (f as { review_reason?: string }).review_reason;
+      const why = note ?? (reason ? `reason: \`${reason}\`` : "no reason recorded");
+      lines.push(`- \`${f.pattern_id}\` @ \`${rel}:${f.line}\` — ignored — ${why}`);
+    }
+    for (const fp of demotedFromFps) {
       const rel = fp.file.startsWith(projectRoot + "/")
         ? fp.file.slice(projectRoot.length + 1)
         : fp.file;
       const reason = (fp as { review_reason?: string }).review_reason ?? "manual_confirmation";
-      lines.push(`- \`${fp.pattern_id}\` @ \`${rel}:${fp.line}\` — reason: \`${reason}\``);
+      lines.push(`- \`${fp.pattern_id}\` @ \`${rel}:${fp.line}\` — demoted to FP — reason: \`${reason}\``);
     }
     lines.push("");
   }
