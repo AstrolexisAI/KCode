@@ -302,10 +302,10 @@ async function handleListModels(): Promise<Response> {
     const { listModels } = await import("../core/models.js");
     const models = await listModels();
     const formatted = models.map((m) => ({
-      id: m.id,
-      name: m.name ?? m.id,
+      id: m.name,
+      name: m.name,
       provider: m.provider ?? "openai",
-      contextWindow: m.contextWindow,
+      contextWindow: m.contextSize,
     }));
     return json({ models: formatted, active: getActiveModel() });
   } catch {
