@@ -67,6 +67,8 @@ import { CLOUD_PATTERNS } from "./patterns/cloud";
 import { SUPPLY_CHAIN_PATTERNS } from "./patterns/supply-chain";
 // P2.3 (v2.10.391) — Next.js framework starter (web pack).
 import { NEXTJS_PATTERNS } from "./patterns/nextjs";
+// P2.3 (v2.10.391) — FastAPI framework pack.
+import { FASTAPI_PATTERNS } from "./patterns/fastapi";
 
 // Re-export every per-language array so existing imports keep working.
 export {
@@ -98,6 +100,7 @@ export {
   CLOUD_PATTERNS,
   SUPPLY_CHAIN_PATTERNS,
   NEXTJS_PATTERNS,
+  FASTAPI_PATTERNS,
 };
 
 export const ALL_PATTERNS: BugPattern[] = [
@@ -129,6 +132,7 @@ export const ALL_PATTERNS: BugPattern[] = [
   ...CLOUD_PATTERNS,
   ...SUPPLY_CHAIN_PATTERNS,
   ...NEXTJS_PATTERNS,
+  ...FASTAPI_PATTERNS,
 ];
 
 /** Return all patterns applicable to the given language. */
