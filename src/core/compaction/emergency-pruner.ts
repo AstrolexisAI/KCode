@@ -136,9 +136,9 @@ function removeOldTurns(
   for (let i = 0; i < messages.length; i++) {
     // Always keep system messages (index 0 typically) and pinned
     if (i === 0 || opts.pinnedIndices.has(i) || i >= cutIndex) {
-      output.push(messages[i]);
+      output.push(messages[i]!);
     } else {
-      removedTokens += estimateTokens(getMessageText(messages[i]));
+      removedTokens += estimateTokens(getMessageText(messages[i]!));
       removedCount++;
     }
   }

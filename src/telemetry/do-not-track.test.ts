@@ -7,7 +7,7 @@ import type { TelemetryConfig } from "./types";
 const BASE_CONFIG: TelemetryConfig = {
   enabled: true,
   level: "standard",
-  sampling: { defaultRate: 1, perEvent: {} },
+  sampling: { default: 1 },
   sinks: {},
 };
 

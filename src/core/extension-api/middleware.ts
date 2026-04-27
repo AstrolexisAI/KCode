@@ -68,12 +68,12 @@ export function createRateLimitMiddleware(maxPerMinute: number): Middleware {
 
     // Remove timestamps outside the sliding window
     const cutoff = now - windowMs;
-    while (timestamps.length > 0 && timestamps[0] < cutoff) {
+    while (timestamps.length > 0 && timestamps[0]! < cutoff) {
       timestamps.shift();
     }
 
     if (timestamps.length >= maxPerMinute) {
-      const retryAfter = Math.ceil((timestamps[0] + windowMs - now) / 1000);
+      const retryAfter = Math.ceil((timestamps[0]! + windowMs - now) / 1000);
       return jsonResponse({ error: "Rate limit exceeded", code: "RATE_LIMITED" }, 429, {
         "Retry-After": String(retryAfter),
       });

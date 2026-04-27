@@ -99,7 +99,7 @@ describe("SudoPasswordPrompt render", () => {
   });
 
   test("Esc calls onSubmit(null)", async () => {
-    let received: string | null = "initial";
+    let received = "initial" as string | null;
     instance = renderWithTheme(
       <SudoPasswordPrompt
         onSubmit={(pw) => {

@@ -309,7 +309,8 @@ export async function handleInfoAction(action: string, ctx: ActionContext): Prom
 
       // Show combined diff preview (truncated)
       try {
-        const diff = execFileSync2("git", ["diff", "--stat", "--", ...files], {
+        const { execFileSync } = await import("node:child_process");
+        const diff = execFileSync("git", ["diff", "--stat", "--", ...files], {
           cwd,
           timeout: 5000,
           encoding: "utf-8",

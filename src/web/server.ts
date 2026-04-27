@@ -37,7 +37,7 @@ interface WebSocketData {
 // ─── Web Server ─────────────────────────────────────────────────
 
 export class WebServer {
-  private server: Server | null = null;
+  private server: Server<WebSocketData> | null = null;
   private config: WebServerConfig;
   private connections = new Set<ServerWebSocket<WebSocketData>>();
   private staticDir: string;

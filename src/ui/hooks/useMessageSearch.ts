@@ -76,6 +76,8 @@ export function extractText(entry: MessageEntry): string {
       return `${entry.summary} ${entry.filesModified.join(" ")}`;
     case "incomplete_response":
       return entry.stopReason;
+    default:
+      return "";
   }
 }
 

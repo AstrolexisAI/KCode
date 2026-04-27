@@ -60,7 +60,7 @@ export function createScalaProject(userRequest: string, cwd: string): ScalaProje
   const depsStr = cfg.deps.map(d => {
     const parts = d.split("::");
     const [org, rest] = [parts[0], parts[1]];
-    const [artifact, ver] = rest.split(":");
+    const [artifact, ver] = rest!.split(":");
     return `    "${org}" %% "${artifact}" % "${ver}"`;
   }).join(",\n");
 

@@ -83,7 +83,7 @@ describe("BudgetTracker", () => {
       tracker.recordSession();
       const recent = tracker.getRecentUsage(7);
       expect(recent).toHaveLength(1);
-      expect(recent[0].tokensUsed).toBe(100);
+      expect(recent[0]!.tokensUsed).toBe(100);
     });
   });
 

@@ -311,7 +311,7 @@ export async function selectBenchmarkModel(
     const matched = models.filter((m) => {
       if (LOCAL_PATTERNS.test(m.baseUrl)) return false;
       if (isBlacklisted(m.name)) return false;
-      const modelTags: string[] = (m as Record<string, unknown>).tags as string[] ?? m.capabilities ?? [];
+      const modelTags: string[] = (m as unknown as Record<string, unknown>).tags as string[] ?? m.capabilities ?? [];
       return requiredTags.every((t) => modelTags.includes(t));
     });
 

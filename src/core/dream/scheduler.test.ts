@@ -125,7 +125,7 @@ describe("DreamScheduler", () => {
     });
 
     expect(results).toHaveLength(1);
-    expect(results[0].status).toBe("completed");
+    expect(results[0]!.status).toBe("completed");
     expect(executeMock).toHaveBeenCalledTimes(1);
   });
 

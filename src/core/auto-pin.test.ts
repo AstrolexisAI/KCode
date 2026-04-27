@@ -38,8 +38,8 @@ describe("AutoPinManager", () => {
     mgr.recordAccess("/tmp/b.ts");
     mgr.recordAccess("/tmp/b.ts");
     const candidates = mgr.getCandidates();
-    expect(candidates[0].path).toBe("/tmp/b.ts");
-    expect(candidates[0].score).toBeGreaterThan(candidates[1]?.score ?? 0);
+    expect(candidates[0]!.path).toBe("/tmp/b.ts");
+    expect(candidates[0]!.score).toBeGreaterThan(candidates[1]?.score ?? 0);
   });
 
   test("edited files get higher score", () => {

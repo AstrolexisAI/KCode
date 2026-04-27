@@ -90,7 +90,7 @@ describe("TriggerApiClient", () => {
 
     expect(Array.isArray(result)).toBe(true);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("trg_001");
+    expect(result[0]!.id).toBe("trg_001");
   });
 
   test("getTrigger returns null on 404", async () => {

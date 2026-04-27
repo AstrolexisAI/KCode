@@ -340,7 +340,7 @@ describe("/review F5 — assign", () => {
     const out = await handleAuditAction("review", ctx(`${TMP} assign 1 critical`));
     expect(out).toContain("high → critical");
     const a = readAudit();
-    expect((a.findings[0] as { severity: string }).severity).toBe("critical");
+    expect((a.findings[0] as unknown as { severity: string }).severity).toBe("critical");
   });
 
   it("rejects invalid severity", async () => {

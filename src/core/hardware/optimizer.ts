@@ -145,7 +145,7 @@ export class HardwareOptimizer {
 
     // Always add a smaller fallback option if we have a large recommendation
     if (recommendations.length > 0 && totalVram >= 12) {
-      const existing = recommendations[recommendations.length - 1];
+      const existing = recommendations[recommendations.length - 1]!;
       if (existing.model.includes("32b") || existing.model.includes("14b")) {
         recommendations.push({
           model: "qwen2.5-coder:7b-instruct-q5_K_M",

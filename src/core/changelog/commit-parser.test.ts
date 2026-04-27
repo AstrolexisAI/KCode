@@ -53,7 +53,7 @@ describe("parseConventionalCommit", () => {
       "style",
       "ci",
       "build",
-    ]) {
+    ] as const) {
       const result = parseConventionalCommit(`${type}: something`);
       expect(result).not.toBeNull();
       expect(result!.type).toBe(type);

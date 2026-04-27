@@ -71,8 +71,8 @@ function resolveLocale(locale: string): LocaleMessages {
   return (
     customLocales[locale] ||
     BUILTIN_LOCALES[locale] ||
-    customLocales[locale.split("-")[0]] ||
-    BUILTIN_LOCALES[locale.split("-")[0]] ||
+    customLocales[locale.split("-")[0]!] ||
+    BUILTIN_LOCALES[locale.split("-")[0]!] ||
     {}
   );
 }

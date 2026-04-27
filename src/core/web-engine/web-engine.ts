@@ -62,7 +62,7 @@ export function createWebProject(
 
   // Step 2: Check for specialized template first, fall back to generic
   const specializedFiles = getSpecializedTemplate(intent.siteType);
-  let template: { files: FileTemplate[] };
+  let template: ProjectTemplate;
   if (specializedFiles) {
     // Specialized template: merge with base project files (package.json, configs)
     const baseTemplate = buildProjectTemplate(intent);
@@ -83,7 +83,12 @@ export function createWebProject(
       });
     }
     const mergedBase = baseConfigFiles;
-    template = { files: [...mergedBase, ...specializedFiles] };
+    template = {
+      files: [...mergedBase, ...specializedFiles],
+      installCmd: baseTemplate.installCmd,
+      devCmd: baseTemplate.devCmd,
+      buildCmd: baseTemplate.buildCmd,
+    };
   } else {
     template = buildProjectTemplate(intent);
   }

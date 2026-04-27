@@ -75,7 +75,7 @@ export function simplifyMessage(msg: Message): { role: string; content: string }
       parts.push(block);
       continue;
     }
-    const b = block as Record<string, unknown>;
+    const b = block as unknown as Record<string, unknown>;
     if (b.type === "text" && typeof b.text === "string") {
       parts.push(b.text);
     } else if (b.type === "tool_use") {

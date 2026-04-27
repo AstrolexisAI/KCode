@@ -50,9 +50,8 @@ async function runCommand(
     });
 
     if (stdin && proc.stdin) {
-      const writer = proc.stdin.getWriter();
-      await writer.write(new TextEncoder().encode(stdin));
-      await writer.close();
+      proc.stdin.write(new TextEncoder().encode(stdin));
+      proc.stdin.end();
     }
 
     const timeoutPromise = new Promise<{ ok: false; stdout: "" }>((resolve) => {

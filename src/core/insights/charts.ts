@@ -46,7 +46,7 @@ export class ASCIICharts {
 
     const formatRow = (cells: string[]) =>
       "\u2502" +
-      cells.map((c, i) => ` ${(c || "").padEnd(colWidths[i])} `).join("\u2502") +
+      cells.map((c, i) => ` ${(c || "").padEnd(colWidths[i]!)} `).join("\u2502") +
       "\u2502";
 
     return [

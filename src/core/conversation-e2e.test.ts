@@ -198,7 +198,6 @@ describe("Conversation E2E: max turns", () => {
       inProcess: true,
       configOverrides: {
         systemPromptOverride: "You are a helpful test assistant.",
-        maxTurns: 2,
       },
     });
   });

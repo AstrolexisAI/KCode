@@ -52,7 +52,7 @@ describe("file-sync", () => {
       expect(backupFiles[0]).toContain("src_main.ts");
       expect(backupFiles[0]).toEndWith(".bak");
 
-      const backupContent = await readFile(join(backupDir, backupFiles[0]), "utf-8");
+      const backupContent = await readFile(join(backupDir, backupFiles[0]!), "utf-8");
       expect(backupContent).toBe("local content to backup");
     });
 

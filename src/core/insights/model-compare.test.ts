@@ -44,8 +44,8 @@ describe("compareModels", () => {
     expect(models.length).toBe(2);
     // Just verify sorting happened -- models[0] should have a higher composite score
     // We can verify by checking the order is deterministic
-    expect(models[0].model).toBeDefined();
-    expect(models[1].model).toBeDefined();
+    expect(models[0]!.model).toBeDefined();
+    expect(models[1]!.model).toBeDefined();
   });
 
   test("success rate is calculated correctly", async () => {

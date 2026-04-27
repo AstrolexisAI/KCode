@@ -240,7 +240,7 @@ describe("MeshNode - peer management", () => {
     const peer = makePeer({ nodeId: "added-peer" });
     node.addPeer(peer);
     expect(node.getPeers()).toHaveLength(1);
-    expect(node.getPeers()[0].nodeId).toBe("added-peer");
+    expect(node.getPeers()[0]!.nodeId).toBe("added-peer");
   });
 
   test("getAvailablePeers excludes self", () => {
@@ -250,7 +250,7 @@ describe("MeshNode - peer management", () => {
     // Add a remote peer
     node.addPeer(makePeer({ nodeId: "remote-1", status: "online" }));
     expect(node.getAvailablePeers()).toHaveLength(1);
-    expect(node.getAvailablePeers()[0].nodeId).toBe("remote-1");
+    expect(node.getAvailablePeers()[0]!.nodeId).toBe("remote-1");
   });
 
   test("updateCapabilities modifies local info", () => {

@@ -56,7 +56,7 @@ interface ClientState {
 // ─── WebSocket Server ───────────────────────────────────────────
 
 export class BridgeWebSocketServer {
-  private server: Server | null = null;
+  private server: Server<ClientState> | null = null;
   private clients = new Map<ServerWebSocket<ClientState>, ClientState>();
   private token: string;
   private sessionManager: SessionManager;
@@ -83,7 +83,7 @@ export class BridgeWebSocketServer {
   /**
    * Start the WebSocket server.
    */
-  start(port: number, hostname: string = "127.0.0.1"): Server {
+  start(port: number, hostname: string = "127.0.0.1"): Server<ClientState> {
     const self = this;
 
     this.server = Bun.serve<ClientState>({

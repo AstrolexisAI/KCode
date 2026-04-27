@@ -131,7 +131,7 @@ export function registerTemplateCommand(program: Command): void {
       console.log(`\n  Scaffolding "${t.name}" to ${outputDir}...\n`);
 
       const result = await scaffolder.scaffold(t, params, outputDir, {
-        apiBase: config.apiBase,
+        apiBase: config.apiBase ?? "",
         model: config.model,
         apiKey: config.apiKey,
       });

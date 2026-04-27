@@ -131,7 +131,7 @@ export async function evaluateOutputBudgetHint(
   try {
     const { evaluateOutputBudget } = await import("./output-budget.js");
     const contextPct = tokenCount > 0 ? Math.round((tokenCount / contextWindowSize) * 100) : 0;
-    const budget = evaluateOutputBudget(userMessage, maxTokens, contextPct);
+    const budget = evaluateOutputBudget(userMessage, maxTokens ?? 0, contextPct);
     if (budget.strategy !== "normal" && budget.systemHint) {
       log.info(
         "session",

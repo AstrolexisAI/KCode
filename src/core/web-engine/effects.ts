@@ -430,7 +430,7 @@ export interface ColorPalette {
   gradient: string;
 }
 
-export const PALETTES: Record<string, ColorPalette> = {
+export const PALETTES = {
   midnight: {
     name: "Midnight",
     primary: "#6366f1",
@@ -497,7 +497,7 @@ export const PALETTES: Record<string, ColorPalette> = {
     textDim: "#5eead4",
     gradient: "linear-gradient(135deg, #22d3ee 0%, #e879f9 50%, #a3e635 100%)",
   },
-};
+} satisfies Record<string, ColorPalette>;
 
 /**
  * Generate CSS custom properties for a color palette.

@@ -95,7 +95,7 @@ export function switchModel(model: string): { success: boolean; error?: string }
 
   try {
     const config = manager.getConfig();
-    (config as Record<string, unknown>).model = model;
+    (config as unknown as Record<string, unknown>).model = model;
     setActiveModel(model);
     sessionContext.model = model;
     return { success: true };

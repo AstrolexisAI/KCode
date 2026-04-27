@@ -77,7 +77,7 @@ describe("emergencyPrune", () => {
       });
       expect(messages.length).toBeLessThan(msgs.length);
       // System message always kept
-      expect(messages[0].role).toBe("system");
+      expect(messages[0]!.role).toBe("system");
     });
   });
 
@@ -113,7 +113,7 @@ describe("emergencyPrune", () => {
       });
       expect(result.strategy).toBe("nuclear");
       expect(messages.length).toBeLessThanOrEqual(3);
-      expect(messages[0].role).toBe("system");
+      expect(messages[0]!.role).toBe("system");
     });
 
     test("nuclear warning is descriptive", () => {

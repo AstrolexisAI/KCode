@@ -43,14 +43,14 @@ describe("validatePlugin", () => {
   test("missing manifest fails", async () => {
     const report = await validatePlugin(dir);
     expect(report.valid).toBe(false);
-    expect(report.errors[0].code).toBe("MISSING_MANIFEST");
+    expect(report.errors[0]!.code).toBe("MISSING_MANIFEST");
   });
 
   test("invalid JSON fails", async () => {
     writeFileSync(join(dir, "plugin.json"), "not json{");
     const report = await validatePlugin(dir);
     expect(report.valid).toBe(false);
-    expect(report.errors[0].code).toBe("INVALID_JSON");
+    expect(report.errors[0]!.code).toBe("INVALID_JSON");
   });
 
   test("missing required fields fail", async () => {

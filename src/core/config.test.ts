@@ -284,7 +284,7 @@ describe("config", () => {
       await createSettingsFile(tempDir, "settings.json", {
         ensemble: {
           enabled: true,
-          strategy: "majority",
+          strategy: "majority-vote",
           models: ["model-a", "model-b"],
           judgeModel: "judge-model",
           maxParallel: 3,
@@ -296,7 +296,7 @@ describe("config", () => {
       const s = await loadSettings(tempDir);
       expect(s.ensemble).toBeDefined();
       expect(s.ensemble!.enabled).toBe(true);
-      expect(s.ensemble!.strategy).toBe("majority");
+      expect(s.ensemble!.strategy).toBe("majority-vote");
       expect(s.ensemble!.models).toEqual(["model-a", "model-b"]);
       expect(s.ensemble!.judgeModel).toBe("judge-model");
       expect(s.ensemble!.maxParallel).toBe(3);
@@ -962,7 +962,7 @@ describe("config", () => {
       const settings: Settings = { deployment: "air-gap" };
       const result = applyAirGapOverrides(settings);
       expect(result.marketplace).toBeDefined();
-      expect((result.marketplace as Record<string, unknown>).disableRemote).toBe(true);
+      expect((result.marketplace as unknown as Record<string, unknown>).disableRemote).toBe(true);
     });
 
     test("preserves existing offline settings while forcing enabled", () => {

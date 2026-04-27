@@ -36,8 +36,8 @@ describe("testPlugin", () => {
 
   test("fails without manifest", async () => {
     const results = await testPlugin(dir);
-    expect(results[0].status).toBe("fail");
-    expect(results[0].error).toContain("plugin.json");
+    expect(results[0]!.status).toBe("fail");
+    expect(results[0]!.error).toContain("plugin.json");
   });
 
   test("fails with invalid version", async () => {

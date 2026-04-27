@@ -108,7 +108,7 @@ export class RagEngine {
       for (let i = 0; i < chunks.length; i++) {
         const emb = embeddings[i];
         if (emb && emb.length > 0) {
-          this.store.insert(chunks[i], emb, checksum);
+          this.store.insert(chunks[i]!, emb, checksum);
         }
       }
 

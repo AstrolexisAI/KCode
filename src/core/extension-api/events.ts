@@ -55,8 +55,9 @@ export class ExtensionEventEmitter {
       }
     }
 
-    // Notify wildcard listeners
-    if (event.type !== "*") {
+    // Notify wildcard listeners (event.type is never "*" by typing,
+    // but kept for runtime safety in case raw events are emitted directly)
+    if ((event.type as string) !== "*") {
       const wildcard = this.listeners.get("*");
       if (wildcard) {
         for (const handler of wildcard) {

@@ -67,8 +67,8 @@ describe("calculateROI", () => {
     const roi = await calculateROI({ hourlyRate: 50, period: 30 });
     expect(roi.topTimeSavers.length).toBe(5);
     for (let i = 1; i < roi.topTimeSavers.length; i++) {
-      expect(roi.topTimeSavers[i].timeSavedHours).toBeLessThanOrEqual(
-        roi.topTimeSavers[i - 1].timeSavedHours,
+      expect(roi.topTimeSavers[i]!.timeSavedHours).toBeLessThanOrEqual(
+        roi.topTimeSavers[i - 1]!.timeSavedHours,
       );
     }
   });

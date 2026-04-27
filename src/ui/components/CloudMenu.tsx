@@ -401,7 +401,7 @@ export default function CloudMenu({ isActive, onDone }: CloudMenuProps) {
                   {isSelected && (
                     <>
                       <Box paddingLeft={4}>
-                        <Text dimColor>Models: {p.models}</Text>
+                        <Text dimColor>Models: {p.modelHint ?? "—"}</Text>
                       </Box>
                       <Box paddingLeft={4}>
                         <Text dimColor>

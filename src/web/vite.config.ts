@@ -24,11 +24,11 @@ export default defineConfig({
     proxy: {
       // Proxy API and WebSocket to the KCode web server
       "/api": {
-        target: "http://localhost:10100",
+        target: "http://localhost:10101",
         changeOrigin: true,
       },
       "/ws": {
-        target: "ws://localhost:10100",
+        target: "ws://localhost:10101",
         ws: true,
       },
     },

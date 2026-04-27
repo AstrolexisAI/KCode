@@ -167,7 +167,7 @@ export async function createMockLLMServer(): Promise<MockLLMServer> {
   let responseIndex = 0;
   const requests: Array<{ body: unknown; timestamp: number }> = [];
 
-  const server: Server = Bun.serve({
+  const server: Server<unknown> = Bun.serve({
     port: 0, // Random available port
     fetch: async (req) => {
       const url = new URL(req.url);
@@ -235,7 +235,7 @@ export async function createMockLLMServer(): Promise<MockLLMServer> {
     },
   });
 
-  const port = server.port;
+  const port = server.port!;
 
   return {
     url: `http://localhost:${port}`,

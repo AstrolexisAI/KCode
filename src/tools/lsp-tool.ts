@@ -211,7 +211,7 @@ export async function executeLsp(input: Record<string, unknown>): Promise<ToolRe
       let text: string;
       if (typeof result.contents === "string") {
         text = result.contents;
-      } else if (result.contents.value) {
+      } else if (!Array.isArray(result.contents) && result.contents.value) {
         text = result.contents.value;
       } else if (Array.isArray(result.contents)) {
         text = result.contents
