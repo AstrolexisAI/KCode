@@ -87,7 +87,8 @@ export function splitHunk(hunks: DiffHunk[], id: string, splitAtLine: number): D
   const idx = hunks.findIndex((h) => h.id === id);
   if (idx === -1) return hunks;
 
-  const hunk = hunks[idx];
+  // findIndex returned a valid index above, so hunks[idx] is defined.
+  const hunk = hunks[idx]!;
 
   // Validate split position
   const totalLines = Math.max(hunk.linesAdded.length, hunk.linesRemoved.length);
@@ -159,12 +160,14 @@ export function mergeHunks(hunks: DiffHunk[], ids: string[]): DiffHunk[] {
 
   // Verify adjacency: indices must be consecutive
   for (let i = 1; i < indices.length; i++) {
-    if (indices[i] !== indices[i - 1] + 1) {
+    if (indices[i]! !== indices[i - 1]! + 1) {
       return hunks; // Not adjacent, no-op
     }
   }
 
-  const toMerge = indices.map((i) => hunks[i]);
+  // indices was built from hunks.map((h, i) => …) above so every index
+  // is in-bounds — hunks[i] is always defined.
+  const toMerge = indices.map((i) => hunks[i]!);
   const allRemoved = toMerge.flatMap((h) => h.linesRemoved);
   const allAdded = toMerge.flatMap((h) => h.linesAdded);
 
@@ -173,23 +176,26 @@ export function mergeHunks(hunks: DiffHunk[], ids: string[]): DiffHunk[] {
   else if (allAdded.length > 0) type = "addition";
   else type = "deletion";
 
+  // toMerge is non-empty because indices.length >= 2 was guarded above.
+  const first = toMerge[0]!;
+  const last = toMerge[toMerge.length - 1]!;
   const merged: DiffHunk = {
     id: crypto.randomUUID(),
-    startLineOld: toMerge[0].startLineOld,
-    endLineOld: toMerge[toMerge.length - 1].endLineOld,
-    startLineNew: toMerge[0].startLineNew,
-    endLineNew: toMerge[toMerge.length - 1].endLineNew,
+    startLineOld: first.startLineOld,
+    endLineOld: last.endLineOld,
+    startLineNew: first.startLineNew,
+    endLineNew: last.endLineNew,
     linesRemoved: allRemoved,
     linesAdded: allAdded,
     context: {
-      before: [...toMerge[0].context.before],
-      after: [...toMerge[toMerge.length - 1].context.after],
+      before: [...first.context.before],
+      after: [...last.context.after],
     },
     status: "pending",
     type,
   };
 
   const result = [...hunks];
-  result.splice(indices[0], indices.length, merged);
+  result.splice(indices[0]!, indices.length, merged);
   return result;
 }

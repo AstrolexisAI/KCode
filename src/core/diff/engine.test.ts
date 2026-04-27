@@ -177,7 +177,7 @@ describe("DiffEngine", () => {
       const result = engine.diff(original, modified);
       expect(result.hunks.length).toBeGreaterThanOrEqual(1);
 
-      const hunk = result.hunks[0];
+      const hunk = result.hunks[0]!;
       // Should have up to 3 context lines before and after
       expect(hunk.context.before.length).toBeLessThanOrEqual(3);
       expect(hunk.context.after.length).toBeLessThanOrEqual(3);

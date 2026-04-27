@@ -71,13 +71,15 @@ export class ThreeWayMerge {
     for (let i = 0; i < allRegions.length; i++) {
       if (conflictedRegionIds.has(i)) continue;
 
-      const regionA = allRegions[i];
+      // i and j are in-bounds via the loop conditions, so allRegions[i]
+      // and allRegions[j] are always defined.
+      const regionA = allRegions[i]!;
       let hasConflict = false;
 
       for (let j = i + 1; j < allRegions.length; j++) {
         if (conflictedRegionIds.has(j)) continue;
 
-        const regionB = allRegions[j];
+        const regionB = allRegions[j]!;
 
         // If regionB starts beyond regionA, no more overlaps possible
         if (regionB.startBase >= regionA.endBase && regionA.endBase > regionA.startBase) {
@@ -258,7 +260,7 @@ export class ThreeWayMerge {
       switch (seg.type) {
         case "base":
           for (let i = seg.start; i < seg.end; i++) {
-            outputLines.push(baseLines[i]);
+            outputLines.push(baseLines[i]!);
           }
           break;
         case "replace":

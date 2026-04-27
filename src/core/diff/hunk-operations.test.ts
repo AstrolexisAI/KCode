@@ -34,22 +34,22 @@ describe("acceptHunk", () => {
   test("marks the specified hunk as accepted", () => {
     const h = makeHunk({ id: "h1" });
     const result = acceptHunk([h], "h1");
-    expect(result[0].status).toBe("accepted");
+    expect(result[0]!.status).toBe("accepted");
   });
 
   test("does not modify other hunks", () => {
     const h1 = makeHunk({ id: "h1" });
     const h2 = makeHunk({ id: "h2" });
     const result = acceptHunk([h1, h2], "h1");
-    expect(result[0].status).toBe("accepted");
-    expect(result[1].status).toBe("pending");
+    expect(result[0]!.status).toBe("accepted");
+    expect(result[1]!.status).toBe("pending");
   });
 
   test("returns a new array (immutable)", () => {
     const hunks = [makeHunk({ id: "h1" })];
     const result = acceptHunk(hunks, "h1");
     expect(result).not.toBe(hunks);
-    expect(hunks[0].status).toBe("pending");
+    expect(hunks[0]!.status).toBe("pending");
   });
 });
 
@@ -57,14 +57,14 @@ describe("rejectHunk", () => {
   test("marks the specified hunk as rejected", () => {
     const h = makeHunk({ id: "r1" });
     const result = rejectHunk([h], "r1");
-    expect(result[0].status).toBe("rejected");
+    expect(result[0]!.status).toBe("rejected");
   });
 
   test("does not affect other hunks", () => {
     const h1 = makeHunk({ id: "r1" });
     const h2 = makeHunk({ id: "r2" });
     const result = rejectHunk([h1, h2], "r1");
-    expect(result[1].status).toBe("pending");
+    expect(result[1]!.status).toBe("pending");
   });
 });
 
@@ -72,14 +72,14 @@ describe("modifyHunk", () => {
   test("replaces added lines and sets status to modified", () => {
     const h = makeHunk({ id: "m1" });
     const result = modifyHunk([h], "m1", ["custom line"]);
-    expect(result[0].linesAdded).toEqual(["custom line"]);
-    expect(result[0].status).toBe("modified");
+    expect(result[0]!.linesAdded).toEqual(["custom line"]);
+    expect(result[0]!.status).toBe("modified");
   });
 
   test("preserves removed lines", () => {
     const h = makeHunk({ id: "m1", linesRemoved: ["kept"] });
     const result = modifyHunk([h], "m1", ["replaced"]);
-    expect(result[0].linesRemoved).toEqual(["kept"]);
+    expect(result[0]!.linesRemoved).toEqual(["kept"]);
   });
 });
 
@@ -136,18 +136,18 @@ describe("splitHunk", () => {
     });
     const result = splitHunk([h], "s1", 2);
     expect(result).toHaveLength(2);
-    expect(result[0].linesRemoved).toEqual(["r1", "r2"]);
-    expect(result[0].linesAdded).toEqual(["a1", "a2"]);
-    expect(result[1].linesRemoved).toEqual(["r3", "r4"]);
-    expect(result[1].linesAdded).toEqual(["a3", "a4"]);
+    expect(result[0]!.linesRemoved).toEqual(["r1", "r2"]);
+    expect(result[0]!.linesAdded).toEqual(["a1", "a2"]);
+    expect(result[1]!.linesRemoved).toEqual(["r3", "r4"]);
+    expect(result[1]!.linesAdded).toEqual(["a3", "a4"]);
   });
 
   test("assigns new unique IDs to split hunks", () => {
     const h = makeHunk({ id: "s2", linesRemoved: ["a", "b"], linesAdded: ["c", "d"] });
     const result = splitHunk([h], "s2", 1);
-    expect(result[0].id).not.toBe("s2");
-    expect(result[1].id).not.toBe("s2");
-    expect(result[0].id).not.toBe(result[1].id);
+    expect(result[0]!.id).not.toBe("s2");
+    expect(result[1]!.id).not.toBe("s2");
+    expect(result[0]!.id).not.toBe(result[1]!.id);
   });
 
   test("returns original array if split position is invalid", () => {
@@ -169,23 +169,23 @@ describe("mergeHunks", () => {
     const h2 = makeHunk({ id: "m2", linesRemoved: ["r2"], linesAdded: ["a2"] });
     const result = mergeHunks([h1, h2], ["m1", "m2"]);
     expect(result).toHaveLength(1);
-    expect(result[0].linesRemoved).toEqual(["r1", "r2"]);
-    expect(result[0].linesAdded).toEqual(["a1", "a2"]);
+    expect(result[0]!.linesRemoved).toEqual(["r1", "r2"]);
+    expect(result[0]!.linesAdded).toEqual(["a1", "a2"]);
   });
 
   test("merged hunk gets a new ID", () => {
     const h1 = makeHunk({ id: "m1" });
     const h2 = makeHunk({ id: "m2" });
     const result = mergeHunks([h1, h2], ["m1", "m2"]);
-    expect(result[0].id).not.toBe("m1");
-    expect(result[0].id).not.toBe("m2");
+    expect(result[0]!.id).not.toBe("m1");
+    expect(result[0]!.id).not.toBe("m2");
   });
 
   test("merged hunk status is pending", () => {
     const h1 = makeHunk({ id: "m1", status: "accepted" });
     const h2 = makeHunk({ id: "m2", status: "accepted" });
     const result = mergeHunks([h1, h2], ["m1", "m2"]);
-    expect(result[0].status).toBe("pending");
+    expect(result[0]!.status).toBe("pending");
   });
 
   test("preserves context from first and last hunks", () => {
@@ -198,8 +198,8 @@ describe("mergeHunks", () => {
       context: { before: ["before2"], after: ["after2"] },
     });
     const result = mergeHunks([h1, h2], ["m1", "m2"]);
-    expect(result[0].context.before).toEqual(["before1"]);
-    expect(result[0].context.after).toEqual(["after2"]);
+    expect(result[0]!.context.before).toEqual(["before1"]);
+    expect(result[0]!.context.after).toEqual(["after2"]);
   });
 
   test("does not merge non-adjacent hunks", () => {
