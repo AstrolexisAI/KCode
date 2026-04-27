@@ -109,6 +109,7 @@ export const RUST_PATTERNS: BugPattern[] = [
       "2. Is the lock held for very short durations where RwLock overhead isn't worth it? → FALSE_POSITIVE\n" +
       "3. Is the Mutex protecting a resource that requires exclusive access (e.g., socket, file)? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if the data is clearly read-heavy and would benefit from concurrent reads.",
+    cwe: "CWE-1050",
     fix_template: "Replace Mutex with RwLock: Arc<RwLock<T>>. Use .read() for shared access, .write() for exclusive.",
   },
 
@@ -146,6 +147,7 @@ export const RUST_PATTERNS: BugPattern[] = [
       "2. Is the loop bounded to a small number of iterations? → FALSE_POSITIVE\n" +
       "3. Can the clone be replaced with a borrow (&T) or Cow? → If yes, respond CONFIRMED.\n" +
       "Only respond CONFIRMED if the cloned data is large and the loop is hot.",
+    cwe: "CWE-1050",
     fix_template: "Use references (&T), Cow<T>, or Arc<T> instead of cloning. Move allocation outside the loop.",
   },
 
@@ -163,6 +165,7 @@ export const RUST_PATTERNS: BugPattern[] = [
       "1. Is this explicitly single-threaded (e.g., LocalSet, #[tokio::main(flavor = \"current_thread\")])? → FALSE_POSITIVE\n" +
       "2. Does the return type already include + Send? → FALSE_POSITIVE\n" +
       "Only respond CONFIRMED if the future is used in a multi-threaded context without Send bound.",
+    cwe: "CWE-704",
     fix_template: "Add Send bound: -> impl Future<Output = T> + Send, or use Pin<Box<dyn Future + Send>>.",
   },
 
