@@ -6,6 +6,9 @@ import { join } from "node:path";
 import { Scaffolder } from "./scaffolder";
 import type { Template } from "./types";
 
+
+const asFetch = (fn: unknown): typeof globalThis.fetch => fn as typeof globalThis.fetch;
+
 const TEST_OUTPUT = join(import.meta.dir, "__test_scaffold__");
 
 const testTemplate: Template = {
@@ -67,7 +70,7 @@ describe("Scaffolder", () => {
   test("scaffold writes files from model response", async () => {
     // Mock fetch to return file markers
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () =>
+    globalThis.fetch = asFetch(async () =>
       new Response(
         JSON.stringify({
           choices: [
@@ -84,7 +87,7 @@ console.log("hello");
           ],
         }),
         { headers: { "Content-Type": "application/json" } },
-      );
+      ));
 
     try {
       const result = await scaffolder.scaffold(
@@ -105,16 +108,16 @@ console.log("hello");
       const content = await indexFile.text();
       expect(content).toContain("hello");
     } finally {
-      globalThis.fetch = originalFetch;
+      globalThis.fetch = asFetch(originalFetch);
     }
   });
 
   test("scaffold throws on empty model response", async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () =>
+    globalThis.fetch = asFetch(async () =>
       new Response(JSON.stringify({ choices: [{ message: { content: "No files here." } }] }), {
         headers: { "Content-Type": "application/json" },
-      });
+      }));
 
     try {
       await expect(
@@ -124,13 +127,13 @@ console.log("hello");
         }),
       ).rejects.toThrow("did not generate any files");
     } finally {
-      globalThis.fetch = originalFetch;
+      globalThis.fetch = asFetch(originalFetch);
     }
   });
 
   test("scaffold throws on API error", async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () => new Response("Internal Server Error", { status: 500 });
+    globalThis.fetch = asFetch(async () => new Response("Internal Server Error", { status: 500 }));
 
     try {
       await expect(
@@ -140,7 +143,7 @@ console.log("hello");
         }),
       ).rejects.toThrow("Model API error");
     } finally {
-      globalThis.fetch = originalFetch;
+      globalThis.fetch = asFetch(originalFetch);
     }
   });
 });

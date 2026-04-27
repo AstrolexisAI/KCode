@@ -43,9 +43,9 @@ describe("DreamEngine", () => {
 
     const tasks = engine.getRegisteredTasks();
     expect(tasks).toHaveLength(3);
-    expect(tasks[0].id).toBe("high");
-    expect(tasks[1].id).toBe("mid");
-    expect(tasks[2].id).toBe("low");
+    expect(tasks[0]!.id).toBe("high");
+    expect(tasks[1]!.id).toBe("mid");
+    expect(tasks[2]!.id).toBe("low");
   });
 
   test("unregister removes tasks", () => {
@@ -56,7 +56,7 @@ describe("DreamEngine", () => {
     engine.unregister("a");
     const tasks = engine.getRegisteredTasks();
     expect(tasks).toHaveLength(1);
-    expect(tasks[0].id).toBe("b");
+    expect(tasks[0]!.id).toBe("b");
   });
 
   test("startDreaming runs tasks that shouldRun", async () => {
@@ -79,7 +79,7 @@ describe("DreamEngine", () => {
 
     const results = await engine.startDreaming(makeCtx());
     expect(results).toHaveLength(1);
-    expect(results[0].status).toBe("completed");
+    expect(results[0]!.status).toBe("completed");
     expect(executeMock).toHaveBeenCalledTimes(1);
   });
 
@@ -131,7 +131,7 @@ describe("DreamEngine", () => {
 
     const results = await resultPromise;
     expect(results).toHaveLength(1);
-    expect(results[0].status).toBe("interrupted");
+    expect(results[0]!.status).toBe("interrupted");
   });
 
   test("wake resets idleSeconds and increments turnCount", () => {
@@ -173,8 +173,8 @@ describe("DreamEngine", () => {
 
     const results = await engine.startDreaming(makeCtx());
     expect(results).toHaveLength(1);
-    expect(results[0].status).toBe("error");
-    expect(results[0].details).toContain("timed out");
+    expect(results[0]!.status).toBe("error");
+    expect(results[0]!.details).toContain("timed out");
   });
 
   test("aborted signal produces interrupted result", async () => {
@@ -202,7 +202,7 @@ describe("DreamEngine", () => {
     engine.wake();
     const results = await resultPromise;
     expect(results).toHaveLength(1);
-    expect(results[0].status).toBe("interrupted");
+    expect(results[0]!.status).toBe("interrupted");
   });
 
   test("tasks run in priority order", async () => {

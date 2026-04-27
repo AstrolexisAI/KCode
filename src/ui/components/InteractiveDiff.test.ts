@@ -126,15 +126,15 @@ describe("InteractiveDiff component logic", () => {
     test("accepting a hunk changes its status", () => {
       const diff = makeDiffResult(3);
       const updated = acceptHunk(diff.hunks, "hunk-1");
-      expect(updated[1].status).toBe("accepted");
-      expect(updated[0].status).toBe("pending");
-      expect(updated[2].status).toBe("pending");
+      expect(updated[1]!.status).toBe("accepted");
+      expect(updated[0]!.status).toBe("pending");
+      expect(updated[2]!.status).toBe("pending");
     });
 
     test("rejecting a hunk changes its status", () => {
       const diff = makeDiffResult(3);
       const updated = rejectHunk(diff.hunks, "hunk-0");
-      expect(updated[0].status).toBe("rejected");
+      expect(updated[0]!.status).toBe("rejected");
     });
 
     test("accepting all pending hunks", () => {
@@ -177,9 +177,9 @@ describe("InteractiveDiff component logic", () => {
 
       // Simulate onComplete receiving the hunks
       const finalHunks = [...hunks];
-      expect(finalHunks[0].status).toBe("accepted");
-      expect(finalHunks[1].status).toBe("rejected");
-      expect(finalHunks[2].status).toBe("pending");
+      expect(finalHunks[0]!.status).toBe("accepted");
+      expect(finalHunks[1]!.status).toBe("rejected");
+      expect(finalHunks[2]!.status).toBe("pending");
     });
 
     test("applying finalized hunks produces correct content", () => {

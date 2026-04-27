@@ -38,8 +38,8 @@ describe("SessionBrowser", () => {
     const sessions = browser.listSessions({ sortBy: "date" });
     expect(sessions).toHaveLength(2);
     // Most recent first
-    expect(sessions[0].sessionId).toBe("s2");
-    expect(sessions[1].sessionId).toBe("s1");
+    expect(sessions[0]!.sessionId).toBe("s2");
+    expect(sessions[1]!.sessionId).toBe("s1");
   });
 
   test("listSessions returns sorted results by turns", () => {
@@ -49,10 +49,10 @@ describe("SessionBrowser", () => {
     const sessions = browser.listSessions({ sortBy: "turns" });
     expect(sessions).toHaveLength(2);
     // s1 has 3 turns, s2 has 2
-    expect(sessions[0].sessionId).toBe("s1");
-    expect(sessions[0].turnCount).toBe(3);
-    expect(sessions[1].sessionId).toBe("s2");
-    expect(sessions[1].turnCount).toBe(2);
+    expect(sessions[0]!.sessionId).toBe("s1");
+    expect(sessions[0]!.turnCount).toBe(3);
+    expect(sessions[1]!.sessionId).toBe("s2");
+    expect(sessions[1]!.turnCount).toBe(2);
   });
 
   test("listSessions supports limit", () => {
@@ -69,7 +69,7 @@ describe("SessionBrowser", () => {
 
     const sessions = browser.listSessions({ limit: 1, offset: 1 });
     expect(sessions).toHaveLength(1);
-    expect(sessions[0].sessionId).toBe("s1");
+    expect(sessions[0]!.sessionId).toBe("s1");
   });
 
   test("listSessions includes metadata", () => {
@@ -92,10 +92,10 @@ describe("SessionBrowser", () => {
     expect(detail!.sessionId).toBe("s1");
     expect(detail!.model).toBe("llama-3");
     expect(detail!.turns).toHaveLength(3);
-    expect(detail!.turns[0].role).toBe("user");
-    expect(detail!.turns[0].content).toBe("Fix the login bug");
-    expect(detail!.turns[1].role).toBe("assistant");
-    expect(detail!.turns[2].turnIndex).toBe(2);
+    expect(detail!.turns[0]!.role).toBe("user");
+    expect(detail!.turns[0]!.content).toBe("Fix the login bug");
+    expect(detail!.turns[1]!.role).toBe("assistant");
+    expect(detail!.turns[2]!.turnIndex).toBe(2);
   });
 
   test("getSession returns null for unknown session", () => {

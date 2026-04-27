@@ -147,8 +147,8 @@ describe("subscription save/load/remove", () => {
     await saveSubscription(sub);
     const subs = await getSubscriptions();
     expect(subs).toHaveLength(1);
-    expect(subs[0].endpoint).toBe(sub.endpoint);
-    expect(subs[0].keys.p256dh).toBe(sub.keys.p256dh);
+    expect(subs[0]!.endpoint).toBe(sub.endpoint);
+    expect(subs[0]!.keys.p256dh).toBe(sub.keys.p256dh);
   });
 
   test("saveSubscription deduplicates by endpoint", async () => {
@@ -157,7 +157,7 @@ describe("subscription save/load/remove", () => {
     await saveSubscription({ ...sub, keys: { ...sub.keys, auth: "updated" } });
     const subs = await getSubscriptions();
     expect(subs).toHaveLength(1);
-    expect(subs[0].keys.auth).toBe("updated");
+    expect(subs[0]!.keys.auth).toBe("updated");
   });
 
   test("saveSubscription allows multiple endpoints", async () => {
@@ -179,7 +179,7 @@ describe("subscription save/load/remove", () => {
 
     const subs = await getSubscriptions();
     expect(subs).toHaveLength(1);
-    expect(subs[0].endpoint).toBe(sub2.endpoint);
+    expect(subs[0]!.endpoint).toBe(sub2.endpoint);
   });
 
   test("removeSubscription returns false for unknown endpoint", async () => {
@@ -237,7 +237,7 @@ describe("createVAPIDJWT", () => {
   test("header specifies ES256 algorithm", () => {
     const keys = generateVAPIDKeys();
     const jwt = createVAPIDJWT("https://push.example.com", "mailto:test@kcode.dev", keys);
-    const header = JSON.parse(base64urlDecode(jwt.split(".")[0]).toString());
+    const header = JSON.parse(base64urlDecode(jwt.split(".")[0]!).toString());
     expect(header.alg).toBe("ES256");
     expect(header.typ).toBe("JWT");
   });
@@ -245,7 +245,7 @@ describe("createVAPIDJWT", () => {
   test("payload contains correct audience and subject", () => {
     const keys = generateVAPIDKeys();
     const jwt = createVAPIDJWT("https://push.example.com", "mailto:test@kcode.dev", keys);
-    const payload = JSON.parse(base64urlDecode(jwt.split(".")[1]).toString());
+    const payload = JSON.parse(base64urlDecode(jwt.split(".")[1]!).toString());
     expect(payload.aud).toBe("https://push.example.com");
     expect(payload.sub).toBe("mailto:test@kcode.dev");
     expect(payload.exp).toBeGreaterThan(Math.floor(Date.now() / 1000));
@@ -254,7 +254,7 @@ describe("createVAPIDJWT", () => {
   test("signature is 64 bytes (raw ES256)", () => {
     const keys = generateVAPIDKeys();
     const jwt = createVAPIDJWT("https://push.example.com", "mailto:test@kcode.dev", keys);
-    const sigBytes = base64urlDecode(jwt.split(".")[2]);
+    const sigBytes = base64urlDecode(jwt.split(".")[2]!);
     expect(sigBytes.length).toBe(64);
   });
 });
@@ -288,8 +288,8 @@ describe("tool approval notification format", () => {
     expect(payload.title).toContain("requires approval");
     expect(payload.tag).toBe("kcode-permission");
     expect(payload.actions).toHaveLength(2);
-    expect(payload.actions![0].action).toBe("allow");
-    expect(payload.actions![1].action).toBe("deny");
+    expect(payload.actions![0]!.action).toBe("allow");
+    expect(payload.actions![1]!.action).toBe("deny");
     expect(payload.data?.toolName).toBe("Bash");
     expect(payload.data?.permissionId).toBe("perm-test-123");
   });

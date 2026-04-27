@@ -5,6 +5,9 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+const asFetch = (fn: unknown): typeof globalThis.fetch => fn as typeof globalThis.fetch;
+
 import {
   formatSubscription,
   getSubscription,
@@ -28,7 +31,7 @@ beforeEach(() => {
 afterEach(() => {
   if (origHome === undefined) delete process.env.KCODE_HOME;
   else process.env.KCODE_HOME = origHome;
-  globalThis.fetch = origFetch;
+  globalThis.fetch = asFetch(origFetch);
   if (existsSync(testHome)) rmSync(testHome, { recursive: true, force: true });
   invalidateSubscriptionCache();
 });
@@ -36,7 +39,7 @@ afterEach(() => {
 describe("getSubscription — network paths", () => {
   test("returns free/none when no OAuth token is configured", async () => {
     // No keychain token → fetchFromServer throws → fallback to free
-    globalThis.fetch = async () => new Response("", { status: 500 });
+    globalThis.fetch = asFetch(async () => new Response("", { status: 500 }));
     const sub = await getSubscription({ forceRefresh: true });
     expect(sub.tier).toBe("free");
     expect(sub.status).toBe("none");
@@ -60,9 +63,9 @@ describe("getSubscription — network paths", () => {
     );
 
     // Network fails
-    globalThis.fetch = async () => {
+    globalThis.fetch = asFetch(async () => {
       throw new Error("network down");
-    };
+    });
 
     const sub = await getSubscription({ forceRefresh: true });
     // Stale cache returned instead of failing
@@ -86,10 +89,10 @@ describe("getSubscription — network paths", () => {
     );
 
     let fetchCalls = 0;
-    globalThis.fetch = async () => {
+    globalThis.fetch = asFetch(async () => {
       fetchCalls++;
       return new Response("", { status: 500 });
-    };
+    });
 
     const sub = await getSubscription(); // no forceRefresh
     expect(sub.tier).toBe("pro");

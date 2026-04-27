@@ -86,7 +86,7 @@ describe("QuestionDialog render", () => {
   });
 
   test("y key calls onChoice('y')", async () => {
-    let choice: string | null = null;
+    let choice = null as string | null;
     instance = renderWithTheme(
       <QuestionDialog
         title="t"
@@ -103,7 +103,7 @@ describe("QuestionDialog render", () => {
   });
 
   test("Enter defaults to first option", async () => {
-    let choice: string | null = null;
+    let choice = null as string | null;
     instance = renderWithTheme(
       <QuestionDialog
         title="t"
@@ -124,7 +124,7 @@ describe("QuestionDialog render", () => {
   });
 
   test("Escape defaults to last option", async () => {
-    let choice: string | null = null;
+    let choice = null as string | null;
     instance = renderWithTheme(
       <QuestionDialog
         title="t"
@@ -141,7 +141,7 @@ describe("QuestionDialog render", () => {
   });
 
   test("ignores input when inactive", async () => {
-    let choice: string | null = null;
+    let choice = null as string | null;
     instance = renderWithTheme(
       <QuestionDialog
         title="t"

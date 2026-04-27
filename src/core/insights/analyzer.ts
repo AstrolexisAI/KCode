@@ -23,7 +23,7 @@ export async function analyzeInsights(period: number = 30): Promise<Insight[]> {
     const modelsWithCost = analytics.modelBreakdown.filter((m) => m.costUsd > 0);
     if (modelsWithCost.length > 1) {
       const sorted = [...modelsWithCost].sort((a, b) => a.costUsd / a.calls - b.costUsd / b.calls);
-      const cheapest = sorted[0];
+      const cheapest = sorted[0]!;
       insights.push({
         type: "recommendation",
         title: `${cheapest.model} has the best cost efficiency`,

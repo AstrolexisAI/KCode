@@ -67,7 +67,7 @@ describe("event-queue", () => {
     await queue.flush();
 
     expect(sink.batches.length).toBe(1);
-    expect(sink.batches[0].length).toBe(2);
+    expect(sink.batches[0]!.length).toBe(2);
     expect(queue.bufferedCount).toBe(0);
   });
 
@@ -226,8 +226,8 @@ describe("event-queue", () => {
     await queue.flush();
 
     expect(sink.batches.length).toBe(2);
-    expect(sink.batches[0].length).toBe(1);
-    expect(sink.batches[1].length).toBe(2);
+    expect(sink.batches[0]!.length).toBe(1);
+    expect(sink.batches[1]!.length).toBe(2);
     expect(sink.totalEvents).toBe(3);
   });
 });

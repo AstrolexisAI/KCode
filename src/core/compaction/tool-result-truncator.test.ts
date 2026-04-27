@@ -10,7 +10,7 @@ describe("truncateToolResults", () => {
     const { messages: output, truncatedCount, charsSaved } = truncateToolResults(messages);
     expect(truncatedCount).toBe(0);
     expect(charsSaved).toBe(0);
-    expect(output[1].content).toBe("short result");
+    expect(output[1]!.content).toBe("short result");
   });
 
   test("truncates tool results exceeding maxChars", () => {
@@ -19,8 +19,8 @@ describe("truncateToolResults", () => {
     const { messages: output, truncatedCount, charsSaved } = truncateToolResults(messages);
     expect(truncatedCount).toBe(1);
     expect(charsSaved).toBeGreaterThan(0);
-    expect((output[0].content as string).length).toBeLessThan(longResult.length);
-    expect(output[0].content).toContain("chars omitted");
+    expect((output[0]!.content as string).length).toBeLessThan(longResult.length);
+    expect(output[0]!.content).toContain("chars omitted");
   });
 
   test("preserves head and tail content", () => {
@@ -33,7 +33,7 @@ describe("truncateToolResults", () => {
       headChars: head.length + 10,
       tailChars: tail.length + 10,
     });
-    const content = output[0].content as string;
+    const content = output[0]!.content as string;
     expect(content).toContain("HEAD_CONTENT_");
     expect(content).toContain("_TAIL_CONTENT");
   });

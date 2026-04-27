@@ -229,16 +229,16 @@ describe("builtinDreamTasks", () => {
 
   test("tasks are sorted by priority", () => {
     for (let i = 1; i < builtinDreamTasks.length; i++) {
-      expect(builtinDreamTasks[i].priority).toBeGreaterThanOrEqual(
-        builtinDreamTasks[i - 1].priority,
+      expect(builtinDreamTasks[i]!.priority).toBeGreaterThanOrEqual(
+        builtinDreamTasks[i - 1]!.priority,
       );
     }
   });
 
   test("priority order is reindex < preload < analyze < maintenance", () => {
-    expect(builtinDreamTasks[0].id).toBe("reindex");
-    expect(builtinDreamTasks[1].id).toBe("preload-context");
-    expect(builtinDreamTasks[2].id).toBe("analyze-usage");
-    expect(builtinDreamTasks[3].id).toBe("maintenance");
+    expect(builtinDreamTasks[0]!!.id).toBe("reindex");
+    expect(builtinDreamTasks[1]!!.id).toBe("preload-context");
+    expect(builtinDreamTasks[2]!!.id).toBe("analyze-usage");
+    expect(builtinDreamTasks[3]!!.id).toBe("maintenance");
   });
 });

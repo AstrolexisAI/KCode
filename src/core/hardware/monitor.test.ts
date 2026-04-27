@@ -38,7 +38,7 @@ describe("PerformanceMonitor", () => {
       expect(small.count).toBe(5);
       // The earliest entries should have been dropped
       const history = small.getHistory();
-      expect(history[0].tokensPerSecond).toBe(5);
+      expect(history[0]!.tokensPerSecond).toBe(5);
     });
 
     test("adds timestamp if not provided", () => {
@@ -49,8 +49,8 @@ describe("PerformanceMonitor", () => {
         cpuUtilization: 45,
       });
       const history = monitor.getHistory();
-      expect(history[0].timestamp).toBeDefined();
-      expect(typeof history[0].timestamp).toBe("number");
+      expect(history[0]!.timestamp).toBeDefined();
+      expect(typeof history[0]!.timestamp).toBe("number");
     });
   });
 
@@ -419,8 +419,8 @@ describe("PerformanceMonitor", () => {
 
       const recent = monitor.getRecent(5);
       expect(recent.length).toBe(5);
-      expect(recent[0].tokensPerSecond).toBe(15);
-      expect(recent[4].tokensPerSecond).toBe(19);
+      expect(recent[0]!.tokensPerSecond).toBe(15);
+      expect(recent[4]!.tokensPerSecond).toBe(19);
     });
   });
 

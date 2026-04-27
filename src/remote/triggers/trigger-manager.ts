@@ -59,7 +59,7 @@ function validateCronField(field: string, name: string, min: number, max: number
       );
     }
 
-    const base = stepParts[0];
+    const base = stepParts[0]!;
     const step = stepParts[1];
 
     // Validate step value

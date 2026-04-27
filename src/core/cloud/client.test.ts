@@ -168,7 +168,7 @@ describe("CloudClient", () => {
       await client.login("test@test.com", "pass");
 
       expect(fetchFn).toHaveBeenCalledTimes(1);
-      const [url, opts] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const [url, opts] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
       expect(url).toBe("https://cloud.kulvex.ai/api/v1/auth/login");
       expect(opts.method).toBe("POST");
       const body = JSON.parse(opts.body as string);
@@ -204,7 +204,7 @@ describe("CloudClient", () => {
       expect(team.name).toBe("Test Team");
       expect(team.plan).toBe("team");
       expect(team.members).toHaveLength(1);
-      expect(team.members[0].role).toBe("owner");
+      expect(team.members[0]!.role).toBe("owner");
       expect(team.usage.sessionsThisMonth).toBe(100);
       expect(team.limits.maxSessions).toBe(1000);
     });
@@ -216,7 +216,7 @@ describe("CloudClient", () => {
       const client = new CloudClient(TEST_CONFIG);
       await client.getTeam();
 
-      const [url] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const [url] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
       expect(url).toBe("https://cloud.kulvex.ai/api/v1/teams/team-001");
     });
   });
@@ -229,7 +229,7 @@ describe("CloudClient", () => {
       const client = new CloudClient(TEST_CONFIG);
       await client.inviteMember("new@example.com", "admin");
 
-      const [url, opts] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const [url, opts] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
       expect(url).toBe("https://cloud.kulvex.ai/api/v1/teams/team-001/members");
       expect(opts.method).toBe("POST");
       const body = JSON.parse(opts.body as string);
@@ -244,7 +244,7 @@ describe("CloudClient", () => {
       const client = new CloudClient(TEST_CONFIG);
       await client.inviteMember("new@example.com");
 
-      const [, opts] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const [, opts] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
       const body = JSON.parse(opts.body as string);
       expect(body.role).toBe("member");
     });
@@ -258,7 +258,7 @@ describe("CloudClient", () => {
       const client = new CloudClient(TEST_CONFIG);
       await client.removeMember("user-042");
 
-      const [url, opts] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const [url, opts] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
       expect(url).toBe("https://cloud.kulvex.ai/api/v1/teams/team-001/members/user-042");
       expect(opts.method).toBe("DELETE");
     });
@@ -272,7 +272,7 @@ describe("CloudClient", () => {
       const client = new CloudClient(TEST_CONFIG);
       await client.request("GET", "/api/v1/test");
 
-      const [, opts] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const [, opts] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
       const headers = opts.headers as Record<string, string>;
       expect(headers.Authorization).toBe("Bearer test-token-abc123");
     });
@@ -284,7 +284,7 @@ describe("CloudClient", () => {
       const client = new CloudClient(TEST_CONFIG);
       await client.request("GET", "/api/v1/test");
 
-      const [, opts] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const [, opts] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
       const headers = opts.headers as Record<string, string>;
       expect(headers["Content-Type"]).toBe("application/json");
       expect(headers["User-Agent"]).toBe("kcode-cli");
@@ -297,7 +297,7 @@ describe("CloudClient", () => {
       const client = new CloudClient(TEST_CONFIG);
       await client.request("POST", "/api/v1/test", { foo: "bar" });
 
-      const [, opts] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const [, opts] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
       expect(JSON.parse(opts.body as string)).toEqual({ foo: "bar" });
     });
 
@@ -308,7 +308,7 @@ describe("CloudClient", () => {
       const client = new CloudClient(TEST_CONFIG);
       await client.request("GET", "/api/v1/test");
 
-      const [, opts] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const [, opts] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
       expect(opts.body).toBeUndefined();
     });
   });
@@ -382,7 +382,7 @@ describe("CloudClient", () => {
       const client = new CloudClient(TEST_CONFIG);
       await client.getAnalytics("week");
 
-      const [url] = fetchFn.mock.calls[0] as [string];
+      const [url] = fetchFn.mock.calls[0] as unknown as [string];
       expect(url).toContain("period=week");
     });
 
@@ -419,7 +419,7 @@ describe("CloudClient", () => {
       const client = new CloudClient(TEST_CONFIG);
       await client.updatePolicies({ requireReview: true });
 
-      const [url, opts] = fetchFn.mock.calls[0] as [string, RequestInit];
+      const [url, opts] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
       expect(url).toContain("/policies");
       expect(opts.method).toBe("PATCH");
       const body = JSON.parse(opts.body as string);

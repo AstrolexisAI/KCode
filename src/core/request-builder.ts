@@ -594,7 +594,7 @@ export async function buildRequestForModel(
       if (msg.role !== "user") continue;
       if (typeof msg.content === "string") {
         msg.content = [
-          { type: "text", text: msg.content, cache_control: { type: "ephemeral" } },
+          { type: "text", text: msg.content, cache_control: { type: "ephemeral" } } as { type: "text"; text: string },
         ];
         break;
       }

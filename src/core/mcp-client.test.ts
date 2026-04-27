@@ -884,8 +884,8 @@ describe("McpServersConfig", () => {
       },
     };
     expect(Object.keys(config)).toHaveLength(3);
-    expect(config.github.command).toBe("npx");
-    expect(config.remote.transport).toBe("http");
+    expect((config.github as { command: string }).command).toBe("npx");
+    expect((config.remote as { transport: string }).transport).toBe("http");
   });
 });
 
@@ -942,8 +942,8 @@ describe("sanitizeMcpInput: edge cases", () => {
     };
     const result = sanitizeMcpInput(input);
     const list = result.list as Array<{ nested: { value: number } }>;
-    expect(list[0].nested.value).toBe(1);
-    expect(list[1].nested.value).toBe(2);
+    expect(list[0]!.nested.value).toBe(1);
+    expect(list[1]!.nested.value).toBe(2);
   });
 
   test("mixed array contents", () => {

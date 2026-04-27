@@ -77,7 +77,7 @@ export async function testPlugin(dir: string): Promise<PluginTestResult[]> {
     for (const [event, handlers] of Object.entries(manifest.hooks)) {
       if (!Array.isArray(handlers)) continue;
       for (let i = 0; i < handlers.length; i++) {
-        const hook = handlers[i];
+        const hook = handlers[i]!;
         results.push(
           await runTest(`hook-dryrun:${event}[${i}]`, async () => {
             if (!hook.command && !hook.action) {
@@ -192,7 +192,7 @@ function findFiles(dir: string, pattern: string): string[] {
 
   try {
     const entries = readdirSync(targetDir);
-    const regex = new RegExp("^" + filePart.replace(/\*/g, ".*").replace(/\?/g, ".") + "$");
+    const regex = new RegExp("^" + filePart!.replace(/\*/g, ".*").replace(/\?/g, ".") + "$");
     return entries.filter((e) => regex.test(e)).map((e) => (dirPart ? `${dirPart}/${e}` : e));
   } catch {
     return [];
@@ -204,7 +204,7 @@ function parseFrontmatter(content: string): Record<string, string> | null {
   if (!match) return null;
 
   const fields: Record<string, string> = {};
-  for (const line of match[1].split("\n")) {
+  for (const line of match[1]!.split("\n")) {
     const idx = line.indexOf(":");
     if (idx > 0) {
       fields[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();

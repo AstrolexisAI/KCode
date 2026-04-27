@@ -6,6 +6,9 @@ import { join } from "node:path";
 import { CDNFetcher, IntegrityError } from "./cdn-fetcher";
 import { SHATracker } from "./sha-tracker";
 
+
+const asFetch = (fn: unknown): typeof globalThis.fetch => fn as typeof globalThis.fetch;
+
 let tempDir: string;
 let cacheDir: string;
 
@@ -118,7 +121,7 @@ describe("CDNFetcher", () => {
     const server = Bun.serve({
       port: 0,
       fetch(req) {
-        return new Response(buffer, {
+        return new Response(buffer as unknown as BodyInit, {
           headers: {
             "content-type": "application/gzip",
             "x-content-sha256": sha256,
@@ -163,7 +166,7 @@ describe("CDNFetcher", () => {
     const server = Bun.serve({
       port: 0,
       fetch(req) {
-        return new Response(buffer, {
+        return new Response(buffer as unknown as BodyInit, {
           headers: {
             "content-type": "application/gzip",
             "x-content-sha256": "wrong-sha-value",
@@ -215,7 +218,7 @@ describe("CDNFetcher", () => {
     const server = Bun.serve({
       port: 0,
       fetch(req) {
-        return new Response(buffer, {
+        return new Response(buffer as unknown as BodyInit, {
           headers: {
             "content-type": "application/gzip",
             "x-content-sha256": sha256,

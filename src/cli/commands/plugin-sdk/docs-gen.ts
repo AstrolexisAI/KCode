@@ -146,7 +146,7 @@ function generateSkillDocs(dir: string, patterns: string[]): string | null {
         const argsMatch = content.match(/args:\n([\s\S]*?)(?=\n---|\n[a-z])/);
         if (argsMatch) {
           lines.push("\n**Arguments:**");
-          const argLines = argsMatch[1].split("\n").filter((l) => l.trim());
+          const argLines = argsMatch[1]!.split("\n").filter((l) => l.trim());
           for (const line of argLines) {
             if (line.includes("name:")) {
               lines.push(`- \`${line.replace(/.*name:\s*/, "").trim()}\``);
@@ -286,7 +286,7 @@ function findFiles(dir: string, pattern: string): string[] {
   if (!existsSync(targetDir)) return [];
 
   try {
-    const regex = new RegExp("^" + filePart.replace(/\*/g, ".*").replace(/\?/g, ".") + "$");
+    const regex = new RegExp("^" + filePart!.replace(/\*/g, ".*").replace(/\?/g, ".") + "$");
     return readdirSync(targetDir)
       .filter((e) => regex.test(e))
       .map((e) => (dirPart ? `${dirPart}/${e}` : e));
@@ -299,7 +299,7 @@ function parseFrontmatter(content: string): Record<string, string> | null {
   const match = content.match(/^---\n([\s\S]*?)\n---/);
   if (!match) return null;
   const fields: Record<string, string> = {};
-  for (const line of match[1].split("\n")) {
+  for (const line of match[1]!.split("\n")) {
     const idx = line.indexOf(":");
     if (idx > 0) {
       fields[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();

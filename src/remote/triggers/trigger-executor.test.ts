@@ -111,7 +111,7 @@ describe("TriggerExecutor", () => {
       await executor.execute(trigger, "/tmp/project");
 
       expect(spawnFn).toHaveBeenCalledTimes(1);
-      const args = spawnFn.mock.calls[0][0] as string[];
+      const args = spawnFn.mock.calls[0]![0] as string[];
       expect(args).toContain("--model");
       expect(args).toContain("claude-3-haiku");
     });
@@ -127,7 +127,7 @@ describe("TriggerExecutor", () => {
       const trigger = makeTrigger({ maxTurns: 10 });
       await executor.execute(trigger, "/tmp/project");
 
-      const args = spawnFn.mock.calls[0][0] as string[];
+      const args = spawnFn.mock.calls[0]![0] as string[];
       expect(args).toContain("--max-turns");
       expect(args).toContain("10");
     });
@@ -143,7 +143,7 @@ describe("TriggerExecutor", () => {
       const trigger = makeTrigger({ workingDirectory: "/custom/dir" });
       await executor.execute(trigger, "/default/dir");
 
-      const options = spawnFn.mock.calls[0][1] as SpawnOptions;
+      const options = spawnFn.mock.calls[0]![1] as SpawnOptions;
       expect(options.cwd).toBe("/custom/dir");
     });
 
@@ -158,7 +158,7 @@ describe("TriggerExecutor", () => {
       const trigger = makeTrigger();
       await executor.execute(trigger, "/default/dir");
 
-      const options = spawnFn.mock.calls[0][1] as SpawnOptions;
+      const options = spawnFn.mock.calls[0]![1] as SpawnOptions;
       expect(options.cwd).toBe("/default/dir");
     });
 
@@ -182,7 +182,7 @@ describe("TriggerExecutor", () => {
     test("runs triggers in sequence", async () => {
       const callOrder: string[] = [];
       const spawnFn = mock(async (args: string[]) => {
-        const prompt = args[args.length - 1];
+        const prompt = args[args.length - 1]!;
         callOrder.push(prompt);
         return { exitCode: 0, stdout: `Done: ${prompt}`, stderr: "" };
       });
@@ -197,9 +197,9 @@ describe("TriggerExecutor", () => {
       const results = await executor.executeAll(triggers, "/tmp");
 
       expect(results).toHaveLength(3);
-      expect(results[0].triggerId).toBe("trg_1");
-      expect(results[1].triggerId).toBe("trg_2");
-      expect(results[2].triggerId).toBe("trg_3");
+      expect(results[0]!.triggerId).toBe("trg_1");
+      expect(results[1]!.triggerId).toBe("trg_2");
+      expect(results[2]!.triggerId).toBe("trg_3");
       expect(callOrder).toEqual(["first", "second", "third"]);
     });
 
@@ -232,9 +232,9 @@ describe("TriggerExecutor", () => {
       const results = await executor.executeAll(triggers, "/tmp");
 
       expect(results).toHaveLength(3);
-      expect(results[0].status).toBe("success");
-      expect(results[1].status).toBe("error");
-      expect(results[2].status).toBe("success");
+      expect(results[0]!.status).toBe("success");
+      expect(results[1]!.status).toBe("error");
+      expect(results[2]!.status).toBe("success");
     });
   });
 

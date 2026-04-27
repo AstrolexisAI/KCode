@@ -44,7 +44,8 @@ export function AnalyticsDashboard({ authToken }: { authToken: string }) {
           const re = /\[tool:\s*(\w+)\]/g;
           let match;
           while ((match = re.exec(content)) !== null) {
-            usage[match[1]] = (usage[match[1]] || 0) + 1;
+            const tool = match[1]!;
+            usage[tool] = (usage[tool] || 0) + 1;
           }
         }
         setToolUsage(usage);
@@ -81,8 +82,8 @@ export function AnalyticsDashboard({ authToken }: { authToken: string }) {
   );
   const maxTurn = Math.max(...turnValues, 1);
 
-  const toolKeys = Object.keys(toolUsage).sort((a, b) => toolUsage[b] - toolUsage[a]);
-  const maxTool = toolKeys.length > 0 ? toolUsage[toolKeys[0]] : 1;
+  const toolKeys = Object.keys(toolUsage).sort((a, b) => (toolUsage[b] ?? 0) - (toolUsage[a] ?? 0));
+  const maxTool = toolKeys.length > 0 ? (toolUsage[toolKeys[0]!] ?? 1) : 1;
 
   return (
     <div style={styles.panel}>
@@ -120,8 +121,8 @@ export function AnalyticsDashboard({ authToken }: { authToken: string }) {
               <BarRow
                 key={name}
                 label={name}
-                value={String(toolUsage[name])}
-                pct={(toolUsage[name] / maxTool) * 100}
+                value={String(toolUsage[name] ?? 0)}
+                pct={((toolUsage[name] ?? 0) / maxTool) * 100}
                 color="#7dcfff"
               />
             ))}

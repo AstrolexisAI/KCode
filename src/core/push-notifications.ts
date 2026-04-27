@@ -297,11 +297,11 @@ function derToRaw(derSig: Buffer): Buffer {
   // DER: 0x30 [total-len] 0x02 [r-len] [r] 0x02 [s-len] [s]
   let offset = 2; // skip 0x30 + total length
   // r
-  const rLen = derSig[offset + 1];
+  const rLen = derSig[offset + 1]!;
   const r = derSig.subarray(offset + 2, offset + 2 + rLen);
   offset += 2 + rLen;
   // s
-  const sLen = derSig[offset + 1];
+  const sLen = derSig[offset + 1]!;
   const s = derSig.subarray(offset + 2, offset + 2 + sLen);
 
   // Pad/trim to 32 bytes each

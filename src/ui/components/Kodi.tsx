@@ -376,20 +376,20 @@ function formatTime(ms: number): string {
 
 const MINI_TICK_MS = 150; // slightly faster than main Kodi for lively feel
 // Compact face expressions — no box, no body, just the face chars
-const MINI_FACES: Record<string, string[]> = {
+const MINI_FACES = {
   local:     ["(^_^)", "(^v^)", "(^-^)", "(^.^)", "(^w^)", "(^_^)"],
   reasoning: ["(O_O)", "(O.O)", "(@_@)", "(O_O)", "(0_0)", "(*_*)"],
   fast:      ["(-_-)", "(o_o)", "(>_<)", "(-.-)", "(o_o)", "(^_-)"],
   analysis:  ["(._.)","(o.o)", "(-.o)", "(o_o)", "(°.°)", "(._-)"],
   default:   ["(o_o)", "(-.o)", "(o.o)", "(o_o)", "(*.*)", "(o_o)"],
-};
-const MINI_MOODS: Record<string, KodiMood[]> = {
+} satisfies Record<string, string[]>;
+const MINI_MOODS = {
   local:     ["idle", "happy", "waving", "idle", "curious"],
   reasoning: ["reasoning", "thinking", "reasoning", "curious", "reasoning"],
   fast:      ["working", "excited", "working", "happy", "working"],
   analysis:  ["thinking", "curious", "thinking", "reasoning", "curious"],
   default:   ["idle", "thinking", "working", "happy", "idle"],
-};
+} satisfies Record<string, KodiMood[]>;
 
 function getMiniPersonality(modelName: string): string {
   if (modelName === "mark7" || modelName.includes("mnemo") || modelName.includes("local")) return "local";
@@ -402,8 +402,8 @@ function getMiniPersonality(modelName: string): string {
 function MiniKodi({ modelName, costUsd }: { modelName: string; costUsd: number }) {
   const { theme } = useTheme();
   const personality = getMiniPersonality(modelName);
-  const faces = MINI_FACES[personality] ?? MINI_FACES.default;
-  const moods = MINI_MOODS[personality] ?? MINI_MOODS.default;
+  const faces = (MINI_FACES as Record<string, string[]>)[personality] ?? MINI_FACES.default;
+  const moods = (MINI_MOODS as Record<string, KodiMood[]>)[personality] ?? MINI_MOODS.default;
 
   const [faceIdx, setFaceIdx] = useState(() => Math.floor(Math.random() * faces.length));
   const [moodIdx, setMoodIdx] = useState(() => Math.floor(Math.random() * moods.length));
@@ -745,7 +745,7 @@ export default function KodiCompanion({
         try {
           const { fetchLiveBalance } = await import("../../core/balance/live-fetch.js");
           const { loadUserSettingsRaw } = await import("../../core/config.js");
-          const settings = loadUserSettingsRaw() as Record<string, unknown>;
+          const settings = await loadUserSettingsRaw();
           const keyMap: Record<string, string> = {
             kimi: String(settings.kimiApiKey ?? ""),
             openrouter: String(settings.openrouterApiKey ?? ""),

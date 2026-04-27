@@ -38,8 +38,8 @@ describe("StartupProfiler", () => {
       p.checkpoint("b");
       const r = p.report();
       expect(r.checkpoints).toHaveLength(2);
-      expect(r.checkpoints[0].name).toBe("a");
-      expect(r.checkpoints[1].name).toBe("b");
+      expect(r.checkpoints[0]!.name).toBe("a");
+      expect(r.checkpoints[1]!.name).toBe("b");
       expect(r.totalMs).toBeGreaterThanOrEqual(0);
       expect(r.categoryTotals).toBeDefined();
     });
@@ -56,21 +56,21 @@ describe("StartupProfiler", () => {
       p.checkpoint("b");
       p.checkpoint("c");
       const cps = p.report().checkpoints;
-      expect(cps[1].timestamp).toBeGreaterThanOrEqual(cps[0].timestamp);
-      expect(cps[2].timestamp).toBeGreaterThanOrEqual(cps[1].timestamp);
+      expect(cps[1]!.timestamp).toBeGreaterThanOrEqual(cps[0]!.timestamp);
+      expect(cps[2]!.timestamp).toBeGreaterThanOrEqual(cps[1]!.timestamp);
     });
 
     test("tracks memory usage", () => {
       const p = new StartupProfiler(true);
       p.checkpoint("mem-test");
-      const cp = p.report().checkpoints[0];
+      const cp = p.report().checkpoints[0]!;
       expect(cp.memoryMB).toBeGreaterThan(0);
     });
 
     test("tracks module count", () => {
       const p = new StartupProfiler(true);
       p.checkpoint("mod-test");
-      const cp = p.report().checkpoints[0];
+      const cp = p.report().checkpoints[0]!;
       expect(cp.importsLoaded).toBeGreaterThanOrEqual(0);
     });
 
@@ -102,15 +102,15 @@ describe("StartupProfiler", () => {
       p.checkpoint("config_loaded");
       p.checkpoint("tools_registered");
       const r = p.report();
-      expect(r.checkpoints[0].category).toBe("init");
-      expect(r.checkpoints[1].category).toBe("config");
-      expect(r.checkpoints[2].category).toBe("tools");
+      expect(r.checkpoints[0]!.category).toBe("init");
+      expect(r.checkpoints[1]!.category).toBe("config");
+      expect(r.checkpoints[2]!.category).toBe("tools");
     });
 
     test("assigns 'other' category to unknown checkpoint names", () => {
       const p = new StartupProfiler(true);
       p.checkpoint("custom_phase");
-      expect(p.report().checkpoints[0].category).toBe("other");
+      expect(p.report().checkpoints[0]!.category).toBe("other");
     });
 
     test("categoryTotals sums deltas per category", () => {
@@ -185,7 +185,7 @@ describe("StartupProfiler", () => {
       _resetProfiler();
       profileCheckpoint("test");
       expect(getProfileReport()).toHaveLength(1);
-      expect(getProfileReport()[0].name).toBe("test");
+      expect(getProfileReport()[0]!.name).toBe("test");
     });
 
     test("profileCheckpoint no-op when disabled", () => {

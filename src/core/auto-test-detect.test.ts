@@ -36,9 +36,9 @@ describe("auto-test-detect", () => {
     test("builds targeted test command for modified files", () => {
       const mappings = buildTestCommand([process.cwd() + "/src/core/config.ts"], process.cwd());
       expect(mappings.length).toBeGreaterThan(0);
-      expect(mappings[0].framework).toBe("bun-test");
-      expect(mappings[0].runCommand).toContain("bun test");
-      expect(mappings[0].runCommand).toContain("config.test.ts");
+      expect(mappings[0]!.framework).toBe("bun-test");
+      expect(mappings[0]!.runCommand).toContain("bun test");
+      expect(mappings[0]!.runCommand).toContain("config.test.ts");
     });
 
     test("returns empty for files without tests", () => {

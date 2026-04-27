@@ -17,9 +17,9 @@ describe("SessionSearch", () => {
     search.indexTurn("s1", 0, "user", "Hello world");
     const turns = search.getSessionTurns("s1");
     expect(turns).toHaveLength(1);
-    expect(turns[0].content).toBe("Hello world");
-    expect(turns[0].role).toBe("user");
-    expect(turns[0].turnIndex).toBe(0);
+    expect(turns[0]!.content).toBe("Hello world");
+    expect(turns[0]!.role).toBe("user");
+    expect(turns[0]!.turnIndex).toBe(0);
   });
 
   test("search returns matching results with snippets", () => {
@@ -29,9 +29,9 @@ describe("SessionSearch", () => {
 
     const results = search.search("authentication");
     expect(results.length).toBeGreaterThan(0);
-    expect(results[0].sessionId).toBe("s1");
-    expect(results[0].matchSnippet).toContain("authentication");
-    expect(results[0].score).toBeGreaterThan(0);
+    expect(results[0]!.sessionId).toBe("s1");
+    expect(results[0]!.matchSnippet).toContain("authentication");
+    expect(results[0]!.score).toBeGreaterThan(0);
   });
 
   test("search returns empty for no matches", () => {
@@ -59,9 +59,9 @@ describe("SessionSearch", () => {
 
     const turns = search.getSessionTurns("s1");
     expect(turns).toHaveLength(3);
-    expect(turns[0].turnIndex).toBe(0);
-    expect(turns[1].turnIndex).toBe(1);
-    expect(turns[2].turnIndex).toBe(2);
+    expect(turns[0]!.turnIndex).toBe(0);
+    expect(turns[1]!.turnIndex).toBe(1);
+    expect(turns[2]!.turnIndex).toBe(2);
   });
 
   test("getSessionTurns returns turns in order", () => {
@@ -71,9 +71,9 @@ describe("SessionSearch", () => {
     search.indexTurn("s1", 1, "assistant", "Second");
 
     const turns = search.getSessionTurns("s1");
-    expect(turns[0].turnIndex).toBe(0);
-    expect(turns[1].turnIndex).toBe(1);
-    expect(turns[2].turnIndex).toBe(2);
+    expect(turns[0]!.turnIndex).toBe(0);
+    expect(turns[1]!.turnIndex).toBe(1);
+    expect(turns[2]!.turnIndex).toBe(2);
   });
 
   test("deleteSession removes entries", () => {
@@ -111,6 +111,6 @@ describe("SessionSearch", () => {
 
     const authResults = search.search("auth");
     expect(authResults).toHaveLength(1);
-    expect(authResults[0].sessionId).toBe("s3");
+    expect(authResults[0]!.sessionId).toBe("s3");
   });
 });

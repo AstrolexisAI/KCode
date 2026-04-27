@@ -142,27 +142,35 @@ describe("VirtualMessageList — message entry rendering", () => {
   test("text entries have correct structure", () => {
     const entry = makeTextEntry("user", "Hello");
     expect(entry.kind).toBe("text");
-    expect(entry.role).toBe("user");
-    expect(entry.text).toBe("Hello");
+    if (entry.kind === "text") {
+      expect(entry.role).toBe("user");
+      expect(entry.text).toBe("Hello");
+    }
   });
 
   test("tool use entries have name and summary", () => {
     const entry = makeToolUseEntry("Read", "/path/to/file");
     expect(entry.kind).toBe("tool_use");
-    expect(entry.name).toBe("Read");
-    expect(entry.summary).toBe("/path/to/file");
+    if (entry.kind === "tool_use") {
+      expect(entry.name).toBe("Read");
+      expect(entry.summary).toBe("/path/to/file");
+    }
   });
 
   test("tool result entries handle errors", () => {
     const entry = makeToolResultEntry("Bash", "command failed", true);
     expect(entry.kind).toBe("tool_result");
-    expect(entry.isError).toBe(true);
+    if (entry.kind === "tool_result") {
+      expect(entry.isError).toBe(true);
+    }
   });
 
   test("banner entries have title and subtitle", () => {
     const entry = makeBannerEntry("KCode v1.0", "Ready");
     expect(entry.kind).toBe("banner");
-    expect(entry.title).toBe("KCode v1.0");
+    if (entry.kind === "banner") {
+      expect(entry.title).toBe("KCode v1.0");
+    }
   });
 });
 

@@ -9,6 +9,9 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+
+const asFetch = (fn: unknown): typeof globalThis.fetch => fn as typeof globalThis.fetch;
+
 function mockManifest(latest: string) {
   return {
     schema_version: 1,
@@ -78,21 +81,21 @@ describe("maybeNotifyUpdate", () => {
       delete process.env.KCODE_QUIET;
     }
     console.log = originalLog;
-    globalThis.fetch = globalThis.fetch;
+    globalThis.fetch = asFetch(globalThis.fetch);
     await rm(tempDir, { recursive: true, force: true });
   });
 
   test("prints notice when update is available", async () => {
     process.argv = ["bun", "kcode"];
     const origFetch = globalThis.fetch;
-    globalThis.fetch = mock(() =>
+    globalThis.fetch = asFetch(mock(() =>
       Promise.resolve(
         new Response(JSON.stringify(mockManifest("2.10.999")), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         }),
       ),
-    );
+    ));
 
     try {
       const { maybeNotifyUpdate } = await import("./update-notifier");
@@ -101,28 +104,28 @@ describe("maybeNotifyUpdate", () => {
       expect(out).toContain("2.10.999");
       expect(out).toContain("kcode update");
     } finally {
-      globalThis.fetch = origFetch;
+      globalThis.fetch = asFetch(origFetch);
     }
   });
 
   test("stays silent when no update is available", async () => {
     process.argv = ["bun", "kcode"];
     const origFetch = globalThis.fetch;
-    globalThis.fetch = mock(() =>
+    globalThis.fetch = asFetch(mock(() =>
       Promise.resolve(
         new Response(JSON.stringify(mockManifest("1.0.0")), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         }),
       ),
-    );
+    ));
 
     try {
       const { maybeNotifyUpdate } = await import("./update-notifier");
       await maybeNotifyUpdate("1.0.0");
       expect(logs.join("\n")).toBe("");
     } finally {
-      globalThis.fetch = origFetch;
+      globalThis.fetch = asFetch(origFetch);
     }
   });
 
@@ -130,7 +133,7 @@ describe("maybeNotifyUpdate", () => {
     process.argv = ["bun", "kcode", "update"];
     let fetched = false;
     const origFetch = globalThis.fetch;
-    globalThis.fetch = mock(() => {
+    globalThis.fetch = asFetch(mock(() => {
       fetched = true;
       return Promise.resolve(
         new Response(JSON.stringify(mockManifest("2.10.999")), {
@@ -138,7 +141,7 @@ describe("maybeNotifyUpdate", () => {
           headers: { "Content-Type": "application/json" },
         }),
       );
-    });
+    }));
 
     try {
       const { maybeNotifyUpdate } = await import("./update-notifier");
@@ -146,7 +149,7 @@ describe("maybeNotifyUpdate", () => {
       expect(logs.join("\n")).toBe("");
       expect(fetched).toBe(false);
     } finally {
-      globalThis.fetch = origFetch;
+      globalThis.fetch = asFetch(origFetch);
     }
   });
 
@@ -202,7 +205,7 @@ describe("maybeNotifyUpdate", () => {
 
     let fetched = false;
     const origFetch = globalThis.fetch;
-    globalThis.fetch = mock(() => {
+    globalThis.fetch = asFetch(mock(() => {
       fetched = true;
       return Promise.resolve(
         new Response(JSON.stringify(mockManifest("2.10.999")), {
@@ -210,7 +213,7 @@ describe("maybeNotifyUpdate", () => {
           headers: { "Content-Type": "application/json" },
         }),
       );
-    });
+    }));
 
     try {
       const { maybeNotifyUpdate } = await import("./update-notifier");
@@ -218,7 +221,7 @@ describe("maybeNotifyUpdate", () => {
       expect(logs.join("\n")).toBe("");
       expect(fetched).toBe(false);
     } finally {
-      globalThis.fetch = origFetch;
+      globalThis.fetch = asFetch(origFetch);
     }
   });
 });

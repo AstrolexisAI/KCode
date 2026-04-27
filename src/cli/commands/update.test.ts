@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { Command } from "commander";
 import { registerUpdateCommand } from "./update";
 
+
+const asFetch = (fn: unknown): typeof globalThis.fetch => fn as typeof globalThis.fetch;
+
 function buildManifest(latest: string) {
   return {
     schema_version: 1,
@@ -117,13 +120,13 @@ describe("update command output", () => {
   });
 
   afterEach(() => {
-    globalThis.fetch = originalFetch;
+    globalThis.fetch = asFetch(originalFetch);
     console.log = originalLog;
     console.error = originalError;
   });
 
   test("--check with no update shows up-to-date message", async () => {
-    globalThis.fetch = mock(() => Promise.resolve(jsonResponse(buildManifest("1.8.0"))));
+    globalThis.fetch = asFetch(mock(() => Promise.resolve(jsonResponse(buildManifest("1.8.0")))));
 
     const program = new Command();
     program.exitOverride();
@@ -136,7 +139,7 @@ describe("update command output", () => {
   });
 
   test("--check with update available shows version info", async () => {
-    globalThis.fetch = mock(() => Promise.resolve(jsonResponse(buildManifest("2.0.0"))));
+    globalThis.fetch = asFetch(mock(() => Promise.resolve(jsonResponse(buildManifest("2.0.0")))));
 
     const program = new Command();
     program.exitOverride();
@@ -150,7 +153,7 @@ describe("update command output", () => {
   });
 
   test("shows release notes URL when available", async () => {
-    globalThis.fetch = mock(() => Promise.resolve(jsonResponse(buildManifest("2.0.0"))));
+    globalThis.fetch = asFetch(mock(() => Promise.resolve(jsonResponse(buildManifest("2.0.0")))));
 
     const program = new Command();
     program.exitOverride();
@@ -164,7 +167,7 @@ describe("update command output", () => {
   });
 
   test("shows published date when available", async () => {
-    globalThis.fetch = mock(() => Promise.resolve(jsonResponse(buildManifest("2.0.0"))));
+    globalThis.fetch = asFetch(mock(() => Promise.resolve(jsonResponse(buildManifest("2.0.0")))));
 
     const program = new Command();
     program.exitOverride();
