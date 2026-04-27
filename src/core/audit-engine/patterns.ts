@@ -61,6 +61,8 @@ import { DESERIALIZE_PATTERNS } from "./patterns/deserialize";
 import { FLIGHT_SOFTWARE_PATTERNS } from "./patterns/flight-software";
 // v2.10.370 — F9 vendible packs
 import { AI_ML_PATTERNS } from "./patterns/ai-ml";
+// P2.1 (v2.10.389) — Cloud / IaC at-rest pack.
+import { CLOUD_PATTERNS } from "./patterns/cloud";
 
 // Re-export every per-language array so existing imports keep working.
 export {
@@ -89,6 +91,7 @@ export {
   DESERIALIZE_PATTERNS,
   FLIGHT_SOFTWARE_PATTERNS,
   AI_ML_PATTERNS,
+  CLOUD_PATTERNS,
 };
 
 export const ALL_PATTERNS: BugPattern[] = [
@@ -117,6 +120,7 @@ export const ALL_PATTERNS: BugPattern[] = [
   ...DESERIALIZE_PATTERNS,
   ...FLIGHT_SOFTWARE_PATTERNS,
   ...AI_ML_PATTERNS,
+  ...CLOUD_PATTERNS,
 ];
 
 /** Return all patterns applicable to the given language. */

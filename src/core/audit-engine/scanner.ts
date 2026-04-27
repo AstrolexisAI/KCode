@@ -98,6 +98,22 @@ const SOURCE_EXTENSIONS: Record<string, Language> = {
   ".bash": "shell",
   ".zsh": "shell",
   ".ksh": "shell",
+  // P2.1 (v2.10.389) — IaC at-rest scanning extensions.
+  ".yml": "yaml",
+  ".yaml": "yaml",
+  ".tf": "terraform",
+  ".tfvars": "terraform",
+};
+
+/**
+ * Filename-only matchers for files without extensions (Dockerfile,
+ * Containerfile, etc.). Checked AFTER SOURCE_EXTENSIONS — if the
+ * extension lookup returns null we fall through to these.
+ */
+const SOURCE_FILENAMES: Record<string, Language> = {
+  Dockerfile: "dockerfile",
+  Containerfile: "dockerfile",
+  ".dockerfile": "dockerfile",
 };
 
 // Directories matched by exact name at any depth. This is the coarse
@@ -361,7 +377,9 @@ export function enumerateSourceFiles(root: string): string[] {
         stack.push(real);
       } else if (s.isFile()) {
         const ext = extname(entry).toLowerCase();
-        if (!SOURCE_EXTENSIONS[ext]) continue;
+        // P2.1 (v2.10.389) — also accept extensionless filenames like
+        // Dockerfile / Containerfile via SOURCE_FILENAMES.
+        if (!SOURCE_EXTENSIONS[ext] && !SOURCE_FILENAMES[entry]) continue;
         if (isSkippedFilename(entry)) continue;
         if (isSkippedPath(full)) continue;
         let real: string;
@@ -531,7 +549,12 @@ export function detectLanguages(files: string[]): Language[] {
 
 function getLanguageForFile(path: string): Language | null {
   const ext = extname(path).toLowerCase();
-  return SOURCE_EXTENSIONS[ext] ?? null;
+  const byExt = SOURCE_EXTENSIONS[ext];
+  if (byExt) return byExt;
+  // P2.1 (v2.10.389) — fall through to filename-only matchers for
+  // extensionless files (Dockerfile, Containerfile).
+  const base = path.split("/").pop() ?? "";
+  return SOURCE_FILENAMES[base] ?? null;
 }
 
 /**
