@@ -1522,6 +1522,16 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "cloud-004-k8s-host-network": r("Pod with hostNetwork: true (bypasses NetworkPolicy)", "Use a Service to expose ports — node-agent pattern is the only legitimate exception."),
   "cloud-005-dockerfile-secret-arg": r("Dockerfile ARG holding what looks like a secret", "Use BuildKit secret mounts (RUN --mount=type=secret) — ARG values are baked into image history."),
   "cloud-006-gha-third-party-no-sha": r("Third-party GitHub Action pinned to a tag", "Pin to a 40-char commit SHA. Tag refs are mutable and a repo takeover compromises every workflow using @v1."),
+
+  // ── P2.2 (v2.10.389) — Supply-Chain ────────────────────────
+  // Same annotation-tier reasoning as cloud — fixing supply-chain
+  // bugs requires understanding the build/release pipeline; the
+  // recipe points at the precise issue and the canonical guidance.
+  "supply-001-curl-pipe-shell": r("curl <url> | sh — fetch-and-run install", "Download to a file, verify checksum/signature, then run. Or use a signed package manager (apt, brew)."),
+  "supply-002-gha-pull-request-target-checkout-head": r("pull_request_target + checkout PR head — RCE-on-PR", "Switch to pull_request (no secrets), or pass forked PR data via labels/artifacts to a separate workflow without secrets."),
+  "supply-003-pip-extra-index-url": r("pip --extra-index-url — dependency confusion shape", "Use --index-url (single source). Mirror packages internally; pip install --require-hashes for production."),
+  "supply-004-npm-token-hardcoded": r("npm publish token hardcoded", W.SECRET),
+  "supply-005-eval-of-fetch": r("eval/Function over network-fetched payload", W.EVAL),
 };
 
 function commentPrefix(path: string): string {
