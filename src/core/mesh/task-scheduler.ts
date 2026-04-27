@@ -124,7 +124,7 @@ export class TaskScheduler {
       const peerIndex = Math.floor(i / chunkSize);
 
       if (peerIndex < peers.length) {
-        assignments.push({ peer: peers[peerIndex], files: chunk });
+        assignments.push({ peer: peers[peerIndex] ?? null, files: chunk });
       } else {
         assignments.push({ peer: null, files: chunk }); // Local execution
       }

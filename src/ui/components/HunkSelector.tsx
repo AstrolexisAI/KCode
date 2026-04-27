@@ -148,22 +148,22 @@ function SideBySideView({ hunk, dimmed }: { hunk: DiffHunk; dimmed: boolean }): 
   for (let i = 0; i < hunk.context.before.length; i++) {
     const lineNum = hunk.startLineOld - hunk.context.before.length + i;
     const lineNumNew = hunk.startLineNew - hunk.context.before.length + i;
-    leftLines.push({ num: lineNum, text: hunk.context.before[i], type: "ctx" });
-    rightLines.push({ num: lineNumNew, text: hunk.context.before[i], type: "ctx" });
+    leftLines.push({ num: lineNum, text: hunk.context.before[i]!, type: "ctx" });
+    rightLines.push({ num: lineNumNew, text: hunk.context.before[i]!, type: "ctx" });
   }
 
   // Changed lines
   for (let i = 0; i < hunk.linesRemoved.length; i++) {
     leftLines.push({
       num: hunk.startLineOld + i,
-      text: hunk.linesRemoved[i],
+      text: hunk.linesRemoved[i]!,
       type: "del",
     });
   }
   for (let i = 0; i < hunk.linesAdded.length; i++) {
     rightLines.push({
       num: hunk.startLineNew + i,
-      text: hunk.linesAdded[i],
+      text: hunk.linesAdded[i]!,
       type: "add",
     });
   }
@@ -180,14 +180,14 @@ function SideBySideView({ hunk, dimmed }: { hunk: DiffHunk; dimmed: boolean }): 
   for (let i = 0; i < hunk.context.after.length; i++) {
     const lineNum = hunk.endLineOld + 1 + i;
     const lineNumNew = hunk.endLineNew + 1 + i;
-    leftLines.push({ num: lineNum, text: hunk.context.after[i], type: "ctx" });
-    rightLines.push({ num: lineNumNew, text: hunk.context.after[i], type: "ctx" });
+    leftLines.push({ num: lineNum, text: hunk.context.after[i]!, type: "ctx" });
+    rightLines.push({ num: lineNumNew, text: hunk.context.after[i]!, type: "ctx" });
   }
 
   const rows: React.ReactElement[] = [];
   for (let i = 0; i < leftLines.length; i++) {
-    const left = leftLines[i];
-    const right = rightLines[i];
+    const left = leftLines[i]!;
+    const right = rightLines[i]!;
     rows.push(
       <Box key={i} gap={1}>
         {/* Left column (old) */}

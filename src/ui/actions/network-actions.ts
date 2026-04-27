@@ -120,8 +120,9 @@ export async function handleNetworkAction(
 
         lines.push(`  Status: ${resp.status} ${resp.statusText}\n`);
 
-        const maxKeyLen = Math.max(...[...resp.headers.keys()].map((k) => k.length), 4);
-        const sorted = [...resp.headers.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+        const headersExt = resp.headers as unknown as { keys(): Iterable<string>; entries(): Iterable<[string, string]> };
+        const maxKeyLen = Math.max(...[...headersExt.keys()].map((k) => k.length), 4);
+        const sorted = [...headersExt.entries()].sort((a, b) => a[0].localeCompare(b[0]));
         for (const [key, value] of sorted) {
           lines.push(`  ${key.padEnd(maxKeyLen)}  ${value}`);
         }

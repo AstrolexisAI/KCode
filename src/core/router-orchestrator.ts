@@ -176,7 +176,7 @@ async function executeSubTask(
 
   const route = await resolveModelForSubTask(task, defaultModel);
   const model = route?.model ?? defaultModel;
-  const baseUrl = route?.baseUrl ?? config.apiBase;
+  const baseUrl = route?.baseUrl ?? config.apiBase ?? "";
   const apiKey = route?.apiKey ?? config.apiKey;
 
   onProgress?.({ type: "task-start", id: task.id, intent: task.intent, model });

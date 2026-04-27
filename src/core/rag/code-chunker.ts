@@ -138,17 +138,17 @@ function detectLanguage(filepath: string): string {
 function findBlockEnd(lines: string[], startIdx: number, language: string): number {
   if (language === "python") {
     // Python: block ends when indentation returns to same level or less
-    const startLine = lines[startIdx];
-    const baseIndent = startLine.match(/^(\s*)/)?.[1].length ?? 0;
+    const startLine = lines[startIdx]!;
+    const baseIndent = startLine.match(/^(\s*)/)?.[1]?.length ?? 0;
     let end = startIdx + 1;
     while (end < lines.length) {
-      const line = lines[end];
+      const line = lines[end]!;
       // Skip empty lines
       if (line.trim().length === 0) {
         end++;
         continue;
       }
-      const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
+      const indent = line.match(/^(\s*)/)?.[1]?.length ?? 0;
       if (indent <= baseIndent) break;
       end++;
     }
@@ -159,7 +159,7 @@ function findBlockEnd(lines: string[], startIdx: number, language: string): numb
   let braceDepth = 0;
   let foundOpen = false;
   for (let i = startIdx; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i]!;
     for (const ch of line) {
       if (ch === "{") {
         braceDepth++;
@@ -180,11 +180,11 @@ function findBlockEnd(lines: string[], startIdx: number, language: string): numb
 function findImportBlockEnd(lines: string[], startIdx: number, importPattern: RegExp[]): number {
   let end = startIdx;
   while (end + 1 < lines.length) {
-    const nextLine = lines[end + 1].trim();
+    const nextLine = lines[end + 1]!.trim();
     // Continue if next line is an import or continuation (empty line between imports)
     if (nextLine.length === 0) {
       // Check if there's another import after the blank line
-      if (end + 2 < lines.length && importPattern.some((p) => p.test(lines[end + 2].trim()))) {
+      if (end + 2 < lines.length && importPattern.some((p) => p.test(lines[end + 2]!.trim()))) {
         end += 2;
         continue;
       }
@@ -238,7 +238,7 @@ export function chunkFile(filepath: string, content: string): CodeChunk[] {
   // Pass 1: Extract import blocks
   for (let i = 0; i < lines.length; i++) {
     if (consumed.has(i)) continue;
-    const trimmed = lines[i].trim();
+    const trimmed = lines[i]!.trim();
     if (patterns.importBlock.some((p) => p.test(trimmed))) {
       const blockEnd = findImportBlockEnd(lines, i, patterns.importBlock);
       const { content: chunkContent, lineEnd } = truncateChunk(lines, i, blockEnd);
@@ -259,7 +259,7 @@ export function chunkFile(filepath: string, content: string): CodeChunk[] {
   // Pass 2: Extract classes
   for (let i = 0; i < lines.length; i++) {
     if (consumed.has(i)) continue;
-    const trimmed = lines[i].trim();
+    const trimmed = lines[i]!.trim();
     for (const pat of patterns.classDecl) {
       const match = trimmed.match(pat);
       if (match) {
@@ -270,7 +270,7 @@ export function chunkFile(filepath: string, content: string): CodeChunk[] {
           lineStart: i + 1,
           lineEnd: lineEnd + 1,
           type: "class",
-          name: match[1],
+          name: match[1]!,
           content: chunkContent,
           language,
         });
@@ -284,7 +284,7 @@ export function chunkFile(filepath: string, content: string): CodeChunk[] {
   // Pass 3: Extract functions/methods
   for (let i = 0; i < lines.length; i++) {
     if (consumed.has(i)) continue;
-    const trimmed = lines[i].trim();
+    const trimmed = lines[i]!.trim();
     for (const pat of patterns.functionDecl) {
       const match = trimmed.match(pat);
       if (match) {
@@ -295,7 +295,7 @@ export function chunkFile(filepath: string, content: string): CodeChunk[] {
           lineStart: i + 1,
           lineEnd: lineEnd + 1,
           type: "function",
-          name: match[1],
+          name: match[1]!,
           content: chunkContent,
           language,
         });
@@ -309,17 +309,17 @@ export function chunkFile(filepath: string, content: string): CodeChunk[] {
   // Pass 4: Remaining unconsumed lines → fallback blocks
   const remaining: number[] = [];
   for (let i = 0; i < lines.length; i++) {
-    if (!consumed.has(i) && lines[i].trim().length > 0) remaining.push(i);
+    if (!consumed.has(i) && lines[i]!.trim().length > 0) remaining.push(i);
   }
   if (remaining.length > 0) {
     // Group contiguous remaining lines into blocks
-    let blockStart = remaining[0];
+    let blockStart = remaining[0]!;
     for (let r = 1; r <= remaining.length; r++) {
-      if (r === remaining.length || remaining[r] - remaining[r - 1] > 3) {
-        const blockEnd = remaining[r - 1];
+      if (r === remaining.length || remaining[r]! - remaining[r - 1]! > 3) {
+        const blockEnd = remaining[r - 1]!;
         const fallbackChunks = chunkLineRange(filepath, lines, blockStart, blockEnd, language);
         chunks.push(...fallbackChunks);
-        if (r < remaining.length) blockStart = remaining[r];
+        if (r < remaining.length) blockStart = remaining[r]!;
       }
     }
   }

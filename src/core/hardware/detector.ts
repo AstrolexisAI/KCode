@@ -34,7 +34,7 @@ export class HardwareDetector {
       try {
         const cpuinfo = await Bun.file("/proc/cpuinfo").text();
         const modelMatch = cpuinfo.match(/model name\s*:\s*(.+)/);
-        if (modelMatch) model = modelMatch[1].trim();
+        if (modelMatch) model = modelMatch[1]!.trim();
 
         // Count physical cores (unique core ids per physical id)
         const coreIds = new Set<string>();
@@ -42,7 +42,7 @@ export class HardwareDetector {
         for (const line of cpuinfo.split("\n")) {
           if (line.startsWith("processor")) processorCount++;
           const coreIdMatch = line.match(/core id\s*:\s*(\d+)/);
-          if (coreIdMatch) coreIds.add(coreIdMatch[1]);
+          if (coreIdMatch) coreIds.add(coreIdMatch[1]!);
         }
         threads = processorCount || 1;
         cores = coreIds.size || Math.ceil(threads / 2);
@@ -50,7 +50,7 @@ export class HardwareDetector {
         // Extract CPU features/flags
         const flagsMatch = cpuinfo.match(/flags\s*:\s*(.+)/);
         if (flagsMatch) {
-          const allFlags = flagsMatch[1].trim().split(/\s+/);
+          const allFlags = flagsMatch[1]!.trim().split(/\s+/);
           const interesting = [
             "avx",
             "avx2",
@@ -98,7 +98,7 @@ export class HardwareDetector {
       const os = await import("node:os");
       const cpus = os.cpus();
       if (cpus.length > 0) {
-        model = cpus[0].model;
+        model = cpus[0]!.model;
         threads = cpus.length;
         cores = Math.ceil(threads / 2);
       }
@@ -119,8 +119,8 @@ export class HardwareDetector {
         const meminfo = await Bun.file("/proc/meminfo").text();
         const totalMatch = meminfo.match(/MemTotal:\s+(\d+)\s+kB/);
         const availMatch = meminfo.match(/MemAvailable:\s+(\d+)\s+kB/);
-        if (totalMatch) totalGb = Math.round(parseInt(totalMatch[1], 10) / 1024 / 1024);
-        if (availMatch) availableGb = Math.round(parseInt(availMatch[1], 10) / 1024 / 1024);
+        if (totalMatch) totalGb = Math.round(parseInt(totalMatch[1]!, 10) / 1024 / 1024);
+        if (availMatch) availableGb = Math.round(parseInt(availMatch[1]!, 10) / 1024 / 1024);
       } catch (err) {
         log.debug("hardware", `Failed to read /proc/meminfo: ${err}`);
       }
@@ -181,8 +181,8 @@ export class HardwareDetector {
           if (parts.length >= 2) {
             gpus.push({
               vendor: "nvidia",
-              model: parts[0],
-              vramGb: Math.round(parseInt(parts[1], 10) / 1024),
+              model: parts[0]!,
+              vramGb: Math.round(parseInt(parts[1]!, 10) / 1024),
               driver: parts[2] || undefined,
               computeCapability: parts[3] || undefined,
             });
@@ -206,7 +206,7 @@ export class HardwareDetector {
             if (memResult.exitCode === 0) {
               const memMatch = memResult.stdout.toString().match(/Total Memory \(B\):\s+(\d+)/);
               if (memMatch) {
-                vramGb = Math.round(parseInt(memMatch[1], 10) / 1024 / 1024 / 1024);
+                vramGb = Math.round(parseInt(memMatch[1]!, 10) / 1024 / 1024 / 1024);
               }
             }
           } catch {
@@ -214,7 +214,7 @@ export class HardwareDetector {
           }
           gpus.push({
             vendor: "amd",
-            model: nameMatch[1].trim(),
+            model: nameMatch[1]!.trim(),
             vramGb,
           });
         }
@@ -263,10 +263,10 @@ export class HardwareDetector {
       if (result.exitCode === 0) {
         const lines = result.stdout.toString().trim().split("\n");
         if (lines.length >= 2) {
-          const parts = lines[1].split(/\s+/);
+          const parts = lines[1]!.split(/\s+/);
           // df -B1 output: Filesystem 1B-blocks Used Available Use% Mounted-on
           if (parts.length >= 4) {
-            availableGb = Math.round(parseInt(parts[3], 10) / 1024 / 1024 / 1024);
+            availableGb = Math.round(parseInt(parts[3]!, 10) / 1024 / 1024 / 1024);
           }
         }
       }

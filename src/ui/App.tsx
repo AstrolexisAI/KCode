@@ -211,8 +211,9 @@ export default function App({ config, conversationManager, tools, initialSession
       try {
         const { loadUserSettingsRaw } = await import("../core/config.js");
         const { getInstalledKodiCandidate } = await import("../core/kodi-model.js");
-        const raw = loadUserSettingsRaw();
-        const alreadyDeclined = Boolean(raw.kodiAdvisor?.declined);
+        const raw = await loadUserSettingsRaw();
+        const advisor = (raw.kodiAdvisor ?? {}) as { declined?: boolean; modelId?: string };
+        const alreadyDeclined = Boolean(advisor.declined);
         const alreadyInstalled = Boolean(getInstalledKodiCandidate());
         if (cancelled) return;
         if (!alreadyDeclined && !alreadyInstalled) {
@@ -234,8 +235,9 @@ export default function App({ config, conversationManager, tools, initialSession
     if (result.action === "declined") {
       try {
         const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("../core/config.js");
-        const raw = loadUserSettingsRaw();
-        raw.kodiAdvisor = { ...(raw.kodiAdvisor ?? {}), declined: true };
+        const raw = await loadUserSettingsRaw();
+        const advisor = (raw.kodiAdvisor ?? {}) as Record<string, unknown>;
+        raw.kodiAdvisor = { ...advisor, declined: true };
         saveUserSettingsRaw(raw);
       } catch {
         /* best effort */
@@ -243,9 +245,10 @@ export default function App({ config, conversationManager, tools, initialSession
     } else if (result.action === "downloaded") {
       try {
         const { loadUserSettingsRaw, saveUserSettingsRaw } = await import("../core/config.js");
-        const raw = loadUserSettingsRaw();
+        const raw = await loadUserSettingsRaw();
+        const advisor = (raw.kodiAdvisor ?? {}) as Record<string, unknown>;
         raw.kodiAdvisor = {
-          ...(raw.kodiAdvisor ?? {}),
+          ...advisor,
           modelId: result.candidateId,
           declined: false,
         };

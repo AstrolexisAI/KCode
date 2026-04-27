@@ -115,8 +115,8 @@ export default function InteractiveDiff({
         setHunks((prev) => {
           const updated = [...prev];
           for (let i = 0; i < updated.length; i++) {
-            if (updated[i].status === "pending") {
-              updated[i] = { ...updated[i], status: "accepted" };
+            if (updated[i]!.status === "pending") {
+              updated[i] = { ...updated[i]!, status: "accepted" };
             }
           }
           return updated;
@@ -129,8 +129,8 @@ export default function InteractiveDiff({
         setHunks((prev) => {
           const updated = [...prev];
           for (let i = 0; i < updated.length; i++) {
-            if (updated[i].status === "pending") {
-              updated[i] = { ...updated[i], status: "rejected" };
+            if (updated[i]!.status === "pending") {
+              updated[i] = { ...updated[i]!, status: "rejected" };
             }
           }
           return updated;

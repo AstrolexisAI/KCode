@@ -146,7 +146,7 @@ function MessageContent({ content }: { content: string }) {
     }
     const placeholder = `__CODE_BLOCK_${codeBlocks.length}__`;
     withCodePlaceholders.push(placeholder);
-    codeBlocks.push({ lang: match[1], code: match[2] });
+    codeBlocks.push({ lang: match[1]!, code: match[2]! });
     lastIdx = match.index + match[0].length;
   }
   if (lastIdx < content.length) {
@@ -159,11 +159,11 @@ function MessageContent({ content }: { content: string }) {
   const elements: JSX.Element[] = [];
 
   for (let i = 0; i < segments.length; i++) {
-    const seg = segments[i];
+    const seg = segments[i]!;
     const codeMatch = seg.match(/^__CODE_BLOCK_(\d+)__$/);
     if (codeMatch) {
-      const idx = parseInt(codeMatch[1], 10);
-      const block = codeBlocks[idx];
+      const idx = parseInt(codeMatch[1]!, 10);
+      const block = codeBlocks[idx]!;
       elements.push(
         <div key={`code-${i}`} style={styles.codeBlock}>
           {block.lang && <div style={styles.codeLang}>{block.lang}</div>}
