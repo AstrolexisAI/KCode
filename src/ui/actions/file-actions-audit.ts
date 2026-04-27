@@ -1056,18 +1056,26 @@ export async function handleAuditAction(
       } catch (err) {
         return `  ${(err as Error).message}`;
       }
-      const safeOnly = tokens.includes("--safe-only");
       // F6 (v2.10.369) — three explicit /fix modes:
       //   --safe-only  : only fix_support === "rewrite" findings, run normal fixer
       //   --annotate   : every finding becomes an audit-note comment, no logic change
       //   --all        : explicit name for the default behavior (rewrites + annotates + manual)
-      // --safe-only and --annotate are mutually exclusive — they
-      // disagree on what should happen to rewrite-tier findings.
+      // CL.8 (v2.10.378) — --ci is a synonym for --safe-only. CI
+      // pipelines should never auto-apply audit-note comments or
+      // claim a manual-tier finding was "fixed"; --safe-only is the
+      // right semantics. Naming it --ci makes the intent clear at
+      // the call site (`/fix . --ci`) without forcing the reviewer
+      // to remember which flag set is the safe one.
+      const ciMode = tokens.includes("--ci");
+      const safeOnly = tokens.includes("--safe-only") || ciMode;
       const annotateMode = tokens.includes("--annotate");
       const allMode = tokens.includes("--all");
+      // --safe-only / --ci and --annotate are mutually exclusive —
+      // they disagree on what should happen to rewrite-tier findings.
       if (safeOnly && annotateMode) {
+        const safeFlag = ciMode ? "--ci (alias for --safe-only)" : "--safe-only";
         return (
-          `  --safe-only and --annotate are mutually exclusive.\n` +
+          `  ${safeFlag} and --annotate are mutually exclusive.\n` +
           `  --safe-only applies rewrites; --annotate emits audit-note comments without changing code.\n` +
           `  Pick one.`
         );
@@ -1178,7 +1186,9 @@ export async function handleAuditAction(
       const skipped = fixes.filter((f) => f.kind === "skipped");
 
       const modeLabel = safeOnly
-        ? "  (--safe-only mode)"
+        ? ciMode
+          ? "  (--ci mode → --safe-only)"
+          : "  (--safe-only mode)"
         : annotateMode
           ? "  (--annotate mode — no code rewrites, audit-note comments only)"
           : allMode

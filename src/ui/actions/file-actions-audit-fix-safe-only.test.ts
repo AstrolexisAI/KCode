@@ -219,3 +219,41 @@ describe("/fix mode mutual exclusion", () => {
     expect(out).not.toContain("KCode Auto-Fixer");
   });
 });
+
+// CL.8 (v2.10.378) — --ci is an alias for --safe-only on /fix.
+// CI pipelines should never auto-apply audit-note comments or claim
+// a manual-tier finding was "fixed"; --safe-only is the right
+// semantics. Naming it --ci makes the intent obvious at the call
+// site without forcing the reviewer to remember which flag is safe.
+describe("/fix --ci alias", () => {
+  test("--ci behaves identically to --safe-only", async () => {
+    seedFix();
+    const ciResult = await handleAuditAction("fix", ctx(`${TMP} --ci`));
+    const ciOut = ciResult as string;
+    expect(ciOut).toContain("--ci mode → --safe-only");
+    // Same outcome as --safe-only: 1 rewrite applied, 2 held back.
+    expect(ciOut).toMatch(/✅ Rewritten:\s+1/);
+    expect(ciOut).toMatch(/📝 Annotated:\s+0/);
+    expect(ciOut).toMatch(/✋ Manual:\s+0/);
+    expect(ciOut).toContain("--safe-only held back 2 finding(s)");
+  });
+
+  test("--ci + --annotate is rejected with a clear message", async () => {
+    seedFix();
+    const result = await handleAuditAction("fix", ctx(`${TMP} --ci --annotate`));
+    const out = result as string;
+    expect(out).toContain("mutually exclusive");
+    expect(out).toContain("--ci");
+    expect(out).toContain("alias for --safe-only");
+  });
+
+  test("--ci + --safe-only together is fine (both safe)", async () => {
+    seedFix();
+    const result = await handleAuditAction("fix", ctx(`${TMP} --ci --safe-only`));
+    const out = result as string;
+    // Should run the fixer (no rejection); --ci wins on label
+    // because the explicit --ci flag is more specific.
+    expect(out).toContain("--ci mode");
+    expect(out).toMatch(/✅ Rewritten:\s+1/);
+  });
+});
