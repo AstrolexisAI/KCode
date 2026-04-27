@@ -72,7 +72,7 @@ export async function handleNetworkAction(
         ];
 
         // Show headers summary
-        const headerCount = [...resp.headers].length;
+        const headerCount = [...(resp.headers as unknown as Iterable<[string, string]>)].length;
         lines.push(`  Headers: ${headerCount}`);
         lines.push(``);
 

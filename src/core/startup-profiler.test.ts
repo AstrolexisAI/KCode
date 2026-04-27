@@ -95,7 +95,7 @@ describe("startup-profiler", () => {
       process.env.KCODE_PROFILE_STARTUP = "1";
       profileCheckpoint("x");
       const report = getProfileReport();
-      report.push({ name: "fake", timestamp: 999, delta: 0 });
+      report.push({ name: "fake", timestamp: 999, deltaMs: 0 });
       expect(getProfileReport()).toHaveLength(1); // original unaffected
     });
 

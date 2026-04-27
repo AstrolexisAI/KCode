@@ -1,6 +1,7 @@
 // KCode - Session Viewer Component (React)
 // Shows conversation messages with syntax highlighting and expandable tool calls.
 
+import type { JSX } from "react";
 import { useCallback, useEffect, useState } from "react";
 
 interface MessageEntry {

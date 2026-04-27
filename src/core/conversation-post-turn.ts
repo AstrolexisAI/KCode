@@ -606,6 +606,38 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
     log.debug("auto-memory", `hook error: ${err instanceof Error ? err.message : err}`);
   }
 
+  // Shared scope-flagger used by the grounding gate (line ~617) and
+  // the closeout renderer (line ~1384). Defined once at function scope
+  // so both downstream blocks can call it.
+  const { getTaskScopeManager } = await import("./task-scope.js");
+  const scopeMgr = getTaskScopeManager();
+  const flagScope = (
+    reason: string,
+    opts: {
+      mayClaimReady?: boolean;
+      mayClaimImplemented?: boolean;
+      mustUsePartialLanguage?: boolean;
+      phase?: "partial" | "failed" | "blocked";
+    } = {},
+  ) => {
+    const cur = scopeMgr.current();
+    if (!cur) return;
+    const updates: {
+      phase?: typeof cur.phase;
+      completion: Partial<typeof cur.completion>;
+    } = { completion: {} };
+    if (opts.mayClaimReady === false) updates.completion.mayClaimReady = false;
+    if (opts.mayClaimImplemented === false)
+      updates.completion.mayClaimImplemented = false;
+    if (opts.mustUsePartialLanguage === true)
+      updates.completion.mustUsePartialLanguage = true;
+    if (opts.phase) updates.phase = opts.phase as typeof cur.phase;
+    if (!cur.completion.reasons.includes(reason)) {
+      updates.completion.reasons = [...cur.completion.reasons, reason];
+    }
+    scopeMgr.update(updates);
+  };
+
   // Grounding gate — two checks before declaring "done":
   //   1. Scan files written/edited this turn for stub markers
   //      (stub_tx1, NotImplementedError, TODO, empty pass, …)
@@ -633,38 +665,9 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
       } = await import("./grounding-gate.js");
 
       // Phase 3: grounding detectors update the TaskScope instead of
-      // only emitting advisory banners. The scope becomes source of
-      // truth for "may this turn claim ready/done?" — phase 4 will
-      // have the closeout renderer consult it.
-      const { getTaskScopeManager } = await import("./task-scope.js");
-      const scopeMgr = getTaskScopeManager();
-      const flagScope = (
-        reason: string,
-        opts: {
-          mayClaimReady?: boolean;
-          mayClaimImplemented?: boolean;
-          mustUsePartialLanguage?: boolean;
-          phase?: "partial" | "failed";
-        } = {},
-      ) => {
-        const cur = scopeMgr.current();
-        if (!cur) return;
-        const updates: {
-          phase?: typeof cur.phase;
-          completion: Partial<typeof cur.completion>;
-        } = { completion: {} };
-        if (opts.mayClaimReady === false) updates.completion.mayClaimReady = false;
-        if (opts.mayClaimImplemented === false)
-          updates.completion.mayClaimImplemented = false;
-        if (opts.mustUsePartialLanguage === true)
-          updates.completion.mustUsePartialLanguage = true;
-        if (opts.phase) updates.phase = opts.phase;
-        // Accumulate reason, avoid duplicates
-        if (!cur.completion.reasons.includes(reason)) {
-          updates.completion.reasons = [...cur.completion.reasons, reason];
-        }
-        scopeMgr.update(updates);
-      };
+      // only emitting advisory banners. flagScope is hoisted to the
+      // function scope so both this gate and the later closeout
+      // renderer can share it.
 
       // Detect whether ANY tool result this turn was a BLOCKED response
       // (Edit/Write blocked, bash-mutation blocked, rewrite blocked, etc.).

@@ -45,7 +45,8 @@ async function fetchOpenAICompatibleModels(
               : typeof m.max_input_tokens === "number"
                 ? m.max_input_tokens
                 : undefined;
-      return { id, contextWindow: ctx } satisfies DiscoveredModel;
+      const result: DiscoveredModel = ctx !== undefined ? { id, contextWindow: ctx } : { id };
+      return result;
     })
     .filter((m): m is DiscoveredModel => m !== null);
 }
@@ -104,7 +105,8 @@ async function fetchAnthropicModels(apiKey: string): Promise<DiscoveredModel[]> 
           : typeof m.context_window === "number"
             ? m.context_window
             : undefined;
-      return { id, contextWindow: ctx } satisfies DiscoveredModel;
+      const result: DiscoveredModel = ctx !== undefined ? { id, contextWindow: ctx } : { id };
+      return result;
     })
     .filter((m): m is DiscoveredModel => m !== null);
 }

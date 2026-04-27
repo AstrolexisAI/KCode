@@ -719,12 +719,12 @@ export class ConversationManager {
 
       yield { type: "turn_start" };
 
-      let assistantContent: ContentBlock[];
-      let toolCalls: ToolUseBlock[];
-      let stopReason: string;
-      let turnInputTokens: number;
-      let turnOutputTokens: number;
-      let textChunks: string[];
+      let assistantContent: ContentBlock[] = [];
+      let toolCalls: ToolUseBlock[] = [];
+      let stopReason: string = "";
+      let turnInputTokens: number = 0;
+      let turnOutputTokens: number = 0;
+      let textChunks: string[] = [];
 
       // Check response cache before making API call
       const cacheDisabled = this.config.noCache || this.config.thinking;
@@ -773,7 +773,7 @@ export class ConversationManager {
                 );
                 let content = "";
                 for await (const chunk of stream) {
-                  if (chunk.type === "content" && chunk.text) content += chunk.text;
+                  if (chunk.type === "content_delta" && chunk.text) content += chunk.text;
                 }
                 return {
                   content,
