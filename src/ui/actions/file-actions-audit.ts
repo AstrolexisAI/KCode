@@ -506,6 +506,14 @@ export async function handleAuditAction(
         needs_context?: number;
         needs_context_detail?: Reviewable[];
         confirmed_findings: number;
+        pattern_metrics?: Record<string, {
+          hits: number;
+          unique_sites: number;
+          confirmed: number;
+          false_positive: number;
+          confirmed_rate?: number;
+          false_positive_rate?: number;
+        }>;
       };
       try {
         audit = JSON.parse(readFs(jsonPath, "utf-8")) as typeof audit;
@@ -540,6 +548,21 @@ export async function handleAuditAction(
         sev === "critical" ? "🔴" :
         sev === "high" ? "🟠" :
         sev === "medium" ? "🟡" : "🟢";
+      // P2.5 (v2.10.389) — surface pattern_metrics noise hints inline.
+      // External audit asked for "this pattern is 80% FP in your past
+      // reviews — likely false positive" prompts during triage. We
+      // start with the current-run metrics (cheap, no extra IO) and
+      // can extend to review-history's cross-run data later. Threshold:
+      // >=3 unique_sites + FP rate >50% — below that the sample is too
+      // small to be a useful signal.
+      const noiseHint = (patternId: string): string => {
+        const m = audit.pattern_metrics?.[patternId];
+        if (!m || m.unique_sites < 3) return "";
+        const fpRate = m.false_positive_rate;
+        if (fpRate === undefined || fpRate < 0.5) return "";
+        const pct = Math.round(fpRate * 100);
+        return ` ⚠ ${pct}% FP this run (${m.false_positive}/${m.unique_sites} sites)`;
+      };
       const fmtItem = (
         globalIdx: number,
         e: Reviewable,
@@ -554,8 +577,9 @@ export async function handleAuditAction(
         // triage; the kc-* hash is the one that survives reruns
         // and refactors.
         const idStr = e.finding_id ? `  ${e.finding_id}` : "";
+        const hint = noiseHint(e.pattern_id);
         return [
-          `    ${globalIdx}. ${icon(e.severity)} [${e.severity.toUpperCase()}] ${e.pattern_id}${idStr}${reasonStr}${tagStr}`,
+          `    ${globalIdx}. ${icon(e.severity)} [${e.severity.toUpperCase()}] ${e.pattern_id}${idStr}${reasonStr}${tagStr}${hint}`,
           `       ${rel}:${e.line}`,
           `       ${e.verification.reasoning.slice(0, 220)}`,
         ];

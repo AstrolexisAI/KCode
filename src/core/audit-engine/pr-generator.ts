@@ -19,6 +19,15 @@ export interface PrOptions {
   repo?: string;
   /** Don't actually push or create PR — just generate and show what would happen */
   dryRun?: boolean;
+  /**
+   * P2.6 (v2.10.389) — compact body mode. Replaces the per-finding
+   * card section (which can run hundreds of lines on large audits)
+   * with a one-line-per-finding table + a link to AUDIT_REPORT.md
+   * for full evidence. The Fixed / Manual / Ignored split stays.
+   * Useful for PR comments that get auto-truncated by GitHub or
+   * for shipping a concise reviewer-friendly summary.
+   */
+  compact?: boolean;
   /** Progress callback for each step */
   onStep?: (step: string) => void;
 }
@@ -398,6 +407,7 @@ const SUMMARY_PLACEHOLDER = "<!-- KCODE_SUMMARY -->";
 function buildStructuredPrBody(
   result: AuditResult,
   projectRoot: string,
+  compact = false,
 ): string {
   const lines: string[] = [];
   const fixSummary =
@@ -544,7 +554,23 @@ function buildStructuredPrBody(
       "_These were patched mechanically by `/fix`. Each finding has a fix recipe in the `rewrite` tier._",
     );
     lines.push("");
-    fixedFindings.forEach((f, i) => renderFindingCard(f, i));
+    if (compact) {
+      // P2.6 — one-line-per-finding row instead of the multi-line card.
+      // Full evidence is still in AUDIT_REPORT.md alongside the diff.
+      lines.push("| # | Severity | Pattern | File:Line |");
+      lines.push("|---|----------|---------|-----------|");
+      fixedFindings.forEach((f, i) => {
+        const rel = f.file.startsWith(projectRoot + "/")
+          ? f.file.slice(projectRoot.length + 1)
+          : f.file.replace(result.project + "/", "");
+        lines.push(
+          `| ${i + 1} | ${f.severity.toUpperCase()} | \`${f.pattern_id}\` | \`${rel}:${f.line}\` |`,
+        );
+      });
+      lines.push("");
+    } else {
+      fixedFindings.forEach((f, i) => renderFindingCard(f, i));
+    }
   }
 
   // ── Manual (needs human attention) ───────────────────────
@@ -562,11 +588,29 @@ function buildStructuredPrBody(
         "Read the evidence below and patch by hand._",
     );
     lines.push("");
-    manualFindings.forEach((f, i) =>
-      // Continue numbering so reviewers can reference findings by
-      // index across both sections without ambiguity.
-      renderFindingCard(f, i + fixedFindings.length),
-    );
+    if (compact) {
+      lines.push("| # | Severity | Pattern | File:Line |");
+      lines.push("|---|----------|---------|-----------|");
+      manualFindings.forEach((f, i) => {
+        const rel = f.file.startsWith(projectRoot + "/")
+          ? f.file.slice(projectRoot.length + 1)
+          : f.file.replace(result.project + "/", "");
+        lines.push(
+          `| ${i + fixedFindings.length + 1} | ${f.severity.toUpperCase()} | \`${f.pattern_id}\` | \`${rel}:${f.line}\` |`,
+        );
+      });
+      lines.push("");
+    } else {
+      manualFindings.forEach((f, i) =>
+        // Continue numbering so reviewers can reference findings by
+        // index across both sections without ambiguity.
+        renderFindingCard(f, i + fixedFindings.length),
+      );
+    }
+  }
+  if (compact) {
+    lines.push("> Compact body — see `AUDIT_REPORT.md` in the diff for full evidence per finding (sink, input boundary, execution path, suggested fix).");
+    lines.push("");
   }
 
   // ── Ignored / demoted ────────────────────────────────────
@@ -811,7 +855,7 @@ export async function createPr(opts: PrOptions): Promise<PrResult> {
   // This eliminates the v318/v320 class of bugs where mark7 emitted
   // chain-of-thought / hallucinated counts / fabricated CWE numbers
   // into the body — the LLM never writes any of those fields now.
-  const structured = buildStructuredPrBody(auditResult, projectRoot);
+  const structured = buildStructuredPrBody(auditResult, projectRoot, opts.compact === true);
   let executiveSummary = "";
   try {
     const raw = await llmCallback(buildExecutiveSummaryPrompt(auditResult));
