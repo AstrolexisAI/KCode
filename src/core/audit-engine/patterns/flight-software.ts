@@ -99,6 +99,59 @@ export const FLIGHT_SOFTWARE_PATTERNS: BugPattern[] = [
       "`FW_ASSERT(buf.getData() != nullptr);` or `if (buf.getData() == nullptr) return;` before use.",
   },
 
+  // ── Buffer pointer arithmetic without size check ────────────────
+  // v2.10.381 — found while dogfooding KCode against fprime. The
+  // existing fsw-005 pattern catches null-deref shape; this catches
+  // the read-past-end shape on the SAME callsite. Both can fire on
+  // the same line: `data.getData() + i` is unsafe in two distinct
+  // ways (null base AND offset-past-end), and each requires a
+  // different mitigation.
+  //
+  // Confirmed real bugs surfaced by this pattern in fprime:
+  //   Svc/FprimeDeframer/FprimeDeframer.cpp:92 — data.getData() + i
+  //     where i bounded by header.get_lengthField() (external bytes
+  //     from radio frame). No FW_ASSERT(data.getSize() >= ...).
+  //   Svc/Ccsds/{TcDeframer,SpacePacketDeframer}/*.cpp — same shape:
+  //     header field controls offset, no upstream size check.
+  {
+    id: "fsw-005b-buffer-size-unchecked",
+    title: "Fw::Buffer::getData() pointer arithmetic without getSize() bound check",
+    severity: "high",
+    languages: ["c", "cpp"],
+    pack: "embedded",
+    // Match `<name>.getData() + N` or `<name>.getData()[N]`.
+    //
+    // Negative lookbehind: skip the site if a `.getSize()` CALL
+    // appears in the prior 800 chars. We require the parens (an
+    // actual call, not just the text "getSize" appearing in a
+    // comment or documentation line) so prose mentions don't
+    // silence real bugs.
+    //
+    // 800-char window because realistic flight code has multi-line
+    // FW_ASSERTs (~200-300 chars themselves) followed by intermediate
+    // setup code before the use site. 300 was too tight (FP observed
+    // in fprime Svc/FileDownlink:384 where the FW_ASSERT covers
+    // the use 8 lines / ~400 chars later).
+    //
+    // We deliberately DON'T require the .getSize() reference to use
+    // the same buffer name as the use site. Multi-buffer functions
+    // exist but are rare in flight code; per-name binding produced
+    // FPs when a function asserted `data.getSize() >= N` and then
+    // accessed via a renamed local. Verifier handles residual FNs.
+    regex: /(?<!\.getSize\s*\(\s*\)[\s\S]{0,800})\b(\w+)\.getData\s*\(\s*\)\s*(?:\[|\+)/g,
+    explanation:
+      "Indexing or pointer-adding off `buffer.getData()` without first checking that `buffer.getSize()` covers the access range is a read-past-end-of-buffer vulnerability. In flight code this is most dangerous at protocol deframers where the read offset comes from an external length field — a malicious frame with `lengthField > buffer.getSize()` triggers heap-adjacent reads (Heartbleed-shape).",
+    verify_prompt:
+      "Find the access bound (loop limit, array index, pointer offset). Trace back to where it's derived from. Then check:\n" +
+      "1. The bound is from an external source (radio frame header, file packet length, ground command size) AND there's NO `FW_ASSERT(buf.getSize() >= bound)` upstream — CONFIRMED. Read-past-end via crafted input.\n" +
+      "2. The bound is from internal state (sizeof of compile-time struct, FW_NUM_ARRAY_ELEMENTS) — FALSE_POSITIVE.\n" +
+      "3. There's an upstream `FW_ASSERT(buf.getSize() >= ...)` or `if (buf.getSize() < ...) return error;` covering the access range — FALSE_POSITIVE.\n" +
+      "4. The bound is hardcoded to a value smaller than the buffer's known minimum size (e.g. `+ sizeof(FrameHeader)` and the Buffer is allocated to ALWAYS be ≥ FrameHeader+payload) — FALSE_POSITIVE if the allocator contract is documented.",
+    cwe: "CWE-125",
+    fix_template:
+      "Insert `FW_ASSERT(buf.getSize() >= <access_bound>);` BEFORE the pointer arithmetic. The bound is context-dependent (loop limit, header field, fixed offset) — KCode cannot infer it generically; this is the human's call.",
+  },
+
   // ── Dispatch loop without queue overflow check ──────────────────
   {
     id: "fsw-006-dispatch-loop-unbounded",

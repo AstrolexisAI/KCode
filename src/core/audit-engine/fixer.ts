@@ -1417,6 +1417,10 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "fsw-003-assert-as-validation": r("FW_ASSERT for input validation", "Use cmdResponse_VALIDATION_ERROR for untrusted input; keep FW_ASSERT for invariants."),
   "fsw-004-narrow-cast-no-check": r("narrowing cast", "Range-check the source value before static_cast to a narrower type."),
   "fsw-005-buffer-getdata-unchecked": r("Fw::Buffer.getData null deref", "Guard: FW_ASSERT(buf.getData() != nullptr) before use."),
+  "fsw-005b-buffer-size-unchecked": r(
+    "Fw::Buffer pointer arithmetic without size bound",
+    "Insert FW_ASSERT(buf.getSize() >= <access_bound>) BEFORE the getData()+N or getData()[N] use. The bound is context-dependent (loop limit, header length field, fixed offset) — KCode cannot infer it; this needs human attention.",
+  ),
   "fsw-006-dispatch-loop-unbounded": r("unbounded dispatch loop", "Cap messages per doDispatch() and yield to scheduler."),
   "fsw-007-assert-with-side-effect": r("FW_ASSERT with side effect", "Split: capture the side-effect into a variable, then FW_ASSERT the variable."),
   "fsw-008-time-ticks-overflow": r("tick rollover", "Use unsigned difference idiom: static_cast<U32>(now - last) for rollover safety."),
