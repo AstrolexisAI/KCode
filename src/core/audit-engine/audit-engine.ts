@@ -50,6 +50,15 @@ export interface AuditEngineOptions {
    */
   pack?: import("./types").PatternPack;
   /**
+   * Optional cancellation signal. The pipeline checks it at every
+   * phase boundary and propagates it into verification so an in-flight
+   * /scan can be interrupted from the TUI (Esc) without killing the
+   * process. The orchestrator throws ScanCancelledError when the
+   * signal aborts; callers should catch it and produce a soft message.
+   * v2.10.385.
+   */
+  signal?: AbortSignal;
+  /**
    * Progress reporting. The phase set is the union of stages the
    * runAudit pipeline can be in:
    *   initializing — fetching git submodules before any scan work
@@ -319,6 +328,16 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
   }
 
   // Phase 2: Verification (optional)
+  // Cancellation gate: if the user already hit Esc during the scanning
+  // phase (which can be slow on large repos), short-circuit before the
+  // verifier loop so we don't burn LLM calls for a result that will be
+  // discarded.
+  if (opts.signal?.aborted) {
+    const { ScanCancelledError } = await import("./scan-state");
+    throw new ScanCancelledError(
+      `Scan cancelled before verification (${candidates.length} candidates queued)`,
+    );
+  }
   let verified: Array<{ candidate: Candidate; verification: Verification }>;
   let falsePositives = 0;
 
@@ -346,6 +365,7 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
             opts.onCandidate?.(cand, ver, i, total);
           }
         : undefined,
+      ...(opts.signal ? { signal: opts.signal } : {}),
     };
     const verifiedSubset = await verifyAllCandidates(candidatesToVerify, verifyOpts);
     // Stitch suppressed candidates back into the result with a
