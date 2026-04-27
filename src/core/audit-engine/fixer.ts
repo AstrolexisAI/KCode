@@ -1542,6 +1542,12 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "next-003-next-public-secret": r("NEXT_PUBLIC_<NAME> with secret-shaped name (bundled to client)", "Drop the NEXT_PUBLIC_ prefix; secrets must stay server-side. If the browser needs the API, proxy through a Route Handler."),
   "next-004-route-handler-no-auth": r("App Router route handler reads request data without auth", "Add `const session = await auth(); if (!session?.user) return new Response('unauthorized', { status: 401 });` at the top."),
   "next-005-redirect-from-query": r("redirect/router.push with a raw query value", "Validate against an allowlist or restrict to relative paths (`!url.startsWith('/') || url.startsWith('//')` → reject)."),
+
+  // ── P2.3 (v2.10.391) — FastAPI framework pack ──────────────
+  "fastapi-002-cors-wildcard-with-credentials": r("CORS allow_origins='*' + allow_credentials=True", "The two cannot coexist safely. Pick: explicit origin allowlist + credentials, OR '*' without credentials."),
+  "fastapi-003-jwt-no-verify": r("jwt.decode without signature verification", "Pass the verification key + algorithms=['RS256'] (or your signer's algorithm). Never decode without verification."),
+  "fastapi-004-pickle-from-request": r("pickle.loads on attacker-reachable input — RCE", W.DESER),
+  "fastapi-005-route-no-auth-on-mutation": r("Mutation endpoint without an auth Depends", "Add `user: User = Depends(get_current_user)` to the signature, or attach dependencies=[Depends(verify_user)] to the router."),
 };
 
 function commentPrefix(path: string): string {
