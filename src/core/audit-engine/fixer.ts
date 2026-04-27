@@ -1510,6 +1510,18 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
   "php-ast-001-eval-of-parameter": r("eval / assert of parameter (RCE)", W.EVAL),
   "php-ast-002-shell-of-parameter": r("system / shell_exec / passthru of parameter (command injection)", W.SHELL),
   "php-ast-003-include-of-parameter": r("include / require / file_get_contents of parameter (RFI/LFI/path traversal)", W.PATH),
+
+  // ── P2.1 (v2.10.389) — Cloud / IaC ─────────────────────────
+  // Annotation-tier only: IaC fixes are too context-dependent for
+  // automated rewrites (which capabilities does this pod actually
+  // need? which actions does this role actually call?). The
+  // annotations point the reviewer at the precise issue.
+  "cloud-001-iam-wildcard-action": r("IAM Action='*' grants full account surface", "Replace with the explicit list of API calls the role needs."),
+  "cloud-002-tf-public-s3": r("S3 bucket with public-read ACL", "Use private ACL + CloudFront with an Origin Access Identity for public assets."),
+  "cloud-003-k8s-privileged-container": r("Kubernetes privileged container (full host root)", "Drop privileged: true; request specific capabilities via securityContext.capabilities.add."),
+  "cloud-004-k8s-host-network": r("Pod with hostNetwork: true (bypasses NetworkPolicy)", "Use a Service to expose ports — node-agent pattern is the only legitimate exception."),
+  "cloud-005-dockerfile-secret-arg": r("Dockerfile ARG holding what looks like a secret", "Use BuildKit secret mounts (RUN --mount=type=secret) — ARG values are baked into image history."),
+  "cloud-006-gha-third-party-no-sha": r("Third-party GitHub Action pinned to a tag", "Pin to a 40-char commit SHA. Tag refs are mutable and a repo takeover compromises every workflow using @v1."),
 };
 
 function commentPrefix(path: string): string {

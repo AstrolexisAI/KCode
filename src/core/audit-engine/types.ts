@@ -110,7 +110,11 @@ export type Language =
   | "javascript" | "typescript" | "swift" | "java"
   | "kotlin" | "csharp" | "php" | "ruby" | "dart"
   | "scala" | "elixir" | "lua" | "zig" | "haskell"
-  | "perl" | "r" | "julia" | "sql" | "matlab" | "shell";
+  | "perl" | "r" | "julia" | "sql" | "matlab" | "shell"
+  // P2.1 (v2.10.389) — IaC at-rest scanning. yaml covers Kubernetes
+  // manifests + GitHub Actions workflows; terraform is .tf; dockerfile
+  // is matched by filename (no extension) in scanner.ts.
+  | "yaml" | "terraform" | "dockerfile";
 
 /**
  * A bug pattern is a rule that identifies a specific class of dangerous code.
