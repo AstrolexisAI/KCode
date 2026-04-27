@@ -69,6 +69,10 @@ import { SUPPLY_CHAIN_PATTERNS } from "./patterns/supply-chain";
 import { NEXTJS_PATTERNS } from "./patterns/nextjs";
 // P2.3 (v2.10.391) — FastAPI framework pack.
 import { FASTAPI_PATTERNS } from "./patterns/fastapi";
+// P2.3 (v2.10.391) — Express framework pack.
+import { EXPRESS_PATTERNS } from "./patterns/express";
+// P2.3 (v2.10.391) — Django framework pack.
+import { DJANGO_PATTERNS } from "./patterns/django";
 
 // Re-export every per-language array so existing imports keep working.
 export {
@@ -101,6 +105,8 @@ export {
   SUPPLY_CHAIN_PATTERNS,
   NEXTJS_PATTERNS,
   FASTAPI_PATTERNS,
+  EXPRESS_PATTERNS,
+  DJANGO_PATTERNS,
 };
 
 export const ALL_PATTERNS: BugPattern[] = [
@@ -133,6 +139,8 @@ export const ALL_PATTERNS: BugPattern[] = [
   ...SUPPLY_CHAIN_PATTERNS,
   ...NEXTJS_PATTERNS,
   ...FASTAPI_PATTERNS,
+  ...EXPRESS_PATTERNS,
+  ...DJANGO_PATTERNS,
 ];
 
 /** Return all patterns applicable to the given language. */
