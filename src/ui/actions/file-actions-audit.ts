@@ -25,6 +25,10 @@ export async function handleAuditAction(
         return `  ${(err as Error).message}`;
       }
       const skipVerify = tokens.includes("--skip-verify");
+      // P1.3 (v2.10.389) — opt-in exploit proof generation. Off by
+      // default; enabled with /scan --exploits to produce PoC data
+      // for confirmed findings (security-review / customer-report flow).
+      const generateExploits = tokens.includes("--exploits") || tokens.includes("--proofs");
       // CL.6 (v2.10.376) — /scan now passes through engine flags that
       // were previously CLI-only. Same parser shape as the audit
       // command in cli/commands/audit.ts so users get one mental
@@ -161,6 +165,7 @@ export async function handleAuditAction(
             // --max-files <n> if they want partial coverage.
             maxFiles: parsedMaxFiles ?? Number.MAX_SAFE_INTEGER,
             skipVerification: skipVerify,
+            generateExploits,
             // CL.6 — pass through diff-based audit and pack filter.
             ...(sinceRef ? { since: sinceRef } : {}),
             ...(packArg
@@ -239,6 +244,7 @@ export async function handleAuditAction(
                   signal: controller.signal,
                   maxFiles: parsedMaxFiles ?? Number.MAX_SAFE_INTEGER,
                   skipVerification: false,
+                  generateExploits,
                   ...(sinceRef ? { since: sinceRef } : {}),
                   ...(packArg
                     ? { pack: packArg as "web" | "ai-ml" | "cloud" | "supply-chain" | "embedded" }

@@ -104,6 +104,14 @@ export function registerAuditCommand(program: Command): void {
         "v2.10.353 — designed for PR pre-merge gates.",
       false,
     )
+    .option(
+      "--exploits",
+      "Generate proof-of-concept exploit data for each confirmed finding. " +
+        "Templates exist for ~10 patterns (deterministic PoCs); uncovered patterns optionally use " +
+        "the verifier model for an LLM-assisted PoC. Adds an Exploit Proofs section to the report. " +
+        "Never executes anything — just structured PoC data. P1.3 (v2.10.389).",
+      false,
+    )
     .action(async (path: string, opts: {
       output?: string;
       model?: string;
@@ -119,6 +127,7 @@ export function registerAuditCommand(program: Command): void {
       json: boolean;
       sarif: boolean;
       ci: boolean;
+      exploits: boolean;
     }) => {
       const projectRoot = pathResolve(path);
       const outputPath = opts.output ?? pathResolve(projectRoot, "AUDIT_REPORT.md");
@@ -239,6 +248,7 @@ export function registerAuditCommand(program: Command): void {
         fallbackCallback,
         maxFiles,
         skipVerification: opts.skipVerify,
+        generateExploits: opts.exploits,
         since: opts.since,
         ...(opts.pack
           ? { pack: opts.pack as "web" | "ai-ml" | "cloud" | "supply-chain" | "embedded" }
