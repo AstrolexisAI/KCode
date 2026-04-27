@@ -157,6 +157,13 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     opts.onPhase?.("discovery");
   }
 
+  // v2.10.388 — yield to event loop so the TUI's setInterval polling
+  // can render the indeterminate progress bar BEFORE scanProject
+  // blocks the thread for ~5-15s. Without this, the user pressed
+  // Enter on /scan and saw a blank screen for 15+ seconds because
+  // setInterval(200ms) couldn't fire while scanProject ran.
+  await new Promise((r) => setImmediate(r));
+
   // Phase 1: Discovery + scanning.
   //
   // When `opts.since` is set we run scanProject as usual to get the
@@ -171,6 +178,11 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     const { ALL_PATTERNS } = await import("./patterns");
     regexPatterns = ALL_PATTERNS.filter((p) => p.pack === opts.pack);
   }
+  opts.onPhase?.("scanning", "regex patterns over file tree");
+  // Yield once more right before the heavy scan so the phase update
+  // above lands on screen before the (sync, multi-second) scanProject
+  // call locks the event loop.
+  await new Promise((r) => setImmediate(r));
   let scanResult = scanProject(opts.projectRoot, {
     maxFiles: opts.maxFiles,
     ...(regexPatterns ? { patterns: regexPatterns } : {}),
@@ -250,6 +262,14 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     if (allAstPatterns.length > 0 && files.length > 0) {
       const { readFileSync } = await import("node:fs");
       let astTotal = 0;
+      // v2.10.388 — yield every YIELD_EVERY files so the TUI poll can
+      // refresh elapsed time and the indeterminate bar keeps moving.
+      // Tree-sitter parsing is sync C++ that blocks ~50-300ms per file;
+      // accumulating without yields keeps the bar frozen for 10s+ on
+      // large repos. 32 is the empirical sweet spot — small enough to
+      // give visible motion, big enough that yield overhead is <1%.
+      const YIELD_EVERY = 32;
+      let i = 0;
       for (const file of files) {
         let content: string;
         try {
@@ -274,6 +294,11 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
           if (s.grammar_loaded) cur.loaded = true;
           else if (s.load_error) cur.last_error = s.load_error;
           astLangAgg.set(lang, cur);
+        }
+        i++;
+        if (i % YIELD_EVERY === 0) {
+          opts.onPhase?.("scanning", `AST: ${i}/${files.length} files`);
+          await new Promise((r) => setImmediate(r));
         }
       }
       if (astTotal > 0) {

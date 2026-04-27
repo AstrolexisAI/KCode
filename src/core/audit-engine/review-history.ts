@@ -30,9 +30,10 @@ export interface PatternNoiseEntry {
   /** Count of distinct demotions across all paths in this project. */
   demoted_count: number;
   /**
-   * Per-path-glob counts. Keys are file path globs derived from the
-   * demoted file (e.g. `*/test/*`, `src/legacy/*`). Lets the runtime
-   * say "this pattern is high-noise in test paths but fine in src".
+   * Per-path-glob counts. Keys are coarse path-bucket strings derived
+   * from the demoted file (e.g. "test:*" for any path under a tests
+   * tree, "src/legacy:*" for a specific subtree). Lets the runtime say
+   * "this pattern is high-noise in test paths but fine in src".
    */
   by_path_glob: Record<string, number>;
   /** Last demotion timestamp (ISO 8601). */

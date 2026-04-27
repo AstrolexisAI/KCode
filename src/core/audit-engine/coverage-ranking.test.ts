@@ -398,7 +398,11 @@ describe("generateMarkdownReport — coverage + FP section", () => {
 
 // v2.10.351 P1.1 — Audit Confidence header rendering.
 describe("generateMarkdownReport — Audit Confidence header (v2.10.351 P1)", () => {
-  const baseAudit = (overrides: Record<string, unknown>) => ({
+  // Explicit Partial<_MdInput> return type so the empty-array literals
+  // below don't infer as `never[]` and trip TS2345 against the typed
+  // helper. Same pattern as `renderMd` — fixtures are intentionally
+  // partial and we cast at the call site.
+  const baseAudit = (overrides: Record<string, unknown>): Partial<_MdInput> => ({
     project: "/repo",
     timestamp: "2026-04-25",
     languages_detected: ["c"],
