@@ -30,7 +30,7 @@ KCode flips the architecture: **scan deterministically, verify locally.**
 
 ```
   ┌──────────────────────────────────────────────────┐
-  │  256 hand-written patterns scan your source      │
+  │  399 hand-written patterns scan your source      │
   │  (C, Rust, Go, Python, TypeScript, and 20 more)  │
   └────────────────────┬─────────────────────────────┘
                        │
@@ -163,7 +163,7 @@ Everything in Individual Pro plus:
 
 - **Bun + TypeScript** — single static binary, no runtime dependencies
 - **React/Ink terminal UI** — modern interactive CLI, not a REPL
-- **256 patterns** covering C, Rust, Go, Python, TypeScript, JavaScript,
+- **399 patterns** covering C, Rust, Go, Python, TypeScript, JavaScript,
   Java, Kotlin, Swift, Ruby, PHP, C#, Dart, Scala, and 10 more
 - **Local verifier** — runs on a 24GB GPU (RTX 4090, M2 Max) or falls
   back to cloud for weak hardware with BYO API keys

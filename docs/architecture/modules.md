@@ -21,7 +21,7 @@ of them breaks the product for everyone.
 | Module | Path | Role |
 |--------|------|------|
 | Audit engine | `src/core/audit-engine/` | The product. Patterns, scanner, verifier, report-generator, fixer, exploit-gen, SARIF exporter. |
-| Scanner + patterns | `src/core/audit-engine/patterns.ts`, `scanner.ts` | 257 curated patterns + regex engine + comment-awareness. |
+| Scanner + patterns | `src/core/audit-engine/patterns.ts`, `scanner.ts` | 399 curated patterns (372 regex + 27 AST) + regex engine + comment-awareness + opt-in `kcode-disable: audit` marker. |
 | Conversation loop | `src/core/conversation.ts` | Orchestrates the LLM turn lifecycle. |
 | Configuration | `src/core/config.ts` | Settings hierarchy + validation. |
 | Permissions | `src/core/permissions*` | Security model + audit log. |

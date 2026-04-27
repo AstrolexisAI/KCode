@@ -431,6 +431,14 @@ export interface AuditCoverage {
    * from "no diff at all". v2.10.335.
    */
   changedFilesInDiff?: number;
+  /**
+   * v2.10.394 — files that carried a `kcode-disable: audit` directive
+   * and were therefore skipped from pattern matching. Surfaced so the
+   * audit summary can report "audit-disabled: 6 files" — without the
+   * counter the marker mechanism could silently hide findings.
+   * External audit P1.
+   */
+  auditDisabledFiles?: string[];
 }
 
 /**

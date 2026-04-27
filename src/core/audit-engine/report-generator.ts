@@ -297,6 +297,16 @@ function renderAuditConfidence(result: AuditResult, lines: string[]): void {
       `Coverage truncated — only ${cov.scannedFiles} / ${cov.totalCandidateFiles} files scanned. Re-run with \`--max-files ${Math.min(cov.totalCandidateFiles, cov.maxFiles * 4)}\` for full coverage.`,
     );
   }
+  // v2.10.394 — surface files that carried `kcode-disable: audit`. Without
+  // this line the marker mechanism would silently exclude findings.
+  // External audit P1.
+  const disabled = cov?.auditDisabledFiles ?? [];
+  if (disabled.length > 0) {
+    warnings.push(
+      `Audit-disabled: ${disabled.length} file(s) carried a \`kcode-disable: audit\` directive and were skipped from pattern matching. ` +
+      `Files: ${disabled.slice(0, 3).map((f) => f.split("/").pop()).join(", ")}${disabled.length > 3 ? `, +${disabled.length - 3} more` : ""}.`,
+    );
+  }
   if (astStatus.some((s) => !s.loaded)) {
     warnings.push(
       "AST coverage degraded — at least one grammar failed to load. Run `kcode grammars install` and re-run the audit.",
