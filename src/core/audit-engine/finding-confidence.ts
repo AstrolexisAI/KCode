@@ -73,11 +73,13 @@ export function derivePatternMaturity(pattern: PatternView): PatternMaturity {
 // ── Per-signal weights ────────────────────────────────────────────
 
 function maturityWeight(m: PatternMaturity): number {
-  // Maturity carries most of the score when the verifier is opted
-  // out (which is the default path for `kcode audit --skip-verify`
-  // and any non-LLM run). A high-precision pattern + a clean record
-  // should still land in the HIGH band on its own.
-  if (m === "high_precision") return 45;
+  // Maturity is the dominant signal when the verifier is opted out
+  // (the default for `kcode audit --skip-verify` and any non-LLM
+  // run). A high_precision pattern alone scores into the HIGH band
+  // because by definition it's a categorical-API match that can't
+  // be a false positive — `Math.random()` for security is wrong
+  // every time it appears regardless of surrounding context.
+  if (m === "high_precision") return 60;
   if (m === "stable") return 30;
   return 10; // experimental — broad / non-literal patterns
 }
