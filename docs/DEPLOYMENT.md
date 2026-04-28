@@ -100,7 +100,7 @@ kcode models add mnemo:mark4 http://localhost:8090 \
 ### Verify Installation
 
 ```bash
-kcode --version           # Should print 0.1.0
+kcode --version           # Should print the current version (matches package.json)
 kcode models list         # Should show all registered models
 kcode "say hello"         # Quick test
 ```
@@ -133,7 +133,7 @@ User Input
      ▼          ▼
 ┌──────────┐ ┌──────────────────┐
 │ LLM API  │ │  Tool Registry   │
-│ (SSE)    │ │  (17 tools)      │
+│ (SSE)    │ │  (48 tools)      │
 │          │ │                  │
 │ llama-   │ │  Bash, Read,     │
 │ server   │ │  Write, Edit,    │
@@ -343,10 +343,10 @@ bun test
 # Build standalone binary
 bun run build.ts
 
-# Version bump
-bun run version:patch   # 0.1.0 → 0.1.1
-bun run version:minor   # 0.1.0 → 0.2.0
-bun run version:major   # 0.1.0 → 1.0.0
+# Version bump (current version is in package.json)
+bun run version:patch   # X.Y.Z → X.Y.(Z+1)
+bun run version:minor   # X.Y.Z → X.(Y+1).0
+bun run version:major   # X.Y.Z → (X+1).0.0
 ```
 
 ### Project Structure

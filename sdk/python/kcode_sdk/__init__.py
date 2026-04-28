@@ -20,14 +20,14 @@ class KCodeClient:
     """Client for the KCode HTTP API.
 
     Args:
-        base_url: Base URL of the KCode server. Default: http://localhost:19300
+        base_url: Base URL of the KCode server. Default: http://localhost:10101
         api_key: Bearer token for authentication. Optional.
         timeout: Request timeout in seconds. Default: 30.
     """
 
     def __init__(
         self,
-        base_url: str = "http://localhost:19300",
+        base_url: str = "http://localhost:10101",
         api_key: Optional[str] = None,
         timeout: int = 30,
     ):
