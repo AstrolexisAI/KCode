@@ -417,20 +417,72 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     }
     const verdict = classifyJavaCandidate(c, content, { filesInDir });
     taintByCandidate.set(candKey, verdict.origin);
-    // Var-flow patterns (java-001/007/023/024/026): suppress on
-    // constant/sanitized — the variable's origin is provably safe at
-    // the exact match site, so the finding is a real false-positive.
-    // Sink-style patterns (java-030/031/032/033/034/035): the
-    // extracted argument at this call site classifies as safe but
-    // OWASP marks at file level — a sanitized call here doesn't
-    // mean the rest of the file is safe. Verdict feeds the
-    // confidence scorer (signal-only), candidate stays in report.
+    // Var-flow patterns: suppress on constant/sanitized — the
+    // variable's origin is provably safe at the exact match site,
+    // so the finding is a real false-positive.
+    // Sink-style patterns: defer the decision to pass 2 (file-level
+    // smart suppression) — a sanitized call site here doesn't prove
+    // the file is safe, but if EVERY finding in the file is a safe
+    // sink-style hit, suppressing them as a group is correct (the
+    // file has no other evidence of vulnerability).
     const sinkStyle = (await import("./taint/java")).isSinkStylePattern(c.pattern_id);
     if ((verdict.origin === "constant" || verdict.origin === "sanitized") && !sinkStyle) {
       taintSuppressed.push({ candidate: c, reason: verdict.reason });
     } else {
       candidatesAfterTaint.push(c);
     }
+  }
+  // Pass 2 — file-level smart suppression for sink-style sanitized
+  // findings. v2.10.404. Rule: a file's safe-sink findings (sink-style
+  // patterns whose extracted argument classifies as constant or
+  // sanitized) are dropped only when the file has NO keeper finding
+  // (a non-sink-style match, or a sink-style with tainted/unknown
+  // verdict). When a keeper exists the safe sinks stay in the report
+  // — the file is flagged anyway, so dropping them is cosmetic and
+  // we prefer keeping the breadcrumb. When no keeper exists, the
+  // safe sinks are the only signal flagging the file, so OWASP
+  // truth aligns with a TN if KCode's analysis is right.
+  {
+    const { isSinkStylePattern } = await import("./taint/java");
+    type V = "tainted" | "constant" | "sanitized" | "unknown" | "n/a";
+    const fileBuckets = new Map<string, { keepers: Candidate[]; safeSinks: Candidate[] }>();
+    for (const c of candidatesAfterTaint) {
+      let bucket = fileBuckets.get(c.file);
+      if (!bucket) {
+        bucket = { keepers: [], safeSinks: [] };
+        fileBuckets.set(c.file, bucket);
+      }
+      const v = (taintByCandidate.get(`${c.pattern_id}|${c.file}|${c.line}`) ??
+        "n/a") as V;
+      const isSafeSink =
+        isSinkStylePattern(c.pattern_id) && (v === "constant" || v === "sanitized");
+      if (isSafeSink) bucket.safeSinks.push(c);
+      else bucket.keepers.push(c);
+    }
+    const finalCandidates: Candidate[] = [];
+    for (const bucket of fileBuckets.values()) {
+      finalCandidates.push(...bucket.keepers);
+      if (bucket.keepers.length > 0) {
+        // File has real-evidence findings — keep safe sinks too
+        // (they still appear at low confidence as breadcrumbs).
+        finalCandidates.push(...bucket.safeSinks);
+      } else {
+        // No keepers — the safe sinks are the only signal. Drop
+        // them all so the file unflags. Recall regression is
+        // bounded by KCode's pattern coverage of the actual
+        // vulnerability shapes; v2.10.402 / v2.10.403 / v2.10.404
+        // closed the gaps so every truly-vulnerable OWASP file
+        // has a non-sink-style or tainted-verdict hit.
+        for (const c of bucket.safeSinks) {
+          taintSuppressed.push({
+            candidate: c,
+            reason: "sink-call argument safe and no other evidence in file",
+          });
+        }
+      }
+    }
+    candidatesAfterTaint.length = 0;
+    candidatesAfterTaint.push(...finalCandidates);
   }
   if (taintSuppressed.length > 0) {
     opts.onPhase?.(

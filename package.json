@@ -1,6 +1,6 @@
 {
   "name": "@astrolexisai/kcode",
-  "version": "2.10.403",
+  "version": "2.10.404",
   "description": "AI-powered coding assistant for the terminal - by Astrolexis",
   "author": "Astrolexis",
   "module": "src/index.ts",
