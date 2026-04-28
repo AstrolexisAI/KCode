@@ -746,4 +746,30 @@ export const JAVA_PATTERNS: BugPattern[] = [
     fix_template:
       "Validate before setting: if (Pattern.matches(\"^[A-Za-z0-9_-]+$\", value)) response.setHeader(\"X-Custom\", value);",
   },
+
+  // ── XSS via bound PrintWriter variable (CWE-79) ─────────────────
+  // OWASP shape: `PrintWriter out = response.getWriter(); ...
+  // out.format(Locale.US, fmt, obj);` — same xss as java-030 but
+  // the writer is held in a local variable, so the regex anchored
+  // on `response.getWriter()...` doesn't match. Captures the var
+  // name with `(\w+)` and re-uses it later via `\1` to find the
+  // sink call. v2.10.404.
+  {
+    id: "java-036-xss-printwriter-var",
+    title: "PrintWriter from response.getWriter() used as a sink (var-flow)",
+    severity: "high",
+    languages: ["java"],
+    regex:
+      /\b(?:java\.io\.)?PrintWriter\s+(\w+)\s*=\s*response\.getWriter\s*\(\s*\)\s*;[\s\S]{0,400}?\b\1\s*\.\s*(?:print|println|printf|write|format|append)\s*\(/g,
+    explanation:
+      "A PrintWriter obtained from response.getWriter() is being written to with a non-literal first argument. The variable assignment + later sink call is the same xss shape java-030 handles for the inline form; this catches it when the writer is held in a local variable. CWE-79.",
+    verify_prompt:
+      "Trace the first argument of the print/println/printf/write/format call.\n" +
+      "1. CONFIRMED if any source path leads to request.getParameter / getHeader / getCookies / getRequestURI.\n" +
+      "2. FALSE_POSITIVE if all path values pass through HTML-encode (Encode.forHtml, ESAPI.encoder, HtmlUtils.htmlEscape, Apache StringEscapeUtils.escapeHtml).\n" +
+      "3. FALSE_POSITIVE if the value is a class constant or static config — no request input upstream.",
+    cwe: "CWE-79",
+    fix_template:
+      "Encode before writing: out.write(org.owasp.encoder.Encode.forHtml(value));",
+  },
 ];
