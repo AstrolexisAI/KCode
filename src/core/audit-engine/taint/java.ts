@@ -164,9 +164,9 @@ const SINK_PATTERN_ANCHORS: Record<string, RegExp> = {
   "java-030-xss-writer-non-literal":
     /\bresponse\.getWriter\s*\(\s*\)\s*\.\s*(?:print|println|printf|write|format|append)\s*\(/,
   "java-031-cmdi-exec-non-literal":
-    /\b(?:Runtime\.getRuntime\(\)\.exec|new\s+ProcessBuilder|ProcessBuilder\s*\.\s*command|Process\s*\.\s*(?:exec|start))\s*\(/,
+    /\b(?:(?:java\.lang\.)?Runtime\.getRuntime\(\)\.exec|\w+\.exec|new\s+(?:java\.lang\.)?ProcessBuilder|ProcessBuilder\s*\.\s*command|Process\s*\.\s*(?:exec|start))\s*\(/,
   "java-032-path-file-non-literal":
-    /\b(?:new\s+(?:java\.io\.)?File|new\s+(?:java\.io\.)?FileInputStream|new\s+(?:java\.io\.)?FileReader|Paths\.get|Path\.of)\s*\(/,
+    /\b(?:new\s+(?:java\.io\.)?(?:File|FileInputStream|FileOutputStream|FileReader|FileWriter|RandomAccessFile)|(?:java\.nio\.file\.)?Files\.\w+|(?:java\.nio\.file\.)?Paths\.get|(?:java\.nio\.file\.)?Path\.of)\s*\(/,
   "java-033-ldap-non-literal":
     /\b(?:DirContext|InitialDirContext|InitialContext)\s*[\w.]*\.\s*search\s*\(/,
   "java-034-trustbound-setattribute":
@@ -255,17 +255,22 @@ export function extractSinkCallArg(
             ) {
               return args[1] ?? null;
             }
-            // For getWriter().format / .printf calls where the first
-            // argument is a Locale (e.g. `format(Locale.US, fmt, args)`),
-            // the actual format-string sink is arg[1]. OWASP uses this
-            // shape to evade naive matchers; we skip the Locale and
-            // analyse the format string. v2.10.402.
-            if (
-              patternId === "java-030-xss-writer-non-literal" &&
-              args[0] &&
-              /^(?:java\.util\.)?Locale\./.test(args[0])
-            ) {
-              return args[1] ?? null;
+            // For getWriter() variadic format/printf calls — both
+            // `format(fmt, varargs...)` and `printf(Locale, fmt,
+            // varargs...)` — the tainted value can be the format
+            // string OR any of the varargs. Returning a single arg
+            // here would miss `format("literal", taintedObj)` cases.
+            // Wrap all relevant args in a synthetic concat so the
+            // expression classifier examines every operand. v2.10.403.
+            if (patternId === "java-030-xss-writer-non-literal") {
+              // Skip a leading Locale; the rest are format-string
+              // and varargs which all reach the output.
+              const startIdx =
+                args[0] && /^(?:java\.util\.)?Locale\./.test(args[0]) ? 1 : 0;
+              const tail = args.slice(startIdx).filter((a): a is string => !!a);
+              if (tail.length === 0) return null;
+              if (tail.length === 1) return tail[0] ?? null;
+              return tail.join(" + ");
             }
             return args[0] ?? null;
           }
