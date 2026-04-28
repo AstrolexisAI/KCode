@@ -41,6 +41,11 @@ export const AI_ML_PATTERNS: BugPattern[] = [
     severity: "critical",
     languages: ["python", "javascript", "typescript", "go", "ruby", "java"],
     pack: "ai-ml",
+    // Categorical: the regex matches the OpenAI key prefix
+    // (sk- / sk-proj-) followed by 20+ chars of the key alphabet.
+    // Real keys land here; placeholders almost never match because
+    // the prefix is OpenAI-specific.
+    maturity: "high_precision",
     // Real OpenAI keys are 51 chars: sk-<48 base62>. Project-scoped
     // keys are sk-proj-<48 base62>. Match either form. Allow the key
     // to live in a string literal; we don't try to follow it through
