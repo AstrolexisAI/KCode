@@ -348,13 +348,228 @@ export function classifyExpression(
     return { origin: "unknown", reason: `'${trimmed}' empty merge` };
   }
 
-  // Method call we don't recognize — Phase 2 will look up same-file
-  // declarations to classify these.
+  // Method call — resolve same-file (Phase 2) or cross-file (Phase 3)
+  // by parsing the target method's declaration and merging the
+  // verdicts of its return statements.
   if (/^\w+(?:\.\w+)*\s*\(/.test(trimmed)) {
-    return { origin: "unknown", reason: "unrecognized method call" };
+    return classifyMethodCall(trimmed, { ...ctx, depth: depth + 1 });
   }
 
   return { origin: "unknown", reason: "unhandled expression shape" };
+}
+
+// ── Phase 2/3: method resolution ───────────────────────────────────
+
+/**
+ * Classify a method call by resolving the target method's body —
+ * either in the current file (Phase 2) or in another file in the
+ * same directory (Phase 3, when ctx.filesInDir is provided).
+ *
+ * Forms recognized:
+ *   methodName(args)          — same-class instance/static method
+ *   obj.methodName(args)      — instance method (obj traced to `new ClassName(...)`)
+ *   Class.staticMethod(args)  — static method on a known class
+ */
+export function classifyMethodCall(
+  callExpr: string,
+  ctx: ClassifyContext,
+): ClassifyResult {
+  const depth = ctx.depth ?? 0;
+  if (depth > (ctx.maxDepth ?? 8)) {
+    return { origin: "unknown", reason: "max recursion in method resolve" };
+  }
+
+  // Strip leading `(Type)` cast: `(String) foo.bar()` → `foo.bar()`
+  let expr = callExpr.trim();
+  expr = expr.replace(/^\(\s*\w[\w.]*\s*\)\s*/, "");
+
+  const callMatch = expr.match(/^(?:([\w.]+)\.)?(\w+)\s*\(/);
+  if (!callMatch) return { origin: "unknown", reason: "unparseable call" };
+  const qualifier = callMatch[1] ?? "";
+  const methodName = callMatch[2] ?? "";
+  if (!methodName) return { origin: "unknown", reason: "no method name" };
+
+  // Pick the target file content. Default to the current file.
+  let targetContent: string | undefined = ctx.fileContent;
+  let resolvedAcrossFile = false;
+
+  if (qualifier && ctx.filesInDir) {
+    // Static call: qualifier itself is the class name.
+    if (/^[A-Z]/.test(qualifier) && !qualifier.includes(".")) {
+      const cross = ctx.filesInDir.get(qualifier);
+      if (cross) {
+        targetContent = cross;
+        resolvedAcrossFile = true;
+      }
+    } else if (!qualifier.includes(".")) {
+      // Lowercase qualifier — likely an instance variable. Trace it
+      // to its `new ClassName(...)` assignment in the current file.
+      const className =
+        ctx.fileContent && ctx.currentLine != null
+          ? resolveClassOfVariable(ctx.fileContent, qualifier, ctx.currentLine)
+          : null;
+      if (className) {
+        const cross = ctx.filesInDir.get(className);
+        if (cross) {
+          targetContent = cross;
+          resolvedAcrossFile = true;
+        }
+      }
+    }
+  }
+
+  if (!targetContent) {
+    return { origin: "unknown", reason: "no resolvable target file" };
+  }
+
+  const body = findMethodBody(targetContent, methodName);
+  if (body === null) {
+    return { origin: "unknown", reason: `method ${methodName} not found` };
+  }
+  const returns = findReturnExpressions(body);
+  if (returns.length === 0) {
+    return { origin: "unknown", reason: `${methodName} has no return` };
+  }
+
+  // Merge return verdicts conservatively. tainted ⊐ unknown ⊐
+  // sanitized ⊐ constant.
+  let hasTainted = false;
+  let hasUnknown = false;
+  let hasSanitized = false;
+  let hasConstant = false;
+  // Recurse with a fresh ctx scoped to the resolved file. visited
+  // gets reset since identifiers in the callee are different scopes.
+  const subCtx: ClassifyContext = {
+    ...ctx,
+    fileContent: targetContent,
+    currentLine: undefined,
+    visited: new Set(),
+    depth: depth + 1,
+  };
+  for (const ret of returns) {
+    // For each return, we need a currentLine for in-callee identifier
+    // walks. Use the line where the return statement sits.
+    const sub = classifyExpression(ret.expr, {
+      ...subCtx,
+      currentLine: ret.line,
+    });
+    if (sub.origin === "tainted") hasTainted = true;
+    else if (sub.origin === "unknown") hasUnknown = true;
+    else if (sub.origin === "sanitized") hasSanitized = true;
+    else if (sub.origin === "constant") hasConstant = true;
+  }
+  const tag = resolvedAcrossFile ? " (cross-file)" : "";
+  if (hasTainted) {
+    return { origin: "tainted", reason: `${methodName} returns tainted${tag}` };
+  }
+  if (hasUnknown) {
+    return { origin: "unknown", reason: `${methodName} returns unclassified${tag}` };
+  }
+  if (hasSanitized) {
+    return { origin: "sanitized", reason: `${methodName} returns sanitized${tag}` };
+  }
+  if (hasConstant) {
+    return { origin: "constant", reason: `${methodName} returns constant${tag}` };
+  }
+  return { origin: "unknown", reason: `${methodName} empty merge` };
+}
+
+/**
+ * Trace a local variable `varName` back to the class it was assigned
+ * to via `new ClassName(...)`. Returns the class name, or null when
+ * the variable isn't traceable to a constructor invocation in scope.
+ *
+ * Handles two declaration shapes:
+ *   ClassName varName = new ClassName(...);
+ *   <Type> varName = new ClassName(...);    (varName uses field type)
+ *   ClassName varName;       (declaration only)
+ *   varName = new ClassName(...);
+ */
+export function resolveClassOfVariable(
+  fileContent: string,
+  varName: string,
+  beforeLine: number,
+): string | null {
+  const assigns = findAllAssignmentsInScope(fileContent, varName, beforeLine);
+  for (const a of assigns) {
+    const m = a.rhs.match(/^new\s+([\w.]+)\s*\(/);
+    if (m && m[1]) return m[1].split(".").pop() ?? m[1];
+  }
+  // Fall back: scan for `<Type> varName` declaration anywhere before
+  // beforeLine — picks up the field type even when no `new` is visible.
+  const lines = fileContent.split("\n");
+  const stop = Math.min(beforeLine - 1, lines.length - 1);
+  const declRe = new RegExp(
+    String.raw`(?:^|[^=!<>\w])([A-Z]\w*)\s+\b${escapeReg(varName)}\b\s*[;=]`,
+  );
+  for (let i = stop; i >= 0; i--) {
+    const line = lines[i];
+    if (line === undefined) continue;
+    const m = line.match(declRe);
+    if (m && m[1]) return m[1];
+  }
+  return null;
+}
+
+/**
+ * Locate a method's body in a Java source file. Returns the body
+ * text (without surrounding braces) or null when the method isn't
+ * found.
+ *
+ * This is a regex-based heuristic — sufficient for the OWASP
+ * helper-class shape. Handles overloads by picking the first match.
+ */
+export function findMethodBody(
+  fileContent: string,
+  methodName: string,
+): string | null {
+  const re = new RegExp(
+    String.raw`(?:public|protected|private|static|\s)+\s+[\w.<>\[\]]+\s+\b${escapeReg(methodName)}\s*\([^)]*\)\s*(?:throws[^{]*)?\{`,
+    "g",
+  );
+  const m = re.exec(fileContent);
+  if (!m) return null;
+  const start = m.index + m[0].length - 1;
+  // Match braces from `start` (which points at the `{`) to its `}`.
+  let depth = 0;
+  let inString = false;
+  let stringChar = "";
+  for (let i = start; i < fileContent.length; i++) {
+    const ch = fileContent[i];
+    if (inString) {
+      if (ch === stringChar && fileContent[i - 1] !== "\\") inString = false;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      inString = true;
+      stringChar = ch;
+      continue;
+    }
+    if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return fileContent.slice(start + 1, i);
+    }
+  }
+  return null;
+}
+
+/**
+ * Extract `return X;` expressions from a method body. Returns each
+ * RHS along with its 1-indexed line within the body. Empty `return;`
+ * (void return) is omitted from the result.
+ */
+export function findReturnExpressions(
+  body: string,
+): Array<{ expr: string; line: number }> {
+  const out: Array<{ expr: string; line: number }> = [];
+  const lines = body.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    const m = line.match(/^\s*return\s+([^;]+);/);
+    if (m && m[1]) out.push({ expr: m[1].trim(), line: i + 1 });
+  }
+  return out;
 }
 
 // ── Variable origin walk ──────────────────────────────────────────
@@ -486,8 +701,9 @@ function isInsideConditionalBranch(lines: string[], lineIdx: number): boolean {
 export function classifyJavaCandidate(
   candidate: Candidate,
   fileContent: string,
-  ctx: ClassifyContext = {},
+  baseCtx: ClassifyContext = {},
 ): ClassifyResult {
+  const ctx: ClassifyContext = { ...baseCtx, fileContent };
   if (!shouldClassifyForTaint(candidate.pattern_id)) {
     return { origin: "unknown", reason: "pattern not in taint-flow set" };
   }
