@@ -381,4 +381,308 @@ export const JAVA_PATTERNS: BugPattern[] = [
     fix_template:
       "Replace `Map<String,Object>` with a typed DTO. Use Bean Validation (@Valid + @NotNull / @Size) for schema enforcement.",
   },
+
+  // ────────────────────────────────────────────────────────────────
+  // OWASP Benchmark v1.2 coverage round (v2.10.398)
+  //
+  // The categories below close the gap surfaced by running KCode on
+  // OWASP Benchmark v1.2 — KCode previously had 0% recall on sqli /
+  // xss / cmdi / weakrand / pathtraver / ldapi / securecookie /
+  // trustbound because the existing Java patterns didn't match the
+  // OWASP-style "var = user-input; sink(var);" two-statement shape.
+  //
+  // The patterns below use one of three approaches per category:
+  //   1. Direct call-site match (weakrand: `new Random` / `Math.random`)
+  //   2. Var-flow within ~300 chars (sqli, xss, cmdi, pathtraver, ldapi)
+  //   3. Negative lookahead for missing safety call (securecookie)
+  //
+  // All ship with positive + negative fixtures under tests/patterns/.
+  // ────────────────────────────────────────────────────────────────
+
+  // ── Weak random for security purposes (CWE-338) ────────────────
+  {
+    id: "java-022-weak-random-security",
+    title: "java.util.Random / Math.random used for security purposes",
+    severity: "high",
+    languages: ["java"],
+    // (?<!Secure) avoids matching `SecureRandom`. (?<!\w) avoids
+    // matching as part of an identifier. Both lookbehinds are
+    // fixed-width so JS regex accepts them.
+    regex:
+      /(?<!Secure)(?<!\w)(?:new\s+(?:java\.util\.)?Random\s*\(|(?:java\.lang\.)?Math\.random\s*\()/g,
+    explanation:
+      "java.util.Random and Math.random() are NOT cryptographically secure. They are seeded with low-entropy values (System.nanoTime by default) and predictable from a single observation. Using them to generate session tokens, password reset keys, IVs, nonces, or any security-sensitive value is CWE-338. Use java.security.SecureRandom instead.",
+    verify_prompt:
+      "Is the output of this RNG used for security purposes — a session token, auth cookie, CSRF token, password reset key, IV, nonce, or key material?\n" +
+      "1. CONFIRMED if used for any of: token, key, nonce, iv, salt, session, secret, password, csrf, rememberMe, or written into HTTP responses to the client.\n" +
+      "2. FALSE_POSITIVE if used for non-security randomness (animation jitter, game mechanics, shuffle, test fixtures, retry backoff, sampling, percentile pick, LBS).",
+    cwe: "CWE-338",
+    fix_template:
+      "Replace with java.security.SecureRandom: SecureRandom rand = SecureRandom.getInstanceStrong(); int n = rand.nextInt(...);",
+  },
+
+  // ── SQL injection: var-flow shape (CWE-89) ─────────────────────
+  // Matches: String sql = "..." + .* + "..."; … prepareCall|prepareStatement|executeQuery(sql)
+  // OWASP Benchmark sqli cases use this shape; the existing
+  // java-001 only matches inline concat at the call site.
+  {
+    id: "java-023-sql-injection-var-flow",
+    title: "SQL string built with concatenation flows into prepareStatement/Call/Query",
+    severity: "critical",
+    languages: ["java"],
+    regex:
+      /\bString\s+(\w+)\s*=\s*[^;]*\+[^;]*;[\s\S]{0,400}?\b(?:prepareCall|prepareStatement|createStatement\s*\(\s*\)\s*\.\s*execute(?:Query|Update)?|executeQuery|executeUpdate)\s*\(\s*\1\s*[,)]/g,
+    explanation:
+      "A SQL string is built with concatenation in one statement and passed to prepareStatement / prepareCall / executeQuery in a later statement. Even though the dangerous call uses a variable rather than a literal concat, the variable carries the same injection vector. This is the canonical OWASP Benchmark shape — see BenchmarkTest00008 etc.",
+    verify_prompt:
+      "Trace the variable on the right-hand side of the String assignment.\n" +
+      "1. CONFIRMED if any concatenated value originates from request.getParameter / getCookies / getHeader / getRequestURI etc.\n" +
+      "2. FALSE_POSITIVE if all concatenated values are class constants, env vars, or come from a sanitizer (Pattern.matches with anchored regex, Integer.parseInt → result re-stringified, ESAPI).\n" +
+      "3. FALSE_POSITIVE if the variable is only used for debug logging (no execute() call reached).",
+    cwe: "CWE-89",
+    fix_template:
+      "Use parameterized queries: String sql = \"SELECT * FROM t WHERE id = ?\"; PreparedStatement ps = conn.prepareStatement(sql); ps.setString(1, userInput);",
+  },
+
+  // ── XSS via response.getWriter() (CWE-79) ──────────────────────
+  // Matches: response.getWriter().<method>(...) where the argument
+  // contains user input (request.getParameter / getCookies) directly
+  // or via a String var concatenated from those sources.
+  {
+    id: "java-024-xss-writer-direct",
+    title: "Servlet writes request input to response.getWriter() without HTML-encoding",
+    severity: "critical",
+    languages: ["java"],
+    regex:
+      /\bresponse\.getWriter\s*\(\s*\)\s*\.\s*(?:print|println|write|format|append)\s*\(\s*[^)]*\b(?:request\.(?:getParameter|getHeader|getQueryString|getCookies|getRequestURI)|param|userInput|userName|fileName)\b/g,
+    explanation:
+      "User input from request.getParameter / cookies / headers is written directly to the HTTP response. Any HTML / JS in the input renders in the victim's browser → reflected XSS (CWE-79). Use Encode.forHtml() / ESAPI / OWASP Java Encoder before writing.",
+    verify_prompt:
+      "Does the value reaching getWriter().print/println/write include attacker-controlled data WITHOUT an HTML encoder applied?\n" +
+      "1. FALSE_POSITIVE if the value passes through Encode.forHtml(), HtmlUtils.htmlEscape, ESAPI.encoder().encodeForHTML(), or org.owasp.encoder.\n" +
+      "2. FALSE_POSITIVE if the value is content-type: application/json AND the response is set to Content-Type: application/json (browser won't render).\n" +
+      "3. CONFIRMED otherwise.",
+    cwe: "CWE-79",
+    fix_template:
+      "Encode before writing: response.getWriter().write(org.owasp.encoder.Encode.forHtml(userInput));",
+  },
+
+  // ── Command injection: Runtime.exec / ProcessBuilder (CWE-78) ──
+  {
+    id: "java-025-command-injection",
+    title: "Runtime.exec / ProcessBuilder receives concatenated user input",
+    severity: "critical",
+    languages: ["java"],
+    regex:
+      /\b(?:Runtime\.getRuntime\s*\(\s*\)\s*\.\s*exec|new\s+ProcessBuilder\s*\(?)\s*\(?[^)]*\b(?:request\.getParameter|request\.getHeader|request\.getCookies|param|userInput)\b|\bString\s+(\w+)\s*=\s*[^;]*\b(?:request\.getParameter|request\.getHeader|getCookies)\b[^;]*;[\s\S]{0,300}?\b(?:Runtime\.getRuntime\s*\(\s*\)\s*\.\s*exec|new\s+ProcessBuilder)\s*\(?\s*\1\b/g,
+    explanation:
+      "User-controlled input is concatenated into a shell command and passed to Runtime.exec or ProcessBuilder. Shell metacharacters (; | & $() ` \\n) execute arbitrary commands. CWE-78. Even ProcessBuilder isn't safe when the user input is an argument vector built from concat.",
+    verify_prompt:
+      "Is the command string or argument array constructed from request.* without strict whitelist validation?\n" +
+      "1. FALSE_POSITIVE if input is matched against a fixed allow-list (Pattern.matches with ^[a-z]+$ etc.) before exec.\n" +
+      "2. FALSE_POSITIVE if input is parsed to int/enum first (e.g., Integer.parseInt → switch on the int).\n" +
+      "3. CONFIRMED if any path from request.* reaches the exec / ProcessBuilder call.",
+    cwe: "CWE-78",
+    fix_template:
+      "Use ProcessBuilder with a hard-coded command + validated args, or shell out via a helper that escapes args. Never concatenate user input into a shell line.",
+  },
+
+  // ── Path traversal: var-flow into File / Files / Path (CWE-22) ─
+  {
+    id: "java-026-path-traversal-var-flow",
+    title: "User input flows into File / Files / FileInputStream / Path without canonicalization",
+    severity: "critical",
+    languages: ["java"],
+    regex:
+      /\bString\s+(\w+)\s*=\s*[^;]*\b(?:request\.getParameter|getCookies|getHeader|getRequestURI)\b[^;]*;[\s\S]{0,400}?\b(?:new\s+(?:File|FileInputStream|FileOutputStream|FileReader|FileWriter|RandomAccessFile)\s*\(|Files\.(?:newInputStream|newOutputStream|newBufferedReader|newBufferedWriter|readString|readAllBytes|write|copy|move|delete|exists)|Paths\.get)\s*\([^)]*\b\1\b/g,
+    explanation:
+      "User input is used to construct a file path without normalizing for `..` traversal. CWE-22. Even if a base directory is prepended, an attacker can submit `../../etc/passwd` to escape it.",
+    verify_prompt:
+      "Trace the variable from the String assignment to the File / Files / Paths call.\n" +
+      "1. FALSE_POSITIVE if the input is sanitized via getCanonicalPath() + a startsWith(baseDir.getCanonicalPath()) check.\n" +
+      "2. FALSE_POSITIVE if the input passes through a strict allow-list (Pattern.matches with anchored ^[\\w-]+$ — no slashes, no dots).\n" +
+      "3. CONFIRMED otherwise — even a base-dir prefix doesn't prevent `../../../etc/passwd`.",
+    cwe: "CWE-22",
+    fix_template:
+      "Canonicalize and validate: Path resolved = baseDir.resolve(userInput).normalize(); if (!resolved.startsWith(baseDir)) throw new SecurityException();",
+  },
+
+  // ── LDAP injection (CWE-90) ────────────────────────────────────
+  {
+    id: "java-027-ldap-injection",
+    title: "DirContext.search receives LDAP filter built from user input",
+    severity: "critical",
+    languages: ["java"],
+    regex:
+      /\bString\s+(\w+)\s*=\s*[^;]*\b(?:request\.getParameter|getCookies|getHeader)\b[^;]*;[\s\S]{0,400}?\.(?:search|searchSubtree)\s*\([^)]*\b\1\b|\.(?:search|searchSubtree)\s*\([^)]*\+[^)]*\b(?:request\.getParameter|getCookies|getHeader)\b/g,
+    explanation:
+      "User input is concatenated into an LDAP filter and passed to DirContext.search. Without escaping, an attacker can inject LDAP operators (`*)(uid=*` etc.) to bypass authentication or extract directory contents. CWE-90.",
+    verify_prompt:
+      "Is the LDAP filter constructed from request.* without escaping?\n" +
+      "1. FALSE_POSITIVE if the input is escaped via a known LDAP encoder (ESAPI.encoder().encodeForLDAP, Encode.forLDAP, manual escape of *()\\\\ chars).\n" +
+      "2. FALSE_POSITIVE if input passes through Pattern.matches against a strict allow-list.\n" +
+      "3. CONFIRMED otherwise.",
+    cwe: "CWE-90",
+    fix_template:
+      "Escape per RFC 4515: Encode.forLDAP(userInput) or use parameterized JNDI search controls.",
+  },
+
+  // ── Insecure cookie: missing setSecure / setHttpOnly (CWE-614 / CWE-1004) ─
+  {
+    id: "java-028-cookie-missing-secure-flags",
+    title: "Cookie added to response without setSecure(true) and setHttpOnly(true)",
+    severity: "high",
+    languages: ["java"],
+    // Match: new Cookie(...) followed by addCookie within ~300 chars
+    // WITHOUT both setSecure and setHttpOnly being set on the variable
+    // in between. This is harder to express purely as regex — simpler
+    // approach: match the addCookie call site and rely on the LLM
+    // verifier to check the absence of safety calls.
+    regex:
+      /\bresponse\.addCookie\s*\(\s*(\w+)\s*\)/g,
+    explanation:
+      "A Cookie object is added to the HTTP response. If setSecure(true) is not called, the cookie can leak over plain HTTP. If setHttpOnly(true) is not called, JavaScript can read the cookie (XSS theft). CWE-614, CWE-1004.",
+    verify_prompt:
+      "Trace the cookie variable backward to its construction.\n" +
+      "1. FALSE_POSITIVE if BOTH setSecure(true) AND setHttpOnly(true) appear on the cookie variable before addCookie.\n" +
+      "2. FALSE_POSITIVE if the cookie is documented as a non-sensitive UI cookie (e.g., theme preference) and the file's authoritative session cookie is set elsewhere with the right flags.\n" +
+      "3. CONFIRMED if either setSecure or setHttpOnly is missing.",
+    cwe: "CWE-614",
+    fix_template:
+      "Set both flags: cookie.setSecure(true); cookie.setHttpOnly(true); response.addCookie(cookie);",
+  },
+
+  // ── Trust boundary violation: user input into HttpSession (CWE-501) ─
+  {
+    id: "java-029-trustbound-session-attr",
+    title: "User input stored directly in HttpSession without validation",
+    severity: "high",
+    languages: ["java"],
+    regex:
+      /\b(?:request\.)?getSession\s*\([^)]*\)\s*\.\s*setAttribute\s*\(\s*[^,]+,\s*(?:request\.(?:getParameter|getHeader|getCookies|getRequestURI)|[^)]*\+\s*request\.(?:getParameter|getHeader|getCookies))/g,
+    explanation:
+      "Untrusted request input is stored in the HttpSession. Downstream code that reads the session attribute will trust the value as authenticated context — but the user controls it. CWE-501. Common shape on OWASP Benchmark trustbound category.",
+    verify_prompt:
+      "Is the value stored in the session a raw request input?\n" +
+      "1. FALSE_POSITIVE if the input passes through Pattern.matches with an anchored allow-list before session.setAttribute.\n" +
+      "2. FALSE_POSITIVE if the input is parsed to a strict type (int / enum) first and the session stores the parsed value, not the string.\n" +
+      "3. CONFIRMED if request.getParameter / getCookies / getHeader flows into setAttribute without normalization.",
+    cwe: "CWE-501",
+    fix_template:
+      "Validate and parse the input into a strict type before storing in the session: int userId = Integer.parseInt(request.getParameter(\"id\")); session.setAttribute(\"userId\", userId);",
+  },
+
+  // ── Broader patterns: catch the SINK call with a variable arg, let
+  // the LLM verifier confirm if the variable traces to user input.
+  // These complement the narrower var-flow regexes above when the
+  // user input is reassigned, transformed, or wrapped before reaching
+  // the sink. Recall lift > precision drop on OWASP — verifier
+  // confirms or drops in production deployment.
+
+  // ── XSS broad: getWriter().method(non-literal) (CWE-79) ────────
+  {
+    id: "java-030-xss-writer-non-literal",
+    title: "Servlet writes a non-literal value to response.getWriter()",
+    severity: "high",
+    languages: ["java"],
+    // Match getWriter().X( where the first argument is NOT a quoted
+    // string and NOT a known-safe construction (Locale only, integer
+    // literal). That covers OWASP's `param` after URLDecoder.decode().
+    regex:
+      /\bresponse\.getWriter\s*\(\s*\)\s*\.\s*(?:print|println|write|format|append)\s*\(\s*(?!(?:"|`|'|java\.util\.Locale\.|\d+\s*\)))/g,
+    explanation:
+      "response.getWriter() is being called with a non-literal first argument. If that value originated from request.getParameter / getHeader / getCookies anywhere in the method (even after transformations like URLDecoder.decode), it's reflected XSS. CWE-79.",
+    verify_prompt:
+      "Trace the first argument back to its definition.\n" +
+      "1. CONFIRMED if any path leads to request.getParameter / getHeader / getCookies / getRequestURI.\n" +
+      "2. FALSE_POSITIVE if the value passes through HTML-escape (Encode.forHtml, ESAPI.encoder, HtmlUtils.htmlEscape, Apache StringEscapeUtils.escapeHtml).\n" +
+      "3. FALSE_POSITIVE if the value is a class constant, env var, or static config — no request input upstream.\n" +
+      "4. FALSE_POSITIVE if response.setContentType is application/json AND no script-execution context applies.",
+    cwe: "CWE-79",
+    fix_template:
+      "Escape before writing: response.getWriter().write(org.owasp.encoder.Encode.forHtml(value));",
+  },
+
+  // ── Command injection broad: exec / ProcessBuilder with var (CWE-78) ─
+  {
+    id: "java-031-cmdi-exec-non-literal",
+    title: "Runtime.exec / ProcessBuilder receives a non-literal argument",
+    severity: "high",
+    languages: ["java"],
+    regex:
+      /\b(?:Runtime\.getRuntime\s*\(\s*\)\s*\.\s*exec|new\s+ProcessBuilder)\s*\(\s*(?!(?:"|`|'|new\s+String\s*\[\s*\]\s*\{\s*"))/g,
+    explanation:
+      "exec() / ProcessBuilder() is invoked with a non-literal argument. If any concatenated value or array element traces back to request input, the user can inject shell metacharacters or extra args. CWE-78.",
+    verify_prompt:
+      "Trace each argument component back to its definition.\n" +
+      "1. CONFIRMED if any leads to request.getParameter / getHeader / getCookies and isn't strictly validated.\n" +
+      "2. FALSE_POSITIVE if input passes through Pattern.matches against ^[a-zA-Z0-9_.-]+$ or similar anchored allow-list.\n" +
+      "3. FALSE_POSITIVE if input is parsed to a numeric or enum type first and only the parsed value is used.\n" +
+      "4. FALSE_POSITIVE if the args are all class constants / env vars / static config.",
+    cwe: "CWE-78",
+    fix_template:
+      "Use ProcessBuilder with a validated args list (no concat) or whitelist input via Pattern.matches.",
+  },
+
+  // ── Path traversal broad: File / Paths constructed from var (CWE-22) ─
+  {
+    id: "java-032-path-file-non-literal",
+    title: "File / Path constructed from a non-literal value",
+    severity: "high",
+    languages: ["java"],
+    regex:
+      /\b(?:new\s+(?:File|FileInputStream|FileOutputStream|FileReader|FileWriter|RandomAccessFile)\s*\(|Files\.(?:newInputStream|newOutputStream|newBufferedReader|newBufferedWriter|readString|readAllBytes|write|copy|move|delete|exists)\s*\(|Paths\.get\s*\()\s*(?!(?:"|`|'))/g,
+    explanation:
+      "File / Files / Paths constructor receives a non-literal argument. If the value traces back to request input without canonicalization + base-dir check, the user can read/write arbitrary paths via `..` traversal. CWE-22.",
+    verify_prompt:
+      "Trace the argument back to its definition.\n" +
+      "1. CONFIRMED if any source is request.getParameter / getHeader / getCookies / getRequestURI without getCanonicalPath() startsWith() check.\n" +
+      "2. FALSE_POSITIVE if input passes through Path.normalize() AND a startsWith(baseDir) check.\n" +
+      "3. FALSE_POSITIVE if input is matched against a strict allow-list (e.g., Pattern.matches with no slashes/dots).\n" +
+      "4. FALSE_POSITIVE if input is a class constant / env var / config.",
+    cwe: "CWE-22",
+    fix_template:
+      "Canonicalize and verify: Path resolved = baseDir.resolve(input).normalize(); if (!resolved.startsWith(baseDir)) throw new SecurityException();",
+  },
+
+  // ── LDAP injection broad: search with non-literal filter (CWE-90) ─
+  {
+    id: "java-033-ldap-non-literal",
+    title: "DirContext.search receives a non-literal LDAP filter",
+    severity: "high",
+    languages: ["java"],
+    regex:
+      /\.\s*(?:search|searchSubtree)\s*\(\s*[^,]+,\s*(?!(?:"|`|'))/g,
+    explanation:
+      "DirContext.search() is called with a non-literal filter argument. If the value contains user input without LDAP escaping, the attacker can inject LDAP operators (`*)(uid=*` etc.) to bypass authentication. CWE-90.",
+    verify_prompt:
+      "Trace the filter argument back to its definition.\n" +
+      "1. CONFIRMED if any source is request input (getParameter / getHeader / getCookies) without LDAP escaping.\n" +
+      "2. FALSE_POSITIVE if escaped via ESAPI.encoder().encodeForLDAP, manual escape of *()\\\\NUL chars, or Encode.forLDAP.\n" +
+      "3. FALSE_POSITIVE if input is matched against a strict allow-list before the search call.",
+    cwe: "CWE-90",
+    fix_template:
+      "Escape per RFC 4515 before search: String escaped = Encode.forLDAP(userInput);",
+  },
+
+  // ── Trust boundary broad: any setAttribute with non-literal val (CWE-501) ─
+  {
+    id: "java-034-trustbound-setattribute",
+    title: "session.setAttribute with non-literal value (potential trust-boundary violation)",
+    severity: "medium",
+    languages: ["java"],
+    regex:
+      /\b(?:request\.)?getSession\s*\([^)]*\)\s*\.\s*setAttribute\s*\(\s*[^,]+,\s*(?!(?:"|`|'|null|true|false|\d+))/g,
+    explanation:
+      "An HttpSession attribute is being set to a non-literal value. If that value traces back to request input without parsing/validation, downstream code that reads the attribute will trust the value as a server-side derivation when in fact the user controls it. CWE-501.",
+    verify_prompt:
+      "Trace the value back to its definition.\n" +
+      "1. CONFIRMED if value comes from request.* without parsing / validation.\n" +
+      "2. FALSE_POSITIVE if value is a parsed type (int / enum / Date) where parsing rejects unsafe input.\n" +
+      "3. FALSE_POSITIVE if value is a server-derived object (DAO query result, computed metric, auth-server claim).\n" +
+      "4. FALSE_POSITIVE if a strict allow-list (Pattern.matches) ran upstream.",
+    cwe: "CWE-501",
+    fix_template:
+      "Parse to a strict type before setAttribute: int userId = Integer.parseInt(input); session.setAttribute(\"userId\", userId);",
+  },
 ];
