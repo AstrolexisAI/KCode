@@ -113,6 +113,7 @@ const TAINT_FLOW_PATTERN_IDS: ReadonlySet<string> = new Set([
   "java-031-cmdi-exec-non-literal",
   "java-032-path-file-non-literal",
   "java-033-ldap-non-literal",
+  "java-035-xss-header-non-literal",
 ]);
 
 export function shouldClassifyForTaint(patternId: string): boolean {
@@ -161,7 +162,7 @@ export function extractTaintedVarName(candidate: Candidate): string | null {
  */
 const SINK_PATTERN_ANCHORS: Record<string, RegExp> = {
   "java-030-xss-writer-non-literal":
-    /\bresponse\.getWriter\s*\(\s*\)\s*\.\s*(?:print|println|write|format|append)\s*\(/,
+    /\bresponse\.getWriter\s*\(\s*\)\s*\.\s*(?:print|println|printf|write|format|append)\s*\(/,
   "java-031-cmdi-exec-non-literal":
     /\b(?:Runtime\.getRuntime\(\)\.exec|new\s+ProcessBuilder|ProcessBuilder\s*\.\s*command|Process\s*\.\s*(?:exec|start))\s*\(/,
   "java-032-path-file-non-literal":
@@ -170,6 +171,8 @@ const SINK_PATTERN_ANCHORS: Record<string, RegExp> = {
     /\b(?:DirContext|InitialDirContext|InitialContext)\s*[\w.]*\.\s*search\s*\(/,
   "java-034-trustbound-setattribute":
     /\b(?:session|getSession\s*\(\s*\)\s*)\.\s*setAttribute\s*\(/,
+  "java-035-xss-header-non-literal":
+    /\bresponse\.(?:setHeader|addHeader)\s*\(/,
 };
 
 /**
@@ -240,14 +243,30 @@ export function extractSinkCallArg(
         else if (ch === ")") {
           depth--;
           if (depth === 0) {
-            // For trust-boundary setAttribute the tainted value is
-            // the SECOND argument; everything else uses the first.
             const inner = collected.slice(argStart, p).trim();
-            if (patternId === "java-034-trustbound-setattribute") {
-              const args = splitTopLevelCommas(inner);
+            const args = splitTopLevelCommas(inner);
+            // For trust-boundary setAttribute and the new
+            // setHeader/addHeader xss pattern, the tainted value is
+            // the SECOND argument (first is the attribute / header
+            // name, which is always a literal in these shapes).
+            if (
+              patternId === "java-034-trustbound-setattribute" ||
+              patternId === "java-035-xss-header-non-literal"
+            ) {
               return args[1] ?? null;
             }
-            const args = splitTopLevelCommas(inner);
+            // For getWriter().format / .printf calls where the first
+            // argument is a Locale (e.g. `format(Locale.US, fmt, args)`),
+            // the actual format-string sink is arg[1]. OWASP uses this
+            // shape to evade naive matchers; we skip the Locale and
+            // analyse the format string. v2.10.402.
+            if (
+              patternId === "java-030-xss-writer-non-literal" &&
+              args[0] &&
+              /^(?:java\.util\.)?Locale\./.test(args[0])
+            ) {
+              return args[1] ?? null;
+            }
             return args[0] ?? null;
           }
         }
