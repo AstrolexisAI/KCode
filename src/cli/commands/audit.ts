@@ -127,6 +127,12 @@ export function registerAuditCommand(program: Command): void {
         "security audit. v2.10.397.",
       false,
     )
+    .option(
+      "--confidence <band>",
+      "Filter findings by confidence band: 'high' (verifier-confirmed + tainted-flow only), " +
+        "'medium' (high + stable-pattern matches), 'all' (everything). Default: all. v2.10.400.",
+      "all",
+    )
     .action(
       async (
         path: string,
@@ -148,6 +154,7 @@ export function registerAuditCommand(program: Command): void {
           exploits: boolean;
           deps: boolean;
           includeQuality: boolean;
+          confidence: string;
         },
       ) => {
         const projectRoot = pathResolve(path);
@@ -300,6 +307,28 @@ export function registerAuditCommand(program: Command): void {
               },
         });
 
+        // Apply --confidence filter BEFORE report generation so the
+        // markdown / JSON / SARIF outputs all see the filtered set.
+        // The full unfiltered counts still appear in the headline
+        // breakdown ("High: 5 Medium: 12 Low: 47"). v2.10.400.
+        if (opts.confidence && opts.confidence !== "all") {
+          const { passesConfidenceFilter } = await import(
+            "../../core/audit-engine/finding-confidence"
+          );
+          const minBand = opts.confidence as "high" | "medium" | "all";
+          const before = result.findings.length;
+          result.findings = result.findings.filter((f) =>
+            passesConfidenceFilter(f, minBand),
+          );
+          const dropped = before - result.findings.length;
+          if (dropped > 0) {
+            result.confirmed_findings = result.findings.length;
+            console.log(
+              `${ICONS.phase} confidence filter: dropped ${dropped} findings below '${minBand}' band`,
+            );
+          }
+        }
+
         // Write markdown report
         const markdown = generateMarkdownReport(result);
         writeFileSync(outputPath, markdown);
@@ -331,6 +360,21 @@ export function registerAuditCommand(program: Command): void {
         console.log(`  Files scanned:       ${scannedLabel}`);
         console.log(`  Candidates found:    ${result.candidates_found}`);
         console.log(`  \x1b[31mConfirmed findings:  ${result.confirmed_findings}\x1b[0m`);
+        // Per-band confidence breakdown. Only printed when at least
+        // one finding carries a confidence score — back-compat for
+        // older results / older runners. v2.10.400.
+        const { countByBand } = await import("../../core/audit-engine/finding-confidence");
+        const bands = countByBand(result.findings);
+        if (bands.high + bands.medium + bands.low > 0) {
+          console.log(
+            `    \x1b[32mHigh confidence:   ${bands.high}\x1b[0m   ` +
+              `\x1b[33mMedium: ${bands.medium}\x1b[0m   ` +
+              `\x1b[90mLow: ${bands.low}\x1b[0m`,
+          );
+          if (opts.confidence && opts.confidence !== "all") {
+            console.log(`    (filter: --confidence ${opts.confidence})`);
+          }
+        }
         console.log(`  False positives:     ${result.false_positives}`);
         if ((result.needs_context ?? 0) > 0) {
           console.log(

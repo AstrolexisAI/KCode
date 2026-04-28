@@ -367,6 +367,10 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
   const fileReadCache = new Map<string, string>();
   const taintSuppressed: Array<{ candidate: Candidate; reason: string }> = [];
   const candidatesAfterTaint: Candidate[] = [];
+  // Per-candidate taint verdict, keyed by `${pattern_id}|${file}|${line}`,
+  // so the confidence scorer can read it back when building the
+  // confirmed-finding records below. v2.10.400.
+  const taintByCandidate = new Map<string, "tainted" | "constant" | "sanitized" | "unknown" | "n/a">();
   // Build a class-name → file-content map for cross-file method
   // resolution (Phase 3). Scans every Java file in this audit's
   // file list once. Class name comes from `(public )?class Name`.
@@ -390,7 +394,9 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     }
   }
   for (const c of candidates) {
+    const candKey = `${c.pattern_id}|${c.file}|${c.line}`;
     if (!c.file.endsWith(".java") || !shouldClassifyForTaint(c.pattern_id)) {
+      taintByCandidate.set(candKey, "n/a");
       candidatesAfterTaint.push(c);
       continue;
     }
@@ -405,10 +411,12 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
       fileReadCache.set(c.file, content);
     }
     if (!content) {
+      taintByCandidate.set(candKey, "unknown");
       candidatesAfterTaint.push(c);
       continue;
     }
     const verdict = classifyJavaCandidate(c, content, { filesInDir });
+    taintByCandidate.set(candKey, verdict.origin);
     if (verdict.origin === "constant" || verdict.origin === "sanitized") {
       taintSuppressed.push({ candidate: c, reason: verdict.reason });
     } else {
@@ -434,6 +442,7 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
   // The candidate still appears in the report; it's just routed to
   // a different bucket without a model call.
   const { isHighNoise, getDemotionCount } = await import("./review-history");
+  const { scoreFinding } = await import("./finding-confidence");
   const learningLoopSuppressed: Candidate[] = [];
   const candidatesToVerify: Candidate[] = [];
   for (const c of candidatesPostTaint) {
@@ -546,6 +555,25 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     const extraReasoning = count
       ? `${r.verification.reasoning} (+${count - 1} more matches of this pattern at the same site)`
       : r.verification.reasoning;
+    const candKey = `${r.candidate.pattern_id}|${r.candidate.file}|${r.candidate.line}`;
+    const taintOrigin = taintByCandidate.get(candKey) ?? "n/a";
+    const demotionCount = pattern
+      ? getDemotionCount({
+          projectRoot: opts.projectRoot,
+          patternId: r.candidate.pattern_id,
+          file: r.candidate.file,
+        })
+      : 0;
+    const confidence = pattern
+      ? scoreFinding({
+          pattern,
+          taintOrigin,
+          sanitizerSeen: null,
+          verification: r.verification,
+          demotionCount,
+          verificationSkipped: opts.skipVerification === true,
+        })
+      : undefined;
     const base = {
       pattern_id: r.candidate.pattern_id,
       pattern_title: pattern?.title ?? r.candidate.pattern_id,
@@ -563,6 +591,7 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
         matched_text: r.candidate.matched_text,
         projectRoot: opts.projectRoot,
       }),
+      confidence,
     };
     if (r.verification.verdict === "confirmed") {
       findings.push(base);
