@@ -375,6 +375,40 @@ export interface Finding {
    * "manual review needed" in the body. v2.10.326.
    */
   fix_support?: FixSupport;
+  /**
+   * Per-finding confidence — multi-signal score in [0, 100] plus a
+   * coarse band (high / medium / low) the report and CLI filter on.
+   * Combines pattern maturity, taint origin (Fix #3), sanitizer
+   * presence, verifier verdict, learning-loop demotion history, and
+   * fix support into a single trust dial the user can pull on with
+   * `--confidence <band>`. v2.10.400.
+   *
+   * Each contributing signal is preserved on `signals` so the
+   * report can show the breakdown — "this scored 72 because: pattern
+   * stable +30, taint unknown +0, no sanitizer +20, verifier
+   * skipped n/a, no demotions +20".
+   */
+  confidence?: FindingConfidence;
+}
+
+/**
+ * Per-signal entry feeding the confidence aggregate. `weight` is
+ * the points the signal added (or subtracted) to the final score.
+ * A signal whose `weight` is 0 is still kept in the breakdown so
+ * the user sees we considered it.
+ */
+export interface ConfidenceSignal {
+  name: string;
+  value: string;
+  weight: number;
+}
+
+export type ConfidenceBand = "high" | "medium" | "low";
+
+export interface FindingConfidence {
+  score: number;
+  band: ConfidenceBand;
+  signals: ConfidenceSignal[];
 }
 
 /**

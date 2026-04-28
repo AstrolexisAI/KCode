@@ -192,6 +192,10 @@ export type LookupPattern = Pick<
   | "cwe"
   | "fix_template"
   | "languages"
+  // Fields the per-finding confidence scorer reads. v2.10.400.
+  | "maturity"
+  | "fix_support"
+  | "fixture_covered"
 >;
 
 /** Look up a pattern by ID — searches both regex and AST registries. */
