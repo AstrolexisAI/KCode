@@ -367,6 +367,28 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
   const fileReadCache = new Map<string, string>();
   const taintSuppressed: Array<{ candidate: Candidate; reason: string }> = [];
   const candidatesAfterTaint: Candidate[] = [];
+  // Build a class-name → file-content map for cross-file method
+  // resolution (Phase 3). Scans every Java file in this audit's
+  // file list once. Class name comes from `(public )?class Name`.
+  const filesInDir = new Map<string, string>();
+  {
+    const javaFiles = files.filter((f) => f.endsWith(".java"));
+    if (javaFiles.length > 0) {
+      const { readFileSync } = await import("node:fs");
+      for (const f of javaFiles) {
+        try {
+          const content = readFileSync(f, "utf8");
+          fileReadCache.set(f, content);
+          const cm = content.match(
+            /(?:^|\n)\s*(?:public\s+|abstract\s+|final\s+)*class\s+(\w+)/,
+          );
+          if (cm?.[1]) filesInDir.set(cm[1], content);
+        } catch {
+          /* noop */
+        }
+      }
+    }
+  }
   for (const c of candidates) {
     if (!c.file.endsWith(".java") || !shouldClassifyForTaint(c.pattern_id)) {
       candidatesAfterTaint.push(c);
@@ -386,7 +408,7 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
       candidatesAfterTaint.push(c);
       continue;
     }
-    const verdict = classifyJavaCandidate(c, content);
+    const verdict = classifyJavaCandidate(c, content, { filesInDir });
     if (verdict.origin === "constant" || verdict.origin === "sanitized") {
       taintSuppressed.push({ candidate: c, reason: verdict.reason });
     } else {

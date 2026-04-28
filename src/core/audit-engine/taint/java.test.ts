@@ -241,6 +241,78 @@ public class T {
     expect(r.origin).toBe("tainted");
   });
 
+  it("Phase 2: same-file helper returning a constant → constant", () => {
+    const file = `
+public class T {
+  String helper() {
+    return "fixed";
+  }
+  public void doPost() {
+    String x = helper();
+    String sql = "..." + x + "...";
+    prepareStatement(sql);
+  }
+}
+`.trim();
+    const c = javaCandidate('String sql = "..." + x + "...";', 8);
+    const r = classifyJavaCandidate(c, file);
+    expect(r.origin).toBe("constant");
+  });
+
+  it("Phase 3: cross-file helper class returning constant → constant", () => {
+    // Mirrors OWASP SeparateClassRequest.getTheValue: a helper class
+    // in another file whose method always returns a literal.
+    const helperContent = `
+public class Helper {
+  public String getTheValue(String p) {
+    return "bar";
+  }
+}
+`.trim();
+    const file = `
+public class T {
+  public void doPost() {
+    Helper h = new Helper();
+    String x = h.getTheValue("anything");
+    String sql = "..." + x + "...";
+    prepareStatement(sql);
+  }
+}
+`.trim();
+    const c = javaCandidate('String sql = "..." + x + "...";', 6);
+    const r = classifyJavaCandidate(c, file, {
+      filesInDir: new Map([["Helper", helperContent]]),
+    });
+    expect(r.origin).toBe("constant");
+  });
+
+  it("Phase 3: helper that propagates input → tainted (recall preserved)", () => {
+    const helperContent = `
+public class Helper {
+  public String propagate(String p) {
+    return p;
+  }
+}
+`.trim();
+    const file = `
+public class T {
+  public void doPost() {
+    Helper h = new Helper();
+    String x = h.propagate(request.getParameter("z"));
+    String sql = "..." + x + "...";
+    prepareStatement(sql);
+  }
+}
+`.trim();
+    const c = javaCandidate('String sql = "..." + x + "...";', 6);
+    const r = classifyJavaCandidate(c, file, {
+      filesInDir: new Map([["Helper", helperContent]]),
+    });
+    // Phase 3 sees `return p;` where p is the unresolved parameter →
+    // unknown (no parameter modeling yet). Recall preserved.
+    expect(["unknown", "tainted"]).toContain(r.origin);
+  });
+
   it("preserves recall on unknown shape", () => {
     const file = `
 public class T {
