@@ -119,6 +119,14 @@ export function registerAuditCommand(program: Command): void {
         "P2.4 slice 1 (v2.10.392+). Currently npm-only; future slices add pip / cargo / go / etc.",
       false,
     )
+    .option(
+      "--include-quality",
+      "Include code-quality patterns (NPE risks, resource leaks, infinite loops). Off by default " +
+        "because these fire densely on real-world code without being exploitable on their own — " +
+        "the noise drowns the security signal. Enable when you want a quality pass alongside the " +
+        "security audit. v2.10.397.",
+      false,
+    )
     .action(
       async (
         path: string,
@@ -139,6 +147,7 @@ export function registerAuditCommand(program: Command): void {
           ci: boolean;
           exploits: boolean;
           deps: boolean;
+          includeQuality: boolean;
         },
       ) => {
         const projectRoot = pathResolve(path);
@@ -263,6 +272,7 @@ export function registerAuditCommand(program: Command): void {
           skipVerification: opts.skipVerify,
           generateExploits: opts.exploits,
           includeDeps: opts.deps,
+          includeQuality: opts.includeQuality,
           since: opts.since,
           ...(opts.pack
             ? { pack: opts.pack as "web" | "ai-ml" | "cloud" | "supply-chain" | "embedded" }

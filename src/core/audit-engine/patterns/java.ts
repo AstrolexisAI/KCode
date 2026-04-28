@@ -71,7 +71,8 @@ export const JAVA_PATTERNS: BugPattern[] = [
   {
     id: "java-005-nullable-method-call",
     title: "Method call on nullable return without null check",
-    severity: "high",
+    severity: "medium",
+    category: "quality",
     languages: ["java"],
     regex: /\b(?:get|find|lookup|search|fetch|load|resolve|query)\w*\s*\([^)]*\)\s*\.\s*\w+\s*\(/g,
     explanation:
@@ -93,6 +94,7 @@ export const JAVA_PATTERNS: BugPattern[] = [
     id: "java-006-resource-leak",
     title: "InputStream/Connection not in try-with-resources",
     severity: "medium",
+    category: "quality",
     languages: ["java"],
     regex:
       /\b(?:InputStream|OutputStream|FileReader|FileWriter|BufferedReader|BufferedWriter|Connection|Statement|ResultSet|Socket|RandomAccessFile)\s+\w+\s*=\s*(?:new\s|.*\.(?:open|get|create))\s*[^;]*;(?![\s\S]{0,50}?\btry\b)/g,

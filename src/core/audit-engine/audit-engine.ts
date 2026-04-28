@@ -62,6 +62,19 @@ export interface AuditEngineOptions {
    */
   generateExploits?: boolean;
   /**
+   * v2.10.397 — include patterns tagged `category: "quality"` (NPE risks,
+   * resource leaks, infinite loops, etc.). Off by default because these
+   * fire densely on real-world code without being exploitable on their
+   * own — over-flagging that drowns the security signal. Enable when you
+   * want a code-quality pass alongside the security audit.
+   *
+   * Diagnosed on OWASP Benchmark Java: java-005-nullable-method-call was
+   * firing on ~97% of safe Servlet test cases (the legitimate
+   * `request.getX().Y()` shape). Tagging it `quality` and keeping it
+   * off-by-default fixed precision without losing any security findings.
+   */
+  includeQuality?: boolean;
+  /**
    * P2.4 slice 1 (v2.10.392+) — opt-in dependency manifest scan.
    * When true, the orchestrator parses package.json files under the
    * project root, matches each dependency against a curated advisory
@@ -202,10 +215,16 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
   // that makes /scan --since usable as a CI pre-merge gate.
   // F9 (v2.10.370) — when opts.pack is set, narrow the regex pattern
   // set to that pack only. AST patterns get the same filter below.
+  // v2.10.397 — also filter out `category: "quality"` patterns unless
+  // opts.includeQuality is set. Quality patterns (NPE risks, resource
+  // leaks) fire densely without being exploitable; off by default.
   let regexPatterns: BugPattern[] | undefined;
-  if (opts.pack) {
+  if (opts.pack || !opts.includeQuality) {
     const { ALL_PATTERNS } = await import("./patterns");
-    regexPatterns = ALL_PATTERNS.filter((p) => p.pack === opts.pack);
+    let filtered = ALL_PATTERNS;
+    if (opts.pack) filtered = filtered.filter((p) => p.pack === opts.pack);
+    if (!opts.includeQuality) filtered = filtered.filter((p) => p.category !== "quality");
+    regexPatterns = filtered;
   }
   let changedFilesInDiff: number | undefined;
   let restrictToFiles: Set<string> | undefined;
