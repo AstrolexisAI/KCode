@@ -42,6 +42,11 @@ export const INJECTION_PATTERNS: BugPattern[] = [
     severity: "critical",
     languages: ["python"],
     pack: "web",
+    // Categorical: `subprocess.run(..., shell=True, ...)` is the
+    // exact shape that turns any caller-controlled value into
+    // shell injection. The regex requires `shell=True`, no
+    // ambiguity. Tagged high_precision.
+    maturity: "high_precision",
     regex:
       /\b(?:subprocess\.(?:run|Popen|call|check_output|check_call)|os\.system|os\.popen|commands\.getoutput)\s*\([^)]*shell\s*=\s*True[^)]*\)/g,
     explanation:

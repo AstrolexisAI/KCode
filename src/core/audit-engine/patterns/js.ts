@@ -30,6 +30,11 @@ export const JS_PATTERNS: BugPattern[] = [
     title: "innerHTML/outerHTML with dynamic content (XSS)",
     severity: "high",
     languages: ["javascript", "typescript"],
+    // Categorical: assigning dynamic content to innerHTML/outerHTML
+    // is xss every time. The regex already excludes empty-literal
+    // assignments (`= ""`, `= ''`, `= \`\``) which are benign clears
+    // — every match left over is a real risk. Tagged high_precision.
+    maturity: "high_precision",
     // Skip only clearly-benign empty-literal assignments:
     // `= ""`, `= ''`, `= ` `` `` (template) — optionally followed by
     // `;` and end-of-line. `m` flag makes `$` mean end-of-line
