@@ -116,6 +116,9 @@ export const PYTHON_PATTERNS: BugPattern[] = [
     title: "Hardcoded password, secret, or API key",
     severity: "high",
     languages: ["python", "javascript", "typescript"],
+    // Categorical: hardcoded credentials in source are wrong
+    // every time. verify_prompt filters obvious placeholders.
+    maturity: "high_precision",
     regex: /(?:password|secret|api_key|apikey|token|auth)\s*=\s*["'][^"']{8,}["']/gi,
     explanation:
       "Hardcoded secrets in source code are exposed to anyone with repo access. Use environment variables or a secrets manager.",
@@ -292,6 +295,11 @@ export const PYTHON_PATTERNS: BugPattern[] = [
     title: "Hardcoded secret or API key in assignment",
     severity: "high",
     languages: ["python"],
+    // Categorical: hardcoded credentials in source are wrong
+    // every time. The base64-shaped value in the regex makes
+    // false positives even rarer (placeholders rarely match
+    // 12+ char base64-style strings).
+    maturity: "high_precision",
     regex:
       /(?:api_key|api_secret|aws_secret|private_key|database_password|db_password)\s*=\s*["'][A-Za-z0-9+/=_-]{12,}["']/gi,
     explanation:

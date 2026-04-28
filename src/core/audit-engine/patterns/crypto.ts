@@ -180,6 +180,10 @@ export const CRYPTO_PATTERNS: BugPattern[] = [
       "ruby",
       "rust",
     ],
+    // Categorical: a hardcoded crypto key in source code is
+    // unconditionally wrong — it's exposed in git history, build
+    // artefacts, and any client-side bundle.
+    maturity: "high_precision",
     regex:
       /\b(key|secret|password|token|api_?key|privat[ea]Key|jwt[_.]?secret)\s*[:=]\s*['"`][A-Za-z0-9+/=\-_]{16,}['"`]/gi,
     explanation:

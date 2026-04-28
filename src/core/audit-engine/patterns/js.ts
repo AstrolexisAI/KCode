@@ -101,6 +101,10 @@ export const JS_PATTERNS: BugPattern[] = [
     title: "Hardcoded secret/key in JavaScript/TypeScript",
     severity: "high",
     languages: ["javascript", "typescript"],
+    // Categorical: regex requires UPPER-only var name + 16+ char
+    // base64-style value, so it almost never fires on legitimate
+    // code. Hardcoded secrets are wrong every time.
+    maturity: "high_precision",
     regex:
       /(?:SECRET|API_KEY|PRIVATE_KEY|PASSWORD|TOKEN|AUTH)\s*[:=]\s*["'][A-Za-z0-9+/=_-]{16,}["']/g,
     explanation: "Hardcoded secrets in source code are exposed to anyone with repo access.",
@@ -296,6 +300,9 @@ export const JS_PATTERNS: BugPattern[] = [
     title: "Hardcoded secret or API key in JavaScript/TypeScript",
     severity: "high",
     languages: ["javascript", "typescript"],
+    // Categorical: 20+ char base64-style value rules out almost
+    // every placeholder. Hardcoded secrets are wrong every time.
+    maturity: "high_precision",
     regex:
       /(?:api[_-]?key|api[_-]?secret|auth[_-]?token|private[_-]?key)\s*[:=]\s*["'][A-Za-z0-9+/=_-]{20,}["']/gi,
     explanation:

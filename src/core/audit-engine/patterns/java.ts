@@ -170,6 +170,11 @@ export const JAVA_PATTERNS: BugPattern[] = [
     title: "Hardcoded password, secret, or API key in Java",
     severity: "high",
     languages: ["java"],
+    // Categorical: hardcoded credentials in source are wrong
+    // every time. The verify_prompt only filters
+    // placeholder/test-fixture strings; the secret pattern
+    // itself is unconditional.
+    maturity: "high_precision",
     regex: /(?:password|passwd|secret|apiKey|api_key|token|credential)\s*=\s*"[^"]{8,}"/gi,
     explanation:
       "Hardcoded credentials in Java source code are exposed to anyone with access to the compiled class files (strings are stored in plaintext in .class files).",
