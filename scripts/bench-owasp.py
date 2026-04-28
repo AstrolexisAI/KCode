@@ -210,7 +210,9 @@ def run_codeql(owasp_dir: Path) -> set[str]:
                 "--language=java",
                 f"--source-root={owasp_dir}",
                 f"--working-dir={owasp_dir}",
-                "--command=mvn -B -DskipTests compile",
+                # Use a user-owned local repo so we don't collide with root-owned ~/.m2
+                # left behind by docker-based builds.
+                "--command=mvn -B -DskipTests -Dmaven.repo.local=/tmp/m2-curly clean compile",
                 "--overwrite",
             ],
             capture_output=True, text=True, timeout=1800,
@@ -219,12 +221,12 @@ def run_codeql(owasp_dir: Path) -> set[str]:
             print(f"  CodeQL DB error: {proc.stderr[:300]}", file=sys.stderr)
             return set()
 
-        print("  CodeQL: analyzing (java-security-and-quality.qls)…", file=sys.stderr)
+        print("  CodeQL: analyzing (java-security-extended.qls)…", file=sys.stderr)
         proc = subprocess.run(
             [
                 str(CODEQL), "database", "analyze", str(db),
                 "--format=sarif-latest", f"--output={sarif}",
-                "--quiet", "java-security-and-quality.qls",
+                "--quiet", "java-security-extended.qls",
             ],
             capture_output=True, text=True, timeout=1800,
         )
