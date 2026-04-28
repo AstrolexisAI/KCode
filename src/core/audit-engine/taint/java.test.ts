@@ -313,6 +313,57 @@ public class T {
     expect(["unknown", "tainted"]).toContain(r.origin);
   });
 
+  it("Phase 4+5: doSomething wrapper with foldable cond + constant arg → constant", () => {
+    // OWASP "safe" doSomething shape: the conditional always picks
+    // the parameter branch, the call site passes a literal, so the
+    // taint chain folds to a constant.
+    const file = `
+public class T {
+  private static String doSomething(HttpServletRequest req, String param) {
+    String bar;
+    int num = 196;
+    if ((500 / 42) + num > 200) bar = param;
+    else bar = "unreachable";
+    return bar;
+  }
+  public void doPost() {
+    String param = "noCookieValueSupplied";
+    String bar = doSomething(request, param);
+    String sql = "..." + bar + "...";
+    prepareStatement(sql);
+  }
+}
+`.trim();
+    const c = javaCandidate('String sql = "..." + bar + "...";', 13);
+    const r = classifyJavaCandidate(c, file);
+    expect(r.origin).toBe("constant");
+  });
+
+  it("Phase 4+5: doSomething with foldable cond + tainted arg → tainted", () => {
+    // Same wrapper, but call site passes a Servlet API value; the
+    // chain still folds, but to a tainted classification → preserved.
+    const file = `
+public class T {
+  private static String doSomething(HttpServletRequest req, String param) {
+    String bar;
+    int num = 196;
+    if ((500 / 42) + num > 200) bar = param;
+    else bar = "unreachable";
+    return bar;
+  }
+  public void doPost() {
+    String param = request.getParameter("p");
+    String bar = doSomething(request, param);
+    String sql = "..." + bar + "...";
+    prepareStatement(sql);
+  }
+}
+`.trim();
+    const c = javaCandidate('String sql = "..." + bar + "...";', 13);
+    const r = classifyJavaCandidate(c, file);
+    expect(r.origin).toBe("tainted");
+  });
+
   it("preserves recall on unknown shape", () => {
     const file = `
 public class T {

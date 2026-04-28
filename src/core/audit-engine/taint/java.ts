@@ -292,6 +292,13 @@ export function classifyExpression(
   // verdicts conservatively. This handles `if/else` and `switch/case`
   // shapes where the variable is reassigned across branches.
   if (/^\w+$/.test(trimmed)) {
+    // Phase 5 lite — parameter binding: if we're inside a callee's
+    // body and the identifier names a parameter, return the
+    // call-site classification.
+    if (ctx.paramBindings?.has(trimmed)) {
+      const bound = ctx.paramBindings.get(trimmed);
+      if (bound) return { ...bound, reason: `param '${trimmed}' bound: ${bound.reason}` };
+    }
     if (!ctx.fileContent || ctx.currentLine == null) {
       return { origin: "unknown", reason: `identifier '${trimmed}' (no file ctx)` };
     }
@@ -422,13 +429,27 @@ export function classifyMethodCall(
     return { origin: "unknown", reason: "no resolvable target file" };
   }
 
-  const body = findMethodBody(targetContent, methodName);
-  if (body === null) {
+  const sigInfo = findMethodSignature(targetContent, methodName);
+  if (sigInfo === null) {
     return { origin: "unknown", reason: `method ${methodName} not found` };
   }
+  const { paramNames, body } = sigInfo;
   const returns = findReturnExpressions(body);
   if (returns.length === 0) {
     return { origin: "unknown", reason: `${methodName} has no return` };
+  }
+
+  // Phase 5 — parameter binding: classify each call-site argument
+  // in the CALLER's context, then bind to the method's parameter
+  // names so that `return param;` and `if (cond) bar = param;` shapes
+  // inside the callee resolve to the actual caller value.
+  const callerArgs = parseCallArgs(expr);
+  const paramBindings = new Map<string, ClassifyResult>();
+  for (let i = 0; i < paramNames.length && i < callerArgs.length; i++) {
+    const arg = callerArgs[i];
+    const name = paramNames[i];
+    if (arg === undefined || name === undefined) continue;
+    paramBindings.set(name, classifyExpression(arg, ctx));
   }
 
   // Merge return verdicts conservatively. tainted ⊐ unknown ⊐
@@ -437,13 +458,17 @@ export function classifyMethodCall(
   let hasUnknown = false;
   let hasSanitized = false;
   let hasConstant = false;
-  // Recurse with a fresh ctx scoped to the resolved file. visited
-  // gets reset since identifiers in the callee are different scopes.
+  // Recurse with a fresh ctx scoped to the method body so that
+  // intra-body variable walks resolve against the right line numbers
+  // (findReturnExpressions emits body-relative lines, not absolute
+  // file-relative). visited gets reset since identifiers in the
+  // callee are a different scope.
   const subCtx: ClassifyContext = {
     ...ctx,
-    fileContent: targetContent,
+    fileContent: body,
     currentLine: undefined,
     visited: new Set(),
+    paramBindings,
     depth: depth + 1,
   };
   for (const ret of returns) {
@@ -523,14 +548,36 @@ export function findMethodBody(
   fileContent: string,
   methodName: string,
 ): string | null {
+  return findMethodSignature(fileContent, methodName)?.body ?? null;
+}
+
+/**
+ * Same as findMethodBody, but also extracts the parameter names so
+ * the caller can bind each call-site argument before classifying
+ * the body's return statements.
+ */
+export function findMethodSignature(
+  fileContent: string,
+  methodName: string,
+): { paramNames: string[]; body: string } | null {
   const re = new RegExp(
-    String.raw`(?:public|protected|private|static|\s)+\s+[\w.<>\[\]]+\s+\b${escapeReg(methodName)}\s*\([^)]*\)\s*(?:throws[^{]*)?\{`,
+    String.raw`(?:public|protected|private|static|\s)+\s+[\w.<>\[\]]+\s+\b${escapeReg(methodName)}\s*\(([^)]*)\)\s*(?:throws[^{]*)?\{`,
     "g",
   );
   const m = re.exec(fileContent);
   if (!m) return null;
+  const paramList = (m[1] ?? "").trim();
+  const paramNames: string[] = [];
+  if (paramList) {
+    for (const p of paramList.split(",")) {
+      // Each parameter looks like `Type name`, `final Type name`, or
+      // `Type<X> name`. We just want the trailing identifier.
+      const tokens = p.trim().split(/\s+/);
+      const last = tokens[tokens.length - 1];
+      if (last) paramNames.push(last.replace(/^\.{3}/, "")); // varargs
+    }
+  }
   const start = m.index + m[0].length - 1;
-  // Match braces from `start` (which points at the `{`) to its `}`.
   let depth = 0;
   let inString = false;
   let stringChar = "";
@@ -548,10 +595,61 @@ export function findMethodBody(
     if (ch === "{") depth++;
     else if (ch === "}") {
       depth--;
-      if (depth === 0) return fileContent.slice(start + 1, i);
+      if (depth === 0) {
+        return { paramNames, body: fileContent.slice(start + 1, i) };
+      }
     }
   }
   return null;
+}
+
+/**
+ * Parse the comma-separated arguments of a call expression
+ * `name(arg1, arg2, ...)` respecting nested parens / brackets and
+ * string literals. Returns each argument's text in order.
+ */
+export function parseCallArgs(callExpr: string): string[] {
+  const open = callExpr.indexOf("(");
+  if (open === -1) return [];
+  const args: string[] = [];
+  let depth = 0;
+  let inString = false;
+  let stringChar = "";
+  let cur = "";
+  for (let i = open; i < callExpr.length; i++) {
+    const ch = callExpr[i];
+    if (inString) {
+      cur += ch;
+      if (ch === stringChar && callExpr[i - 1] !== "\\") inString = false;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      inString = true;
+      stringChar = ch;
+      cur += ch;
+      continue;
+    }
+    if (ch === "(") {
+      depth++;
+      if (depth === 1) continue;
+    } else if (ch === ")") {
+      depth--;
+      if (depth === 0) {
+        if (cur.trim()) args.push(cur.trim());
+        return args;
+      }
+    } else if (ch === "[" || ch === "{") {
+      depth++;
+    } else if (ch === "]" || ch === "}") {
+      depth--;
+    } else if (ch === "," && depth === 1) {
+      args.push(cur.trim());
+      cur = "";
+      continue;
+    }
+    cur += ch;
+  }
+  return args;
 }
 
 /**
@@ -622,20 +720,34 @@ export function findAllAssignmentsInScope(
     String.raw`(?:^|[^=!<>\w])\b${escapeReg(varName)}\s*=(?!=)\s*(.*)$`,
   );
   const out: Array<{ rhs: string; line: number; inBranch: boolean }> = [];
+  // Track brace depth as we scan backward — when we exit the
+  // enclosing block (depth becomes positive after seeing more `}`
+  // than `{` going back), we've crossed into a sibling method or
+  // outer scope and should stop.
+  let braceDepth = 0;
   for (let i = startLine; i >= stopLine; i--) {
     const line = lines[i];
     if (line === undefined) continue;
+    // Count braces (ignoring those inside strings — best-effort).
+    for (let k = 0; k < line.length; k++) {
+      const ch = line[k];
+      if (ch === "}") braceDepth++;
+      else if (ch === "{") braceDepth--;
+    }
+    // We exited the block we started in. Going backward, each `{`
+    // decrements depth (we entered the block from outside) — if
+    // depth drops below 0 we've crossed the opening brace of the
+    // method/block enclosing our start position and should stop.
+    if (braceDepth < 0) break;
     const m = line.match(assignRe);
     if (!m || m[1] === undefined) continue;
     let rhs = m[1];
-    let endLine = i;
     if (rhs.includes(";")) {
       rhs = rhs.slice(0, rhs.lastIndexOf(";"));
     } else {
       for (let j = i + 1; j < lines.length; j++) {
         const tail = lines[j];
         if (tail === undefined) break;
-        endLine = j;
         if (tail.includes(";")) {
           rhs += " " + tail.slice(0, tail.indexOf(";"));
           break;
@@ -643,13 +755,166 @@ export function findAllAssignmentsInScope(
         rhs += " " + tail.trim();
       }
     }
+    // Phase 4 — constant folding: if this assignment lives inside a
+    // branch whose controlling `if (...)` is foldable to a literal
+    // boolean, skip the unreachable side. Returns null when the
+    // branch is dead, in which case we drop the assignment from the
+    // merge entirely.
+    const branchKind = classifyBranchPosition(lines, i);
+    if (branchKind === "dead") continue;
     out.push({
       rhs: rhs.trim(),
       line: i + 1,
-      inBranch: isInsideConditionalBranch(lines, i),
+      inBranch: branchKind !== "unconditional",
     });
   }
   return out;
+}
+
+/**
+ * Decide whether a one-liner assignment at lineIdx is:
+ *   "unconditional"   — top-level method body assignment
+ *   "live"            — inside a control-flow branch we can't fold
+ *   "dead"            — inside an unreachable branch (constant-folded)
+ *
+ * The folding is best-effort: we only walk back ~3 lines for an
+ * `if (...)` and try to evaluate the condition with literals and
+ * simple integer-typed local variables (`int n = 196;` style).
+ */
+function classifyBranchPosition(
+  lines: string[],
+  lineIdx: number,
+): "unconditional" | "live" | "dead" {
+  const line = lines[lineIdx] ?? "";
+  // `else <var> = ...` — controlling `if (cond)` is on a previous line.
+  if (/^\s*else\b/.test(line)) {
+    const cond = findControllingIfCondition(lines, lineIdx, /* isElse= */ true);
+    if (cond !== null) {
+      const folded = evaluateConstantBoolExpr(cond, lines, lineIdx);
+      if (folded === true) return "dead";
+      if (folded === false) return "unconditional";
+    }
+    return "live";
+  }
+  // One-liner `if (cond) <var> = ...`
+  const inlineIfCond = extractIfCondition(line);
+  if (inlineIfCond !== null && /=\s*[^=]/.test(line)) {
+    const folded = evaluateConstantBoolExpr(inlineIfCond, lines, lineIdx);
+    if (folded === true) return "unconditional";
+    if (folded === false) return "dead";
+    return "live";
+  }
+  // Body of a previous-line control statement
+  for (let j = lineIdx - 1; j >= Math.max(0, lineIdx - 3); j--) {
+    const prev = lines[j];
+    if (prev === undefined) break;
+    const trimmedPrev = prev.trim();
+    if (trimmedPrev === "" || trimmedPrev.startsWith("//")) continue;
+    const prevCond = extractIfCondition(prev);
+    if (prevCond !== null && !prev.includes(";")) {
+      const folded = evaluateConstantBoolExpr(prevCond, lines, j);
+      if (folded === true) return "unconditional";
+      if (folded === false) return "dead";
+      return "live";
+    }
+    if (/^\s*(?:case\s+[^:]+|default)\s*:\s*$/.test(prev)) return "live";
+    break;
+  }
+  return "unconditional";
+}
+
+/**
+ * Extract the condition expression text inside `if (...)` from a
+ * line, balancing nested parentheses correctly (the regex
+ * `\([^)]+\)` is wrong because it stops at the first inner `)`).
+ *
+ * Returns null when the line doesn't open an `if` / `else if`.
+ */
+function extractIfCondition(line: string): string | null {
+  const m = line.match(/^\s*}?\s*(?:else\s+)?if\s*\(/);
+  if (!m) return null;
+  const start = m.index! + m[0].length;
+  let depth = 1;
+  for (let i = start; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === "(") depth++;
+    else if (ch === ")") {
+      depth--;
+      if (depth === 0) return line.slice(start, i);
+    }
+  }
+  return null;
+}
+
+/**
+ * Walk back from `lineIdx` (the `else` body line) to find the
+ * matching `if (cond)` opener. Returns the cond text or null.
+ */
+function findControllingIfCondition(
+  lines: string[],
+  lineIdx: number,
+  isElse: boolean,
+): string | null {
+  void isElse;
+  for (let j = lineIdx - 1; j >= Math.max(0, lineIdx - 6); j--) {
+    const prev = lines[j];
+    if (prev === undefined) break;
+    if (prev.trim() === "") continue;
+    const cond = extractIfCondition(prev);
+    if (cond !== null) return cond;
+  }
+  return null;
+}
+
+/**
+ * Best-effort evaluator for a Java boolean expression made of
+ * integer literals, simple `int <n> = <literal>;` references, and
+ * the operators `+ - * / > < >= <= == !=`. Returns true/false when
+ * the expression folds to a literal; null otherwise.
+ *
+ * Used to fold OWASP-style guard conditions like
+ *   `int num = 196; if ((500 / 42) + num > 200) ...`
+ * which always take the if branch by construction.
+ */
+export function evaluateConstantBoolExpr(
+  expr: string,
+  lines: string[],
+  fromLineIdx: number,
+): boolean | null {
+  // Substitute integer locals: `int <name> = <literal>;` within
+  // the preceding ~20 lines. Numeric only.
+  const intLocals = new Map<string, number>();
+  const stop = Math.max(0, fromLineIdx - 20);
+  for (let j = fromLineIdx - 1; j >= stop; j--) {
+    const line = lines[j];
+    if (line === undefined) continue;
+    const m = line.match(
+      /^\s*(?:final\s+)?(?:int|long|short|byte)\s+(\w+)\s*=\s*(-?\d+)\s*;/,
+    );
+    if (m && m[1] !== undefined && m[2] !== undefined) {
+      intLocals.set(m[1], parseInt(m[2], 10));
+    }
+  }
+  let substituted = expr;
+  for (const [name, val] of intLocals) {
+    const re = new RegExp(String.raw`\b${escapeReg(name)}\b`, "g");
+    substituted = substituted.replace(re, String(val));
+  }
+  // Reject anything that doesn't look like a pure numeric/boolean
+  // expression after substitution.
+  if (!/^[\d\s+\-*/%()<>=!&|.]+$/.test(substituted)) return null;
+  try {
+    // Restrict allowed operators in the final string. `eval` would be
+    // unsafe with arbitrary input; here we've already gated on the
+    // character class above.
+    // biome-ignore lint/security/noGlobalEval: input is gated by regex
+    const result = (0, eval)(substituted);
+    if (typeof result === "boolean") return result;
+    if (typeof result === "number") return result !== 0;
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 function escapeReg(s: string): string {

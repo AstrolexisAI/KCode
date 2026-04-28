@@ -27,4 +27,10 @@ export interface ClassifyContext {
   maxDepth?: number;
   /** Internal: current depth on this walk. */
   depth?: number;
+  /** Phase 5: when classifying inside a method body, lookup table
+   *  mapping each parameter name to the classification of the
+   *  corresponding call-site argument. Lets `return param;` resolve
+   *  to whatever the caller passed, without modeling parameters as
+   *  free variables. */
+  paramBindings?: Map<string, ClassifyResult>;
 }
