@@ -79,7 +79,7 @@ export class KCodeClient {
   private timeout: number;
 
   constructor(options?: KCodeClientOptions) {
-    this.baseUrl = (options?.baseUrl ?? "http://localhost:19300").replace(
+    this.baseUrl = (options?.baseUrl ?? "http://localhost:10101").replace(
       /\/$/,
       ""
     );

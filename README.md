@@ -478,7 +478,7 @@ kcode stats          # Usage statistics
 Install the extension:
 
 ```bash
-code --install-extension vscode-extension/kcode-0.1.0.vsix
+code --install-extension vscode-extension/kcode-*.vsix
 ```
 
 Features: sidebar chat panel, context menu (Explain/Fix/Test selection), `Ctrl+Shift+K` keybinding, terminal integration. See [vscode-extension/](./vscode-extension/) for details.
