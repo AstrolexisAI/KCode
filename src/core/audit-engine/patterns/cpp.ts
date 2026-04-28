@@ -115,6 +115,11 @@ export const CPP_PATTERNS: BugPattern[] = [
     title: "Use of unbounded string function (strcpy/strcat/sprintf/gets)",
     severity: "high",
     languages: ["c", "cpp"],
+    // Categorical: strcpy/strcat/sprintf/gets have NO bounds-checked
+    // path. Every call is unconditionally a buffer-overflow risk —
+    // the question is just exploitability, not safety. Tagged
+    // high_precision; verifier still filters wrapper macros.
+    maturity: "high_precision",
     regex: /\b(strcpy|strcat|sprintf|gets)\s*\(/g,
     explanation:
       "strcpy/strcat/sprintf/gets have no bounds checking. If the source can exceed the destination size, heap/stack buffer overflow. Use the `_s` or `n` variants.",

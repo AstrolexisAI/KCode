@@ -151,6 +151,11 @@ export const CRYPTO_PATTERNS: BugPattern[] = [
     title: "TLS certificate validation disabled",
     severity: "critical",
     languages: ["python", "javascript", "typescript", "go", "java", "csharp", "ruby", "php"],
+    // Categorical: explicit verify=False, InsecureSkipVerify=true,
+    // rejectUnauthorized=false, CERT_NONE, or empty
+    // checkServerTrusted bodies are unconditionally wrong. The regex
+    // matches each language's explicit-disable form.
+    maturity: "high_precision",
     regex:
       /\b(verify\s*=\s*False|InsecureSkipVerify\s*:\s*true|rejectUnauthorized\s*:\s*false|CERT_NONE|TrustManager[^{]*\{\s*@Override[^}]*checkServerTrusted[^}]*\{\s*\}|ServerCertificateValidationCallback\s*=\s*\(.*?\)\s*=>\s*true|VERIFY_PEER\s*,\s*NULL)/gi,
     explanation:

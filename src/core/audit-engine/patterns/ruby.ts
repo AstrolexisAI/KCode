@@ -10,6 +10,10 @@ export const RUBY_PATTERNS: BugPattern[] = [
     title: "eval/send with dynamic input",
     severity: "critical",
     languages: ["ruby"],
+    // Categorical: regex requires the FIRST argument to be `params`,
+    // `request`, or `input` — explicit user-controlled input. Every
+    // match is a real RCE risk. Tagged high_precision.
+    maturity: "high_precision",
     regex: /\b(?:eval|send|public_send|instance_eval|class_eval)\s*\(\s*(?:params|request|input)/g,
     explanation: "eval/send with user input enables arbitrary code execution.",
     verify_prompt: "Is the argument from user input? If internal/constant, respond FALSE_POSITIVE.",

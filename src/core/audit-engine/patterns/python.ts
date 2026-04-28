@@ -40,6 +40,12 @@ export const PYTHON_PATTERNS: BugPattern[] = [
     title: "Shell command execution with potential injection",
     severity: "critical",
     languages: ["python"],
+    // Categorical: subprocess.run / Popen / os.system / os.popen
+    // with an f-string, format() call, or `+` concat is unconditional
+    // shell injection — there's no "safe with shell=True + dynamic
+    // content" path. Tagged high_precision because the regex
+    // requires an explicit dynamic-string shape.
+    maturity: "high_precision",
     // `(?<!["'\w])f["']` requires the `f` to NOT be preceded by a
     // quote or word character — so literal strings like "-rf",
     // "rm -rf", or "f" (single-letter string literal) don't
@@ -102,6 +108,11 @@ export const PYTHON_PATTERNS: BugPattern[] = [
     title: "yaml.load() without safe Loader (code execution)",
     severity: "high",
     languages: ["python"],
+    // Categorical: yaml.load() without an explicit SafeLoader is
+    // wrong every time — PyYAML's default constructor enables Python
+    // object instantiation. The regex's negative lookahead for
+    // `Loader` ensures we only match the unsafe form.
+    maturity: "high_precision",
     regex: /\byaml\.load\s*\([^)]*(?!\bLoader\b)/g,
     explanation:
       "yaml.load() without Loader=yaml.SafeLoader can execute arbitrary Python code embedded in YAML. Always use yaml.safe_load() or specify SafeLoader.",

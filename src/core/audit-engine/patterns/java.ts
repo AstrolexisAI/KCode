@@ -227,6 +227,12 @@ export const JAVA_PATTERNS: BugPattern[] = [
     title: "XML TransformerFactory without disabling external entities",
     severity: "high",
     languages: ["java"],
+    // Categorical: any `TransformerFactory.newInstance()` is XXE-
+    // vulnerable by default unless the caller subsequently sets
+    // FEATURE_SECURE_PROCESSING and disables external DTDs/entities.
+    // The verify_prompt filters cases where the secure features are
+    // applied; the API call itself is unconditionally a smell.
+    maturity: "high_precision",
     regex: /TransformerFactory\.newInstance\s*\(\s*\)/g,
     explanation:
       "Default TransformerFactory configuration allows XML external entities, enabling XXE attacks that can read local files or perform SSRF.",
@@ -335,6 +341,11 @@ export const JAVA_PATTERNS: BugPattern[] = [
     title: "TrustManager that accepts every certificate (TLS bypass)",
     severity: "critical",
     languages: ["java", "kotlin"],
+    // Categorical: an empty checkServerTrusted/checkClientTrusted/
+    // verify body in a TrustManager / HostnameVerifier is wrong every
+    // time. The regex matches that exact shape; legitimate
+    // implementations always have actual logic in those bodies.
+    maturity: "high_precision",
     regex:
       /(?:new\s+(?:X509TrustManager|HostnameVerifier)\s*\(\s*\)\s*\{[^}]*?(?:checkServerTrusted|checkClientTrusted|verify)[^}]*?\{\s*\}|new\s+TrustManager\s*\[\s*\]\s*\{[^}]*?@Override[^}]*?\{\s*\})/g,
     explanation:
