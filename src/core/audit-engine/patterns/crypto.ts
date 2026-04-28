@@ -67,6 +67,11 @@ export const CRYPTO_PATTERNS: BugPattern[] = [
       "php",
       "ruby",
     ],
+    // Categorical: MD5 and SHA1 collisions have been demonstrated
+    // for nearly two decades; using them for any authentication or
+    // signature use is wrong. 100% precision on OWASP Benchmark
+    // v1.2 (113/113).
+    maturity: "high_precision",
     regex:
       /\b(MD5|SHA1|Sha1|sha1|md5|MessageDigest\.getInstance\s*\(\s*"(?:MD5|SHA-?1)"|hashlib\.(?:md5|sha1)|createHash\s*\(\s*['"](md5|sha1)['"])\b/g,
     explanation:

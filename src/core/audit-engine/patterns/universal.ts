@@ -244,6 +244,11 @@ export const UNIVERSAL_PATTERNS: BugPattern[] = [
       "rust",
       "csharp",
     ],
+    // Categorical: these algorithms are broken regardless of how
+    // they're used; verify_prompt only filters the security-vs-not
+    // question, the API call itself is unconditional. 100%
+    // precision on OWASP Benchmark v1.2 (340/340).
+    maturity: "high_precision",
     regex:
       /\b(?:MD5|md5|sha1|SHA1|SHA-1|DES|RC4|rc4|MD4|md4|hashlib\.md5|hashlib\.sha1|crypto\.createHash\s*\(\s*["'](?:md5|sha1)|MessageDigest\.getInstance\s*\(\s*["'](?:MD5|SHA-?1)|CryptoJS\.(?:MD5|SHA1))\b/g,
     explanation:
