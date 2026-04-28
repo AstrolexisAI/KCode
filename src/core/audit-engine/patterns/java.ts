@@ -441,7 +441,7 @@ export const JAVA_PATTERNS: BugPattern[] = [
     severity: "critical",
     languages: ["java"],
     regex:
-      /\bString\s+(\w+)\s*=\s*[^;]*\+[^;]*;[\s\S]{0,400}?\b(?:prepareCall|prepareStatement|createStatement\s*\(\s*\)\s*\.\s*execute(?:Query|Update|Batch)?|executeQuery|executeUpdate|executeBatch|execute|addBatch)\s*\(\s*\1\s*[,)]/g,
+      /\bString\s+(\w+)\s*=\s*[^;]*\+[^;]*;[\s\S]{0,400}?\b(?:prepareCall|prepareStatement|createStatement\s*\(\s*\)\s*\.\s*execute(?:Query|Update|Batch)?|executeQuery|executeUpdate|executeBatch|execute|addBatch|queryForRowSet|queryForList|queryForObject|queryForMap|queryForInt|queryForLong|query|update|batchUpdate)\s*\(\s*\1\s*[,)]/g,
     explanation:
       "A SQL string is built with concatenation in one statement and passed to prepareStatement / prepareCall / executeQuery in a later statement. Even though the dangerous call uses a variable rather than a literal concat, the variable carries the same injection vector. This is the canonical OWASP Benchmark shape — see BenchmarkTest00008 etc.",
     verify_prompt:
@@ -600,21 +600,21 @@ export const JAVA_PATTERNS: BugPattern[] = [
     title: "Servlet writes a non-literal value to response.getWriter()",
     severity: "high",
     languages: ["java"],
-    // Match getWriter().X( where the first argument is NOT a quoted
-    // string literal and NOT a bare integer literal. The previous
-    // version excluded `java.util.Locale.` first args, but OWASP's
-    // `format(Locale.US, taintedFormat, obj)` shape is vulnerable —
-    // the Locale is just locale; the format-string (arg 2) is the
-    // tainted sink. Pattern now matches; extractSinkCallArg
-    // (taint/java.ts) handles the Locale-skip on the arg side so
-    // the verdict examines arg[1] for these calls. Adds `printf` to
-    // the method alternation, missing in v2.10.398 (covers ~100
-    // OWASP cases that used `printf(taintedFmt, ...)`). Quoted
-    // strings, single-char string-template literals, and bare
-    // numerics are still excluded to keep the false-positive rate
-    // low on legitimate code.
+    // Match getWriter().X( permissively: any first arg that isn't a
+    // bare numeric literal. Quoted strings and concats starting with
+    // a literal both match — the "literal + tainted" shape is real
+    // xss (`println("prefix " + tainted)`), and pure-literal-only
+    // calls (`println("hello")`) get classified as `constant` by the
+    // sink-call extractor downstream and suppressed there with
+    // recall-safe semantics (audit-engine v2.10.403 logic).
+    //
+    // Includes `printf` in the method alternation (missing in
+    // v2.10.398). Locale-first calls like `format(Locale.US, fmt,
+    // obj)` are intentionally matched; extractSinkCallArg in
+    // taint/java.ts skips the Locale on the arg side so the verdict
+    // examines arg[1].
     regex:
-      /\bresponse\.getWriter\s*\(\s*\)\s*\.\s*(?:print|println|printf|write|format|append)\s*\(\s*(?!(?:"|`|'|\d+\s*\)))/g,
+      /\bresponse\.getWriter\s*\(\s*\)\s*\.\s*(?:print|println|printf|write|format|append)\s*\(\s*(?!\d+\s*\))/g,
     explanation:
       "response.getWriter() is being called with a non-literal first argument. If that value originated from request.getParameter / getHeader / getCookies anywhere in the method (even after transformations like URLDecoder.decode), it's reflected XSS. CWE-79.",
     verify_prompt:
@@ -635,7 +635,7 @@ export const JAVA_PATTERNS: BugPattern[] = [
     severity: "high",
     languages: ["java"],
     regex:
-      /\b(?:Runtime\.getRuntime\s*\(\s*\)\s*\.\s*exec|new\s+ProcessBuilder)\s*\(\s*(?!(?:"|`|'|new\s+String\s*\[\s*\]\s*\{\s*"))/g,
+      /\b(?:(?:java\.lang\.)?Runtime\.getRuntime\s*\(\s*\)\s*\.\s*exec|\b\w+\s*\.\s*exec(?=\s*\(\s*[^"`'])|new\s+(?:java\.lang\.)?ProcessBuilder)\s*\(\s*(?!(?:"|`|'|new\s+String\s*\[\s*\]\s*\{\s*"))/g,
     explanation:
       "exec() / ProcessBuilder() is invoked with a non-literal argument. If any concatenated value or array element traces back to request input, the user can inject shell metacharacters or extra args. CWE-78.",
     verify_prompt:
@@ -656,7 +656,7 @@ export const JAVA_PATTERNS: BugPattern[] = [
     severity: "high",
     languages: ["java"],
     regex:
-      /\b(?:new\s+(?:File|FileInputStream|FileOutputStream|FileReader|FileWriter|RandomAccessFile)\s*\(|Files\.(?:newInputStream|newOutputStream|newBufferedReader|newBufferedWriter|readString|readAllBytes|write|copy|move|delete|exists)\s*\(|Paths\.get\s*\()\s*(?!(?:"|`|'))/g,
+      /\b(?:new\s+(?:java\.io\.)?(?:File|FileInputStream|FileOutputStream|FileReader|FileWriter|RandomAccessFile)\s*\(|(?:java\.nio\.file\.)?Files\.(?:newInputStream|newOutputStream|newBufferedReader|newBufferedWriter|readString|readAllBytes|write|copy|move|delete|exists)\s*\(|(?:java\.nio\.file\.)?Paths\.get\s*\()\s*(?!(?:"|`|'))/g,
     explanation:
       "File / Files / Paths constructor receives a non-literal argument. If the value traces back to request input without canonicalization + base-dir check, the user can read/write arbitrary paths via `..` traversal. CWE-22.",
     verify_prompt:
