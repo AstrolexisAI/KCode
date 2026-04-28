@@ -33,6 +33,8 @@ Usage:
 
 import argparse
 import json
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -122,6 +124,80 @@ def run_semgrep(fixture_dir: Path) -> dict[str, set[str]]:
         fname = Path(r["path"]).name
         flagged.setdefault(fname, set()).add(r.get("check_id", ""))
     return flagged
+
+
+def _read_semgrep_token() -> str | None:
+    """Read the Semgrep API token, preferring env var over settings file.
+    Returns None if no token is configured."""
+    env_token = os.environ.get("SEMGREP_APP_TOKEN")
+    if env_token:
+        return env_token
+    settings = Path.home() / ".semgrep" / "settings.yml"
+    if not settings.exists():
+        return None
+    for line in settings.read_text().splitlines():
+        if line.startswith("api_token:"):
+            return line.split(":", 1)[1].strip()
+    return None
+
+
+def run_semgrep_pro(fixture_dir: Path) -> dict[str, set[str]] | None:
+    """Run Semgrep Pro engine. Returns None if not authenticated.
+
+    Pro mode requires the target to be a git repo. We git-init a copy of
+    the fixture in /tmp so the original tree is untouched and Semgrep
+    sees tracked files.
+    """
+    token = _read_semgrep_token()
+    if not token:
+        return None
+
+    with tempfile.TemporaryDirectory(prefix="semgrep-pro-") as tmpdir:
+        # Copy positive.* + negative.* into the tmpdir
+        for f in fixture_dir.iterdir():
+            if f.is_file():
+                shutil.copy2(f, Path(tmpdir) / f.name)
+
+        # Initialize as git repo so --pro accepts it
+        try:
+            subprocess.run(["git", "init", "-q"], cwd=tmpdir, check=True, timeout=10)
+            subprocess.run(["git", "add", "."], cwd=tmpdir, check=True, timeout=10)
+            subprocess.run(
+                ["git", "-c", "user.email=bench@local", "-c", "user.name=bench",
+                 "commit", "-q", "-m", "init"],
+                cwd=tmpdir, check=True, timeout=10,
+            )
+        except subprocess.CalledProcessError:
+            return {}
+
+        config_args: list[str] = []
+        for cfg in SEMGREP_CONFIGS:
+            config_args += ["--config", cfg]
+
+        proc = subprocess.run(
+            [
+                "docker", "run", "--rm", "-e", f"SEMGREP_APP_TOKEN={token}",
+                "-v", f"{tmpdir}:/src", "-w", "/src",
+                "returntocorp/semgrep", "semgrep", "scan", "--pro",
+                *config_args, "--json", "--quiet", "--metrics=off", ".",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        if proc.returncode != 0 and not proc.stdout.strip().startswith("{"):
+            return {}
+
+        try:
+            data = json.loads(proc.stdout)
+        except json.JSONDecodeError:
+            return {}
+
+        flagged: dict[str, set[str]] = {}
+        for r in data.get("results", []):
+            fname = Path(r["path"]).name
+            flagged.setdefault(fname, set()).add(r.get("check_id", ""))
+        return flagged
 
 
 def codeql_lang_for_fixture(fixture_dir: Path) -> str | None:
@@ -263,7 +339,7 @@ def main() -> int:
     parser.add_argument(
         "--tools",
         default="kcode,semgrep,codeql",
-        help="Comma-separated: kcode,semgrep,codeql",
+        help="Comma-separated: kcode,semgrep,semgrep-pro,codeql",
     )
     args = parser.parse_args()
 
@@ -282,8 +358,19 @@ def main() -> int:
         results["KCode"] = evaluate_tool(fixtures, "kcode", run_kcode)
 
     if "semgrep" in tools:
-        print("=== Semgrep ===", file=sys.stderr)
-        results["Semgrep"] = evaluate_tool(fixtures, "semgrep", run_semgrep)
+        print("=== Semgrep OSS ===", file=sys.stderr)
+        results["Semgrep OSS"] = evaluate_tool(fixtures, "semgrep", run_semgrep)
+
+    if "semgrep-pro" in tools:
+        if _read_semgrep_token() is None:
+            print(
+                "Semgrep Pro requires SEMGREP_APP_TOKEN env var or "
+                "~/.semgrep/settings.yml — skipping",
+                file=sys.stderr,
+            )
+        else:
+            print("=== Semgrep Pro ===", file=sys.stderr)
+            results["Semgrep Pro"] = evaluate_tool(fixtures, "semgrep-pro", run_semgrep_pro)
 
     if "codeql" in tools:
         if not CODEQL.exists():
