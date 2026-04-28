@@ -195,6 +195,23 @@ export interface BugPattern {
    *   - "embedded"     flight software (FW_ASSERT, port handlers, command framers)
    */
   pack?: PatternPack;
+  /**
+   * High-level category. v2.10.397.
+   *   - "security"  → real CWE-class vulnerabilities (SQLi, XSS, RCE, etc.).
+   *                   These are what `kcode audit` runs by default.
+   *   - "quality"   → reliability / maintainability issues that aren't
+   *                   exploitable on their own (NPEs, resource leaks,
+   *                   unused vars). Excluded from the default security
+   *                   audit; opt in with `--include-quality`. Tagging
+   *                   these out fixed a precision-killer on OWASP
+   *                   Benchmark Java where java-005-nullable-method-call
+   *                   was firing on basically every Servlet that called
+   *                   `request.getX().Y()` — a real NPE risk in real apps,
+   *                   but useless noise in a security-focused audit.
+   *
+   * Defaults to "security" when undefined.
+   */
+  category?: "security" | "quality";
 }
 
 /** Stable pack names for the F9 vendible-packs taxonomy. */
