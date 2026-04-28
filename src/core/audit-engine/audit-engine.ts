@@ -417,7 +417,18 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     }
     const verdict = classifyJavaCandidate(c, content, { filesInDir });
     taintByCandidate.set(candKey, verdict.origin);
-    if (verdict.origin === "constant" || verdict.origin === "sanitized") {
+    // Suppression is full only for var-flow patterns where the
+    // variable's origin is provably constant or sanitized at the
+    // exact match site. Sink-style patterns (java-030 etc.) extract
+    // the sink-call argument from the file content; an apparent
+    // sanitizer at this call site doesn't mean the rest of the file
+    // is safe (OWASP marks at file level — a separate unsanitized
+    // sink elsewhere still makes the file vulnerable). For those
+    // patterns we preserve the candidate but the verdict still
+    // feeds the confidence scorer so a sanitized-context push it
+    // toward the lower bands.
+    const sinkStyle = (await import("./taint/java")).isSinkStylePattern(c.pattern_id);
+    if ((verdict.origin === "constant" || verdict.origin === "sanitized") && !sinkStyle) {
       taintSuppressed.push({ candidate: c, reason: verdict.reason });
     } else {
       candidatesAfterTaint.push(c);

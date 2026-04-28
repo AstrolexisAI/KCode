@@ -146,6 +146,162 @@ export function extractTaintedVarName(candidate: Candidate): string | null {
   return null;
 }
 
+// ── Multi-line sink-call argument extraction ─────────────────────
+
+/**
+ * Sink-style patterns that need their argument expression extracted
+ * from the file content (rather than the candidate's matched_text)
+ * because OWASP-style code formats the call across multiple lines
+ * and the scanner only stores the first line of the match.
+ *
+ * For each entry the value is the substring on the candidate line
+ * the scanner anchored the match to. We use it to locate the call
+ * site in the file, then walk forward to find the balanced `(...)`
+ * containing the argument expression.
+ */
+const SINK_PATTERN_ANCHORS: Record<string, RegExp> = {
+  "java-030-xss-writer-non-literal":
+    /\bresponse\.getWriter\s*\(\s*\)\s*\.\s*(?:print|println|write|format|append)\s*\(/,
+  "java-031-cmdi-exec-non-literal":
+    /\b(?:Runtime\.getRuntime\(\)\.exec|new\s+ProcessBuilder|ProcessBuilder\s*\.\s*command|Process\s*\.\s*(?:exec|start))\s*\(/,
+  "java-032-path-file-non-literal":
+    /\b(?:new\s+(?:java\.io\.)?File|new\s+(?:java\.io\.)?FileInputStream|new\s+(?:java\.io\.)?FileReader|Paths\.get|Path\.of)\s*\(/,
+  "java-033-ldap-non-literal":
+    /\b(?:DirContext|InitialDirContext|InitialContext)\s*[\w.]*\.\s*search\s*\(/,
+  "java-034-trustbound-setattribute":
+    /\b(?:session|getSession\s*\(\s*\)\s*)\.\s*setAttribute\s*\(/,
+};
+
+/**
+ * True if the pattern is a "sink-style" pattern whose taint var
+ * extraction needs to read the file content forward from the
+ * candidate line. Other patterns (var-flow shapes, etc.) work fine
+ * with the matched_text-based extractTaintedVarName.
+ */
+export function isSinkStylePattern(patternId: string): boolean {
+  return patternId in SINK_PATTERN_ANCHORS;
+}
+
+/**
+ * Locate a sink-call's argument expression in fileContent, starting
+ * at the given 1-indexed line. Walks forward up to 5 lines to find
+ * the anchor regex, then balance-parses the argument list.
+ *
+ * Returns the *first argument* expression — the OWASP shapes always
+ * have the tainted value as arg 0 (println(x), exec(x), File(x),
+ * setAttribute(_, x) where the second arg is the tainted one for
+ * trustbound — handled by isAttributeSink below).
+ */
+export function extractSinkCallArg(
+  fileContent: string,
+  patternId: string,
+  candidateLine: number,
+): string | null {
+  const anchor = SINK_PATTERN_ANCHORS[patternId];
+  if (!anchor) return null;
+
+  const lines = fileContent.split("\n");
+  if (candidateLine < 1 || candidateLine > lines.length) return null;
+
+  // Walk forward up to 5 lines from the candidate line collecting
+  // text until we find the anchor. Multi-line OWASP code looks like
+  //   response.getWriter()
+  //           .println(
+  //                   "blah" + ...
+  let combined = "";
+  let scannedFromIdx = candidateLine - 1;
+  for (let i = 0; i < 5 && scannedFromIdx + i < lines.length; i++) {
+    combined += (lines[scannedFromIdx + i] ?? "") + "\n";
+    const m = anchor.exec(combined);
+    if (!m) continue;
+    // Anchor matched; the `(` of the arg list is at the end of m[0].
+    // Continue collecting forward lines until we close the parens.
+    const argStart = m.index + m[0].length;
+    let depth = 1; // we already consumed the opening `(`
+    let inString = false;
+    let stringChar = "";
+    let collected = combined;
+    let p = argStart;
+    while (true) {
+      while (p < collected.length) {
+        const ch = collected[p];
+        if (inString) {
+          if (ch === stringChar && collected[p - 1] !== "\\") inString = false;
+          p++;
+          continue;
+        }
+        if (ch === '"' || ch === "'") {
+          inString = true;
+          stringChar = ch;
+          p++;
+          continue;
+        }
+        if (ch === "(") depth++;
+        else if (ch === ")") {
+          depth--;
+          if (depth === 0) {
+            // For trust-boundary setAttribute the tainted value is
+            // the SECOND argument; everything else uses the first.
+            const inner = collected.slice(argStart, p).trim();
+            if (patternId === "java-034-trustbound-setattribute") {
+              const args = splitTopLevelCommas(inner);
+              return args[1] ?? null;
+            }
+            const args = splitTopLevelCommas(inner);
+            return args[0] ?? null;
+          }
+        }
+        p++;
+      }
+      // Need more lines.
+      const nextLineIdx = scannedFromIdx + (collected.match(/\n/g)?.length ?? 0);
+      const next = lines[nextLineIdx];
+      if (next === undefined) return null;
+      collected += next + "\n";
+      // Continue from where we left off — don't reset p.
+      if (collected.length === p) return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Split a comma-separated argument list at the top level (respecting
+ * parens, brackets, braces, and string literals). Returns each
+ * argument's text trimmed.
+ */
+function splitTopLevelCommas(text: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let inString = false;
+  let stringChar = "";
+  let cur = "";
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      cur += ch;
+      if (ch === stringChar && text[i - 1] !== "\\") inString = false;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      inString = true;
+      stringChar = ch;
+      cur += ch;
+      continue;
+    }
+    if (ch === "(" || ch === "[" || ch === "{") depth++;
+    else if (ch === ")" || ch === "]" || ch === "}") depth--;
+    if (ch === "," && depth === 0) {
+      if (cur.trim()) out.push(cur.trim());
+      cur = "";
+      continue;
+    }
+    cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+
 // ── Expression parsing helpers ────────────────────────────────────
 
 function extractFirstArg(callExpr: string): string | null {
@@ -227,7 +383,20 @@ export function classifyExpression(
     return { origin: "unknown", reason: "max recursion depth" };
   }
 
-  const trimmed = expr.trim();
+  // Normalise whitespace inside method chains. OWASP-style code
+  // formats long FQN calls across multiple lines:
+  //   org.owasp
+  //       .esapi
+  //       .ESAPI
+  //       .encoder()
+  // The sanitizer / source regexes anchor on the FQN prefix and
+  // can't match if there's whitespace around the dots. Collapse
+  // ` .` and `.\n` into bare `.` so the regexes line up regardless
+  // of source formatting.
+  const trimmed = expr
+    .trim()
+    .replace(/\s*\.\s*/g, ".")
+    .replace(/\s+/g, " ");
   if (!trimmed) return { origin: "unknown", reason: "empty" };
 
   if (/^"[^"\\]*(?:\\.[^"\\]*)*"$/.test(trimmed)) {
@@ -971,6 +1140,29 @@ export function classifyJavaCandidate(
   const ctx: ClassifyContext = { ...baseCtx, fileContent };
   if (!shouldClassifyForTaint(candidate.pattern_id)) {
     return { origin: "unknown", reason: "pattern not in taint-flow set" };
+  }
+
+  // Sink-style patterns: matched_text is just the anchor (e.g.
+  // `response.getWriter()`) and the actual tainted argument lives
+  // across multiple lines in the file. Extract it forward from the
+  // candidate line and classify the expression directly — that
+  // handles concat, sanitizer wrappers, identifiers, and method
+  // calls without a separate variable walk.
+  if (isSinkStylePattern(candidate.pattern_id)) {
+    const arg = extractSinkCallArg(
+      fileContent,
+      candidate.pattern_id,
+      candidate.line,
+    );
+    if (arg === null) {
+      return { origin: "unknown", reason: "could not extract sink-call arg" };
+    }
+    return classifyExpression(arg, {
+      ...ctx,
+      currentLine: candidate.line,
+      visited: new Set(),
+      depth: 0,
+    });
   }
 
   const initialVar = extractTaintedVarName(candidate);
