@@ -441,7 +441,7 @@ export const JAVA_PATTERNS: BugPattern[] = [
     severity: "critical",
     languages: ["java"],
     regex:
-      /\bString\s+(\w+)\s*=\s*[^;]*\+[^;]*;[\s\S]{0,400}?\b(?:prepareCall|prepareStatement|createStatement\s*\(\s*\)\s*\.\s*execute(?:Query|Update)?|executeQuery|executeUpdate)\s*\(\s*\1\s*[,)]/g,
+      /\bString\s+(\w+)\s*=\s*[^;]*\+[^;]*;[\s\S]{0,400}?\b(?:prepareCall|prepareStatement|createStatement\s*\(\s*\)\s*\.\s*execute(?:Query|Update|Batch)?|executeQuery|executeUpdate|executeBatch|execute|addBatch)\s*\(\s*\1\s*[,)]/g,
     explanation:
       "A SQL string is built with concatenation in one statement and passed to prepareStatement / prepareCall / executeQuery in a later statement. Even though the dangerous call uses a variable rather than a literal concat, the variable carries the same injection vector. This is the canonical OWASP Benchmark shape — see BenchmarkTest00008 etc.",
     verify_prompt:
@@ -601,10 +601,20 @@ export const JAVA_PATTERNS: BugPattern[] = [
     severity: "high",
     languages: ["java"],
     // Match getWriter().X( where the first argument is NOT a quoted
-    // string and NOT a known-safe construction (Locale only, integer
-    // literal). That covers OWASP's `param` after URLDecoder.decode().
+    // string literal and NOT a bare integer literal. The previous
+    // version excluded `java.util.Locale.` first args, but OWASP's
+    // `format(Locale.US, taintedFormat, obj)` shape is vulnerable —
+    // the Locale is just locale; the format-string (arg 2) is the
+    // tainted sink. Pattern now matches; extractSinkCallArg
+    // (taint/java.ts) handles the Locale-skip on the arg side so
+    // the verdict examines arg[1] for these calls. Adds `printf` to
+    // the method alternation, missing in v2.10.398 (covers ~100
+    // OWASP cases that used `printf(taintedFmt, ...)`). Quoted
+    // strings, single-char string-template literals, and bare
+    // numerics are still excluded to keep the false-positive rate
+    // low on legitimate code.
     regex:
-      /\bresponse\.getWriter\s*\(\s*\)\s*\.\s*(?:print|println|write|format|append)\s*\(\s*(?!(?:"|`|'|java\.util\.Locale\.|\d+\s*\)))/g,
+      /\bresponse\.getWriter\s*\(\s*\)\s*\.\s*(?:print|println|printf|write|format|append)\s*\(\s*(?!(?:"|`|'|\d+\s*\)))/g,
     explanation:
       "response.getWriter() is being called with a non-literal first argument. If that value originated from request.getParameter / getHeader / getCookies anywhere in the method (even after transformations like URLDecoder.decode), it's reflected XSS. CWE-79.",
     verify_prompt:
@@ -699,5 +709,30 @@ export const JAVA_PATTERNS: BugPattern[] = [
     cwe: "CWE-501",
     fix_template:
       "Parse to a strict type before setAttribute: int userId = Integer.parseInt(input); session.setAttribute(\"userId\", userId);",
+  },
+
+  // ── XSS via response.setHeader / addHeader (CWE-79 / CWE-113) ──
+  // OWASP Benchmark v1.2 has 45 xss cases that route the tainted
+  // value into a header (X-XSS-Protection variants, custom headers)
+  // rather than the body. Header injection becomes XSS in browsers
+  // that reflect the header value into a page (or directly via
+  // CRLF injection in the value). v2.10.402.
+  {
+    id: "java-035-xss-header-non-literal",
+    title: "response.setHeader / addHeader with a non-literal value",
+    severity: "high",
+    languages: ["java"],
+    regex:
+      /\bresponse\.(?:setHeader|addHeader)\s*\(\s*"[^"]+"\s*,\s*(?!(?:"|`|'|null|\d+\s*\)))/g,
+    explanation:
+      "response.setHeader / addHeader is called with a non-literal value as the second argument. If that value traces back to request input without strict allow-list validation, the user can inject CRLF bytes (response splitting), write a Set-Cookie they shouldn't be able to set, or land arbitrary content in a header that's reflected into the page. CWE-79 / CWE-113.",
+    verify_prompt:
+      "Trace the second argument back to its definition.\n" +
+      "1. CONFIRMED if any source is request.getParameter / getHeader / getCookies / getRequestURI without strict allow-list parsing.\n" +
+      "2. FALSE_POSITIVE if the value is a parsed type (int, enum, UUID) or matches an anchored allow-list regex.\n" +
+      "3. FALSE_POSITIVE if the header name is one that the framework strips of CRLF (`Content-Type` is generally container-validated; custom headers are not).",
+    cwe: "CWE-79",
+    fix_template:
+      "Validate before setting: if (Pattern.matches(\"^[A-Za-z0-9_-]+$\", value)) response.setHeader(\"X-Custom\", value);",
   },
 ];
