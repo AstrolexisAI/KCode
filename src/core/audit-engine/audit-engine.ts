@@ -357,6 +357,51 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
     `Found ${rawCandidates.length} raw matches → ${candidates.length} unique (pattern,file) pairs across ${files.length} files`,
   );
 
+  // Fix #3 (v2.10.399) — Java taint flow. For high-FP regex patterns
+  // we walk the candidate's tainted variable backward through its
+  // assignment chain; if the chain provably resolves to a constant or
+  // a sanitizer-wrapped value, the candidate is suppressed before we
+  // burn a verifier call on it. Verdicts of `unknown` (the conservative
+  // side) leave the candidate intact, preserving recall.
+  const { classifyJavaCandidate, shouldClassifyForTaint } = await import("./taint");
+  const fileReadCache = new Map<string, string>();
+  const taintSuppressed: Array<{ candidate: Candidate; reason: string }> = [];
+  const candidatesAfterTaint: Candidate[] = [];
+  for (const c of candidates) {
+    if (!c.file.endsWith(".java") || !shouldClassifyForTaint(c.pattern_id)) {
+      candidatesAfterTaint.push(c);
+      continue;
+    }
+    let content = fileReadCache.get(c.file);
+    if (content === undefined) {
+      try {
+        const { readFileSync } = await import("node:fs");
+        content = readFileSync(c.file, "utf8");
+      } catch {
+        content = "";
+      }
+      fileReadCache.set(c.file, content);
+    }
+    if (!content) {
+      candidatesAfterTaint.push(c);
+      continue;
+    }
+    const verdict = classifyJavaCandidate(c, content);
+    if (verdict.origin === "constant" || verdict.origin === "sanitized") {
+      taintSuppressed.push({ candidate: c, reason: verdict.reason });
+    } else {
+      candidatesAfterTaint.push(c);
+    }
+  }
+  if (taintSuppressed.length > 0) {
+    opts.onPhase?.(
+      "scanning",
+      `taint flow: ${taintSuppressed.length} Java candidate(s) suppressed (constant/sanitized origin)`,
+    );
+  }
+  // From here on, work with the post-taint candidate set.
+  const candidatesPostTaint = candidatesAfterTaint;
+
   // CL.3 (v2.10.373) — learning loop. review-history persists every
   // /review demote_fp action keyed by (project, pattern, path-glob).
   // Before sending each candidate to the verifier, check if this
@@ -369,7 +414,7 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
   const { isHighNoise, getDemotionCount } = await import("./review-history");
   const learningLoopSuppressed: Candidate[] = [];
   const candidatesToVerify: Candidate[] = [];
-  for (const c of candidates) {
+  for (const c of candidatesPostTaint) {
     if (
       isHighNoise({
         projectRoot: opts.projectRoot,
@@ -404,8 +449,10 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
   let falsePositives = 0;
 
   if (opts.skipVerification) {
-    // Return all candidates as "confirmed" without model check (used for testing)
-    verified = candidates.map((c) => ({
+    // Return remaining candidates as "confirmed" without model check.
+    // Uses the post-taint set so suppressions still apply when the
+    // user opts out of LLM verification.
+    verified = candidatesPostTaint.map((c) => ({
       candidate: c,
       verification: {
         verdict: "confirmed" as const,
