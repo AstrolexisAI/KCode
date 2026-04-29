@@ -19,6 +19,8 @@ jobs:
       - name: Install ripgrep (required by Grep/PreviewGrepReplace tests)
         run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: bun install
+      - name: Install backend workspace deps (hono)
+        run: cd backend && bun install
       - name: Dependency audit
         run: bun audit
       - name: Lint
@@ -36,6 +38,8 @@ jobs:
         with:
           bun-version: latest
       - run: bun install
+      - name: Install backend workspace deps (hono)
+        run: cd backend && bun install
       - name: Run tests (Windows)
         run: bun run test:ci
         env:
