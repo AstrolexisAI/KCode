@@ -29,6 +29,15 @@ export interface AuditEngineOptions {
   llmCallback: (prompt: string) => Promise<string>;
   /** Optional cloud-model fallback for ambiguous candidates */
   fallbackCallback?: (prompt: string) => Promise<string>;
+  /**
+   * Cascade mode for the fallback callback. v2.10.406:
+   *   - "on-confirmed" (default when fallbackCallback set): high-precision
+   *     ensemble — fallback runs only when primary confirms; final verdict
+   *     `confirmed` only if BOTH agree.
+   *   - "on-needs-context": legacy — fallback runs only when primary returns
+   *     `needs_context` (escalate-on-ambiguous).
+   */
+  cascadeMode?: "on-confirmed" | "on-needs-context";
   /** Max files to scan (default 500) */
   maxFiles?: number;
   /** Skip verification phase (return candidates as findings without model check) */
@@ -552,13 +561,16 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
       },
     }));
   } else {
+    const cascadeMode =
+      opts.cascadeMode ?? (opts.fallbackCallback ? "on-confirmed" : undefined);
     const verifyHint = opts.fallbackCallback
-      ? `${candidatesToVerify.length} candidates (primary + fallback on ambiguity)`
+      ? `${candidatesToVerify.length} candidates (cascade=${cascadeMode})`
       : `${candidatesToVerify.length} candidates`;
     opts.onPhase?.("verifying", verifyHint);
     const verifyOpts: VerifyOptions = {
       llmCallback: opts.llmCallback,
       fallbackCallback: opts.fallbackCallback,
+      ...(cascadeMode ? { cascadeMode } : {}),
       // Fire live progress on each verified candidate so the UI can
       // update its progress bar in real time.
       onVerified: opts.onCandidate

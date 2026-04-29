@@ -11,20 +11,97 @@ import type { KCodeConfig } from "../types";
 
 export interface AuditLlmOptions {
   model: string;
-  apiBase: string;
+  /** Optional. When omitted, resolved by model-name prefix below. */
+  apiBase?: string;
   apiKey?: string;
   maxTokens?: number;
   temperature?: number;
+  /** Optional ~/.kcode/settings.json fields. Used to resolve a
+   *  provider-specific apiKey (anthropicApiKey / xaiApiKey / kimiApiKey
+   *  / groqApiKey / deepseekApiKey / togetherApiKey) when `apiKey` is
+   *  not passed explicitly. */
+  settings?: Record<string, string | undefined>;
+}
+
+/**
+ * Resolve the API base URL for a given model by name prefix. Used as
+ * the default route when callers don't pass an explicit apiBase. The
+ * mapping covers the providers KCode officially supports for verifier
+ * + audit work; everything else falls through to OpenAI-compatible.
+ *
+ * Synced with cloud-fallback.ts and the model registry — model names
+ * here are CANONICAL prefixes; vendor model IDs (`claude-sonnet-4-6`,
+ * `grok-4-fast-reasoning`, `kimi-k2.6`, etc.) all match by prefix.
+ *
+ * v2.10.405. Closes the bug where `kcode audit -m claude-sonnet-4-6`
+ * (without --api-base) routed to whatever default the CLI guessed
+ * from the global apiKey setting — typically OpenAI when a
+ * dashboard `sk-proj-...` key was saved, leading to 429 quota
+ * errors and verdict=needs_context for every finding.
+ */
+export function resolveApiBaseByModel(model: string): string {
+  const m = model.toLowerCase();
+  if (m.startsWith("claude")) return "https://api.anthropic.com/v1";
+  if (m.startsWith("grok")) return "https://api.x.ai/v1";
+  if (m.startsWith("kimi") || m.startsWith("moonshot"))
+    return "https://api.moonshot.ai/v1";
+  if (m.startsWith("gpt") || m.startsWith("o1") || m.startsWith("o3"))
+    return "https://api.openai.com/v1";
+  if (m.startsWith("deepseek")) return "https://api.deepseek.com/v1";
+  if (m.startsWith("llama") || m.startsWith("mixtral"))
+    return "https://api.groq.com/openai/v1";
+  // Local models (mark7, mnemo:, etc.) and unrecognised names fall to
+  // localhost — works for the dev fleet, breaks loudly for everything
+  // else (which is the right failure mode: tell the user to register
+  // the model or pass --api-base).
+  return "http://localhost:10091";
+}
+
+/**
+ * Resolve an API key for a given baseUrl + model, reading both env
+ * vars (always win) and the per-provider settings.json fields. Used
+ * when the caller doesn't pass an explicit apiKey. v2.10.405.
+ *
+ * Settings shape: `~/.kcode/settings.json` has separate fields per
+ * provider — `anthropicApiKey`, `xaiApiKey`, `kimiApiKey`,
+ * `groqApiKey`, `deepseekApiKey`, `togetherApiKey`. The generic
+ * `apiKey` field is reserved for the OpenAI dashboard key.
+ */
+function resolveApiKeyForBase(baseUrl: string, settings: Record<string, string | undefined> = {}): string {
+  const url = baseUrl.toLowerCase();
+  if (url.includes("anthropic.com"))
+    return process.env.ANTHROPIC_API_KEY ?? settings.anthropicApiKey ?? "";
+  if (url.includes("api.x.ai"))
+    return process.env.XAI_API_KEY ?? settings.xaiApiKey ?? "";
+  if (url.includes("moonshot"))
+    return process.env.MOONSHOT_API_KEY ?? settings.kimiApiKey ?? "";
+  if (url.includes("groq.com"))
+    return process.env.GROQ_API_KEY ?? settings.groqApiKey ?? "";
+  if (url.includes("deepseek.com"))
+    return process.env.DEEPSEEK_API_KEY ?? settings.deepseekApiKey ?? "";
+  if (url.includes("together.xyz"))
+    return process.env.TOGETHER_API_KEY ?? settings.togetherApiKey ?? "";
+  if (url.includes("openai.com"))
+    return process.env.OPENAI_API_KEY ?? settings.apiKey ?? "";
+  // Local / unknown — no API key needed (or caller passes it explicitly)
+  return "";
 }
 
 /**
  * Build a callback that sends ONE prompt to the configured LLM and
  * returns its response text. Works with Anthropic-native or OpenAI-
  * compatible endpoints (llama.cpp, Ollama, vLLM, OpenAI).
+ *
+ * When `apiBase` is omitted, resolved by model-name prefix via
+ * `resolveApiBaseByModel`. v2.10.405 — closes the bug where the CLI
+ * sent claude-/grok-/kimi- model names to OpenAI's chat-completions
+ * endpoint when `settings.apiKey` happened to be an OpenAI key.
  */
 export function makeAuditLlmCallback(opts: AuditLlmOptions): (prompt: string) => Promise<string> {
-  const { model, apiBase } = opts;
-  const apiKey = opts.apiKey ?? process.env.ANTHROPIC_API_KEY ?? process.env.KCODE_API_KEY ?? "";
+  const model = opts.model;
+  const apiBase = opts.apiBase ?? resolveApiBaseByModel(model);
+  const apiKey =
+    opts.apiKey ?? resolveApiKeyForBase(apiBase, opts.settings) ?? process.env.KCODE_API_KEY ?? "";
   // Bumped to 4096 in v2.10.311 — reasoning models like mark7 / qwen-r1
   // / deepseek-r1 spend most of their budget on internal reasoning
   // tokens before producing the final VERDICT line. At 1024 the
@@ -34,7 +111,20 @@ export function makeAuditLlmCallback(opts: AuditLlmOptions): (prompt: string) =>
   const temperature = opts.temperature ?? 0.1;
 
   const isAnthropic = apiBase.includes("anthropic.com") || /\bclaude\b/i.test(model);
+  // Anthropic deprecated `temperature` for opus-4-7 and newer reasoning
+  // models — passing it returns HTTP 400 invalid_request_error and
+  // every candidate buckets as needs_context. v2.10.405. Detect by
+  // model name (opus-4-7+, sonnet-4-7+, opus-5+) and omit the field.
+  const skipTemperature =
+    isAnthropic && /\b(?:opus-4-[7-9]|opus-[5-9]|sonnet-4-[7-9]|sonnet-[5-9])\b/i.test(model);
   const isOAuthToken = apiKey.startsWith("sk-ant-oat01-");
+
+  // Trace line for the audit benchmarks: confirms which provider is
+  // actually being hit. Suppressed in tests / when KCODE_QUIET is set.
+  if (!process.env.KCODE_QUIET && !process.env.NODE_TEST_CONTEXT) {
+    const keyHint = apiKey ? `${apiKey.slice(0, 8)}…` : "<none>";
+    process.stderr.write(`[Verifier] ${model} → ${apiBase} (key: ${keyHint})\n`);
+  }
 
   return async (prompt: string): Promise<string> => {
     // Retry wrapper for 429 rate limits
@@ -77,7 +167,7 @@ export function makeAuditLlmCallback(opts: AuditLlmOptions): (prompt: string) =>
         body: JSON.stringify({
           model,
           max_tokens: maxTokens,
-          temperature,
+          ...(skipTemperature ? {} : { temperature }),
           messages: [{ role: "user", content: prompt }],
         }),
       });

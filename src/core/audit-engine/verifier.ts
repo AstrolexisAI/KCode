@@ -26,15 +26,32 @@ import type {
 } from "./types";
 
 export interface VerifyOptions {
-  /** Primary LLM callback (typically local, cheap). */
+  /** Primary LLM callback (typically cheap + fast — e.g. grok-fast). */
   llmCallback: (prompt: string) => Promise<string>;
   /**
-   * Optional fallback LLM callback (typically cloud, accurate). When set,
-   * candidates that the primary model marks as NEEDS_CONTEXT (ambiguous)
-   * are re-verified with this callback. Keeps token cost down: only hard
-   * cases escalate to the expensive model.
+   * Optional fallback LLM callback. The semantics depend on `cascadeMode`:
+   *
+   *   - "on-confirmed" (default when fallbackCallback is set, v2.10.406+):
+   *     after the PRIMARY model confirms a candidate, the FALLBACK is
+   *     also invoked. Final verdict = `confirmed` only if BOTH agree;
+   *     otherwise the candidate is downgraded to `false_positive` with
+   *     a reasoning trail that names the disagreement. This is the
+   *     "ensemble cascade" — primary cheap-prefilters, fallback
+   *     premium-confirms. Empirically (Grok-fast + Opus on OWASP sqli):
+   *     F1 0.842 vs 0.800 single-model, ~$17 vs ~$40 per OWASP-scale
+   *     audit.
+   *
+   *   - "on-needs-context" (legacy mode): when the primary marks a
+   *     candidate as `needs_context` (ambiguous), it is re-verified
+   *     with the fallback. Useful when the primary is a local model
+   *     that flags hard cases for a cloud second opinion.
    */
   fallbackCallback?: (prompt: string) => Promise<string>;
+  /**
+   * How `fallbackCallback` is invoked. Defaults to "on-confirmed"
+   * when fallbackCallback is provided. v2.10.406.
+   */
+  cascadeMode?: "on-confirmed" | "on-needs-context";
   /** Max lines of file content to include as context (default 200). */
   contextLines?: number;
   /** Called BEFORE each verification starts (for "verifying X..." messages). */
@@ -402,18 +419,16 @@ function degradedVerdict(reason: string): Verification {
 }
 
 /**
- * Verify a single candidate by calling the primary LLM only. Does ONE
- * retry on parse failure with a "your previous response was not
- * valid JSON" suffix, then degrades to needs_context. Does NOT
- * auto-escalate to fallback — that's handled by the orchestrator
- * after user confirmation.
+ * Run the prompt + parse + retry + degrade pipeline against a single
+ * callback. Factored out of `verifyCandidate` so the cascade-on-confirmed
+ * flow (v2.10.406) can reuse it for the fallback model.
  */
-export async function verifyCandidate(
+async function runWithCallback(
   candidate: Candidate,
-  opts: VerifyOptions,
+  callback: (prompt: string) => Promise<string>,
 ): Promise<Verification> {
   const prompt = buildVerifyPrompt(candidate);
-  const primary = await opts.llmCallback(prompt);
+  const primary = await callback(prompt);
   const firstParse = parseVerdict(primary);
   if (firstParse) return sanityCheckVerdict(firstParse);
 
@@ -426,11 +441,54 @@ Your previous response was not valid JSON or was missing required fields.
 Respond with EXACTLY ONE JSON object matching the schema above. No prose,
 no markdown fences, no extra text. The "verdict" and "reasoning" fields
 are mandatory.`;
-  const retry = await opts.llmCallback(retryPrompt);
+  const retry = await callback(retryPrompt);
   const retryParse = parseVerdict(retry);
   if (retryParse) return sanityCheckVerdict(retryParse);
 
   return degradedVerdict("model returned non-JSON twice");
+}
+
+/**
+ * Verify a single candidate by calling the primary LLM only. Does ONE
+ * retry on parse failure with a "your previous response was not
+ * valid JSON" suffix, then degrades to needs_context. Does NOT
+ * auto-escalate to fallback — that's handled by the orchestrator
+ * after user confirmation, or by `verifyAllCandidates` when
+ * `cascadeMode` is set.
+ */
+export async function verifyCandidate(
+  candidate: Candidate,
+  opts: VerifyOptions,
+): Promise<Verification> {
+  return runWithCallback(candidate, opts.llmCallback);
+}
+
+/**
+ * Combine a primary verdict and a fallback verdict under cascade-on-confirmed
+ * semantics. Called only when primary returned `confirmed` and a fallback
+ * callback is configured. Returns:
+ *
+ *   - `confirmed` (with [ensemble ✓] prefix on reasoning) when both agree
+ *   - `false_positive` (with [ensemble ✗] prefix) when fallback disagreed
+ *
+ * The downgrade-to-FP on disagreement is the conservative choice: the
+ * page recommends this configuration as the high-precision default,
+ * and a single confirmation from the cheaper model is not enough on
+ * its own to justify the alert.
+ */
+function combineVerdicts(primary: Verification, fallback: Verification): Verification {
+  if (fallback.verdict === "confirmed") {
+    return {
+      ...primary,
+      reasoning: `[ensemble ✓ both confirmed] ${primary.reasoning}`,
+    };
+  }
+  const trim = (s: string) => (s.length > 200 ? `${s.slice(0, 200)}…` : s);
+  return {
+    verdict: "false_positive",
+    reasoning: `[ensemble ✗ fallback ${fallback.verdict}] primary said: ${trim(primary.reasoning)} | fallback said: ${trim(fallback.reasoning)}`,
+    evidence: primary.evidence,
+  };
 }
 
 /**
@@ -459,6 +517,13 @@ export async function verifyAllCandidates(
   opts: VerifyOptions,
 ): Promise<Array<{ candidate: Candidate; verification: Verification }>> {
   const results: Array<{ candidate: Candidate; verification: Verification }> = [];
+  // Default cascade mode is "on-confirmed" when a fallbackCallback is
+  // present — that's the high-precision ensemble configuration the
+  // benchmark page recommends as default. Callers can override
+  // explicitly to "on-needs-context" for the legacy escalate-on-
+  // ambiguous behaviour.
+  const cascadeMode: "on-confirmed" | "on-needs-context" =
+    opts.cascadeMode ?? (opts.fallbackCallback ? "on-confirmed" : "on-needs-context");
   // Track consecutive transport-level failures. If the first 3
   // candidates ALL fail with a network/connect-style error, the
   // verifier endpoint is unreachable — abort the whole pass instead
@@ -468,7 +533,18 @@ export async function verifyAllCandidates(
   // to the user. Now we throw early so the CLI can surface the
   // configuration error.
   let consecutiveTransportFailures = 0;
-  const TRANSPORT_FAIL_LIMIT = 3;
+  // Default 3 keeps fast-fail for misconfigured endpoints (the original
+  // intent — see issue #111). For long benchmark runs that must survive
+  // transient 503s from a busy provider, set KCODE_VERIFIER_FAIL_LIMIT
+  // to a higher value (e.g. 10). v2.10.406.
+  const TRANSPORT_FAIL_LIMIT = (() => {
+    const raw = process.env.KCODE_VERIFIER_FAIL_LIMIT;
+    if (raw) {
+      const n = parseInt(raw, 10);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    return 3;
+  })();
   for (let i = 0; i < candidates.length; i++) {
     if (opts.signal?.aborted) {
       const { ScanCancelledError } = await import("./scan-state");
@@ -479,6 +555,29 @@ export async function verifyAllCandidates(
     let verification: Verification;
     try {
       verification = await verifyCandidate(c, opts);
+      // v2.10.406 — cascade. After the primary returns its verdict,
+      // optionally invoke the fallback. The two supported modes
+      // intersect with the verdict differently:
+      //   on-confirmed: only run fallback when primary CONFIRMS
+      //                 (high-precision ensemble; default when
+      //                  fallbackCallback is set)
+      //   on-needs-context: only run fallback when primary returns
+      //                 NEEDS_CONTEXT (legacy escalate-on-ambiguous)
+      if (opts.fallbackCallback) {
+        if (cascadeMode === "on-confirmed" && verification.verdict === "confirmed") {
+          const fallback = await runWithCallback(c, opts.fallbackCallback);
+          verification = combineVerdicts(verification, fallback);
+        } else if (
+          cascadeMode === "on-needs-context" &&
+          verification.verdict === "needs_context"
+        ) {
+          const fallback = await runWithCallback(c, opts.fallbackCallback);
+          verification = {
+            ...fallback,
+            reasoning: `[☁ escalated] ${fallback.reasoning}`,
+          };
+        }
+      }
       consecutiveTransportFailures = 0;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
