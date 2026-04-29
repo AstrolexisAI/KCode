@@ -84,15 +84,11 @@ describe("classifyExpression — sanitizers", () => {
     expect(r.origin).toBe("sanitized");
   });
   it("ESAPI.encoder().encodeForHTML over tainted → sanitized", () => {
-    const r = classifyExpression(
-      'ESAPI.encoder().encodeForHTML(request.getParameter("x"))',
-    );
+    const r = classifyExpression('ESAPI.encoder().encodeForHTML(request.getParameter("x"))');
     expect(r.origin).toBe("sanitized");
   });
   it("StringEscapeUtils.escapeHtml4 over tainted → sanitized", () => {
-    const r = classifyExpression(
-      'StringEscapeUtils.escapeHtml4(request.getParameter("x"))',
-    );
+    const r = classifyExpression('StringEscapeUtils.escapeHtml4(request.getParameter("x"))');
     expect(r.origin).toBe("sanitized");
   });
 });
@@ -102,15 +98,12 @@ describe("classifyExpression — concat", () => {
     expect(classifyExpression('"foo" + "bar"').origin).toBe("constant");
   });
   it('"foo" + request.getParameter("x") is tainted', () => {
-    expect(classifyExpression('"foo" + request.getParameter("x")').origin).toBe(
-      "tainted",
-    );
+    expect(classifyExpression('"foo" + request.getParameter("x")').origin).toBe("tainted");
   });
   it("constant + sanitized is sanitized", () => {
-    expect(
-      classifyExpression('"foo" + Integer.parseInt(request.getParameter("x"))')
-        .origin,
-    ).toBe("sanitized");
+    expect(classifyExpression('"foo" + Integer.parseInt(request.getParameter("x"))').origin).toBe(
+      "sanitized",
+    );
   });
 });
 
@@ -149,10 +142,7 @@ public class T {
   }
 }
 `.trim();
-    const c = javaCandidate(
-      'String sql = "..." + x + "..."; prepareStatement(sql);',
-      4,
-    );
+    const c = javaCandidate('String sql = "..." + x + "..."; prepareStatement(sql);', 4);
     const r = classifyJavaCandidate(c, file);
     expect(r.origin).toBe("constant");
   });
@@ -167,10 +157,7 @@ public class T {
   }
 }
 `.trim();
-    const c = javaCandidate(
-      'String sql = "..." + p + "..."; prepareStatement(sql);',
-      4,
-    );
+    const c = javaCandidate('String sql = "..." + p + "..."; prepareStatement(sql);', 4);
     const r = classifyJavaCandidate(c, file);
     expect(r.origin).toBe("tainted");
   });
@@ -185,10 +172,7 @@ public class T {
   }
 }
 `.trim();
-    const c = javaCandidate(
-      'String sql = "..." + p + "..."; prepareStatement(sql);',
-      4,
-    );
+    const c = javaCandidate('String sql = "..." + p + "..."; prepareStatement(sql);', 4);
     const r = classifyJavaCandidate(c, file);
     expect(r.origin).toBe("sanitized");
   });

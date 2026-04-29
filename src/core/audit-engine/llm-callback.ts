@@ -43,13 +43,11 @@ export function resolveApiBaseByModel(model: string): string {
   const m = model.toLowerCase();
   if (m.startsWith("claude")) return "https://api.anthropic.com/v1";
   if (m.startsWith("grok")) return "https://api.x.ai/v1";
-  if (m.startsWith("kimi") || m.startsWith("moonshot"))
-    return "https://api.moonshot.ai/v1";
+  if (m.startsWith("kimi") || m.startsWith("moonshot")) return "https://api.moonshot.ai/v1";
   if (m.startsWith("gpt") || m.startsWith("o1") || m.startsWith("o3"))
     return "https://api.openai.com/v1";
   if (m.startsWith("deepseek")) return "https://api.deepseek.com/v1";
-  if (m.startsWith("llama") || m.startsWith("mixtral"))
-    return "https://api.groq.com/openai/v1";
+  if (m.startsWith("llama") || m.startsWith("mixtral")) return "https://api.groq.com/openai/v1";
   // Local models (mark7, mnemo:, etc.) and unrecognised names fall to
   // localhost — works for the dev fleet, breaks loudly for everything
   // else (which is the right failure mode: tell the user to register
@@ -67,22 +65,21 @@ export function resolveApiBaseByModel(model: string): string {
  * `groqApiKey`, `deepseekApiKey`, `togetherApiKey`. The generic
  * `apiKey` field is reserved for the OpenAI dashboard key.
  */
-function resolveApiKeyForBase(baseUrl: string, settings: Record<string, string | undefined> = {}): string {
+function resolveApiKeyForBase(
+  baseUrl: string,
+  settings: Record<string, string | undefined> = {},
+): string {
   const url = baseUrl.toLowerCase();
   if (url.includes("anthropic.com"))
     return process.env.ANTHROPIC_API_KEY ?? settings.anthropicApiKey ?? "";
-  if (url.includes("api.x.ai"))
-    return process.env.XAI_API_KEY ?? settings.xaiApiKey ?? "";
-  if (url.includes("moonshot"))
-    return process.env.MOONSHOT_API_KEY ?? settings.kimiApiKey ?? "";
-  if (url.includes("groq.com"))
-    return process.env.GROQ_API_KEY ?? settings.groqApiKey ?? "";
+  if (url.includes("api.x.ai")) return process.env.XAI_API_KEY ?? settings.xaiApiKey ?? "";
+  if (url.includes("moonshot")) return process.env.MOONSHOT_API_KEY ?? settings.kimiApiKey ?? "";
+  if (url.includes("groq.com")) return process.env.GROQ_API_KEY ?? settings.groqApiKey ?? "";
   if (url.includes("deepseek.com"))
     return process.env.DEEPSEEK_API_KEY ?? settings.deepseekApiKey ?? "";
   if (url.includes("together.xyz"))
     return process.env.TOGETHER_API_KEY ?? settings.togetherApiKey ?? "";
-  if (url.includes("openai.com"))
-    return process.env.OPENAI_API_KEY ?? settings.apiKey ?? "";
+  if (url.includes("openai.com")) return process.env.OPENAI_API_KEY ?? settings.apiKey ?? "";
   // Local / unknown — no API key needed (or caller passes it explicitly)
   return "";
 }
