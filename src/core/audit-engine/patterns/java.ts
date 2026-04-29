@@ -462,7 +462,7 @@ export const JAVA_PATTERNS: BugPattern[] = [
       "3. FALSE_POSITIVE if the variable is only used for debug logging (no execute() call reached).",
     cwe: "CWE-89",
     fix_template:
-      "Use parameterized queries: String sql = \"SELECT * FROM t WHERE id = ?\"; PreparedStatement ps = conn.prepareStatement(sql); ps.setString(1, userInput);",
+      'Use parameterized queries: String sql = "SELECT * FROM t WHERE id = ?"; PreparedStatement ps = conn.prepareStatement(sql); ps.setString(1, userInput);',
   },
 
   // ── XSS via response.getWriter() (CWE-79) ──────────────────────
@@ -564,8 +564,7 @@ export const JAVA_PATTERNS: BugPattern[] = [
     // in between. This is harder to express purely as regex — simpler
     // approach: match the addCookie call site and rely on the LLM
     // verifier to check the absence of safety calls.
-    regex:
-      /\bresponse\.addCookie\s*\(\s*(\w+)\s*\)/g,
+    regex: /\bresponse\.addCookie\s*\(\s*(\w+)\s*\)/g,
     explanation:
       "A Cookie object is added to the HTTP response. If setSecure(true) is not called, the cookie can leak over plain HTTP. If setHttpOnly(true) is not called, JavaScript can read the cookie (XSS theft). CWE-614, CWE-1004.",
     verify_prompt:
@@ -595,7 +594,7 @@ export const JAVA_PATTERNS: BugPattern[] = [
       "3. CONFIRMED if request.getParameter / getCookies / getHeader flows into setAttribute without normalization.",
     cwe: "CWE-501",
     fix_template:
-      "Validate and parse the input into a strict type before storing in the session: int userId = Integer.parseInt(request.getParameter(\"id\")); session.setAttribute(\"userId\", userId);",
+      'Validate and parse the input into a strict type before storing in the session: int userId = Integer.parseInt(request.getParameter("id")); session.setAttribute("userId", userId);',
   },
 
   // ── Broader patterns: catch the SINK call with a variable arg, let
@@ -687,8 +686,7 @@ export const JAVA_PATTERNS: BugPattern[] = [
     title: "DirContext.search receives a non-literal LDAP filter",
     severity: "high",
     languages: ["java"],
-    regex:
-      /\.\s*(?:search|searchSubtree)\s*\(\s*[^,]+,\s*(?!(?:"|`|'))/g,
+    regex: /\.\s*(?:search|searchSubtree)\s*\(\s*[^,]+,\s*(?!(?:"|`|'))/g,
     explanation:
       "DirContext.search() is called with a non-literal filter argument. If the value contains user input without LDAP escaping, the attacker can inject LDAP operators (`*)(uid=*` etc.) to bypass authentication. CWE-90.",
     verify_prompt:
@@ -697,8 +695,7 @@ export const JAVA_PATTERNS: BugPattern[] = [
       "2. FALSE_POSITIVE if escaped via ESAPI.encoder().encodeForLDAP, manual escape of *()\\\\NUL chars, or Encode.forLDAP.\n" +
       "3. FALSE_POSITIVE if input is matched against a strict allow-list before the search call.",
     cwe: "CWE-90",
-    fix_template:
-      "Escape per RFC 4515 before search: String escaped = Encode.forLDAP(userInput);",
+    fix_template: "Escape per RFC 4515 before search: String escaped = Encode.forLDAP(userInput);",
   },
 
   // ── Trust boundary broad: any setAttribute with non-literal val (CWE-501) ─
@@ -719,7 +716,7 @@ export const JAVA_PATTERNS: BugPattern[] = [
       "4. FALSE_POSITIVE if a strict allow-list (Pattern.matches) ran upstream.",
     cwe: "CWE-501",
     fix_template:
-      "Parse to a strict type before setAttribute: int userId = Integer.parseInt(input); session.setAttribute(\"userId\", userId);",
+      'Parse to a strict type before setAttribute: int userId = Integer.parseInt(input); session.setAttribute("userId", userId);',
   },
 
   // ── XSS via response.setHeader / addHeader (CWE-79 / CWE-113) ──
@@ -733,8 +730,7 @@ export const JAVA_PATTERNS: BugPattern[] = [
     title: "response.setHeader / addHeader with a non-literal value",
     severity: "high",
     languages: ["java"],
-    regex:
-      /\bresponse\.(?:setHeader|addHeader)\s*\(\s*"[^"]+"\s*,\s*(?!(?:"|`|'|null|\d+\s*\)))/g,
+    regex: /\bresponse\.(?:setHeader|addHeader)\s*\(\s*"[^"]+"\s*,\s*(?!(?:"|`|'|null|\d+\s*\)))/g,
     explanation:
       "response.setHeader / addHeader is called with a non-literal value as the second argument. If that value traces back to request input without strict allow-list validation, the user can inject CRLF bytes (response splitting), write a Set-Cookie they shouldn't be able to set, or land arbitrary content in a header that's reflected into the page. CWE-79 / CWE-113.",
     verify_prompt:
@@ -744,7 +740,7 @@ export const JAVA_PATTERNS: BugPattern[] = [
       "3. FALSE_POSITIVE if the header name is one that the framework strips of CRLF (`Content-Type` is generally container-validated; custom headers are not).",
     cwe: "CWE-79",
     fix_template:
-      "Validate before setting: if (Pattern.matches(\"^[A-Za-z0-9_-]+$\", value)) response.setHeader(\"X-Custom\", value);",
+      'Validate before setting: if (Pattern.matches("^[A-Za-z0-9_-]+$", value)) response.setHeader("X-Custom", value);',
   },
 
   // ── XSS via bound PrintWriter variable (CWE-79) ─────────────────
@@ -769,7 +765,6 @@ export const JAVA_PATTERNS: BugPattern[] = [
       "2. FALSE_POSITIVE if all path values pass through HTML-encode (Encode.forHtml, ESAPI.encoder, HtmlUtils.htmlEscape, Apache StringEscapeUtils.escapeHtml).\n" +
       "3. FALSE_POSITIVE if the value is a class constant or static config — no request input upstream.",
     cwe: "CWE-79",
-    fix_template:
-      "Encode before writing: out.write(org.owasp.encoder.Encode.forHtml(value));",
+    fix_template: "Encode before writing: out.write(org.owasp.encoder.Encode.forHtml(value));",
   },
 ];

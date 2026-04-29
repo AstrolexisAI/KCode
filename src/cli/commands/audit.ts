@@ -342,9 +342,7 @@ export function registerAuditCommand(program: Command): void {
           );
           const minBand = opts.confidence as "high" | "medium" | "all";
           const before = result.findings.length;
-          result.findings = result.findings.filter((f) =>
-            passesConfidenceFilter(f, minBand),
-          );
+          result.findings = result.findings.filter((f) => passesConfidenceFilter(f, minBand));
           const dropped = before - result.findings.length;
           if (dropped > 0) {
             result.confirmed_findings = result.findings.length;

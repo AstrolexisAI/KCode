@@ -41,10 +41,7 @@ import type {
  * shape — the scorer doesn't need the regex / explanation /
  * verify_prompt etc., just the maturity-related metadata. v2.10.400.
  */
-export type PatternView = Pick<
-  BugPattern,
-  "id" | "maturity" | "fix_support" | "fixture_covered"
->;
+export type PatternView = Pick<BugPattern, "id" | "maturity" | "fix_support" | "fixture_covered">;
 
 // ── Maturity inference ────────────────────────────────────────────
 
@@ -163,8 +160,7 @@ export function scoreFinding(inputs: ScoreInputs): FindingConfidence {
   const w3 = sanitizerSeenWeight(inputs.sanitizerSeen);
   signals.push({
     name: "sanitizer_seen",
-    value:
-      inputs.sanitizerSeen === null ? "n/a" : inputs.sanitizerSeen ? "yes" : "no",
+    value: inputs.sanitizerSeen === null ? "n/a" : inputs.sanitizerSeen ? "yes" : "no",
     weight: w3,
   });
   score += w3;

@@ -379,7 +379,10 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
   // Per-candidate taint verdict, keyed by `${pattern_id}|${file}|${line}`,
   // so the confidence scorer can read it back when building the
   // confirmed-finding records below. v2.10.400.
-  const taintByCandidate = new Map<string, "tainted" | "constant" | "sanitized" | "unknown" | "n/a">();
+  const taintByCandidate = new Map<
+    string,
+    "tainted" | "constant" | "sanitized" | "unknown" | "n/a"
+  >();
   // Build a class-name → file-content map for cross-file method
   // resolution (Phase 3). Scans every Java file in this audit's
   // file list once. Class name comes from `(public )?class Name`.
@@ -392,9 +395,7 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
         try {
           const content = readFileSync(f, "utf8");
           fileReadCache.set(f, content);
-          const cm = content.match(
-            /(?:^|\n)\s*(?:public\s+|abstract\s+|final\s+)*class\s+(\w+)/,
-          );
+          const cm = content.match(/(?:^|\n)\s*(?:public\s+|abstract\s+|final\s+)*class\s+(\w+)/);
           if (cm?.[1]) filesInDir.set(cm[1], content);
         } catch {
           /* noop */
@@ -461,8 +462,7 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
         bucket = { keepers: [], safeSinks: [] };
         fileBuckets.set(c.file, bucket);
       }
-      const v = (taintByCandidate.get(`${c.pattern_id}|${c.file}|${c.line}`) ??
-        "n/a") as V;
+      const v = (taintByCandidate.get(`${c.pattern_id}|${c.file}|${c.line}`) ?? "n/a") as V;
       const isSafeSink =
         isSinkStylePattern(c.pattern_id) && (v === "constant" || v === "sanitized");
       if (isSafeSink) bucket.safeSinks.push(c);
@@ -561,8 +561,7 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
       },
     }));
   } else {
-    const cascadeMode =
-      opts.cascadeMode ?? (opts.fallbackCallback ? "on-confirmed" : undefined);
+    const cascadeMode = opts.cascadeMode ?? (opts.fallbackCallback ? "on-confirmed" : undefined);
     const verifyHint = opts.fallbackCallback
       ? `${candidatesToVerify.length} candidates (cascade=${cascadeMode})`
       : `${candidatesToVerify.length} candidates`;

@@ -567,10 +567,7 @@ export async function verifyAllCandidates(
         if (cascadeMode === "on-confirmed" && verification.verdict === "confirmed") {
           const fallback = await runWithCallback(c, opts.fallbackCallback);
           verification = combineVerdicts(verification, fallback);
-        } else if (
-          cascadeMode === "on-needs-context" &&
-          verification.verdict === "needs_context"
-        ) {
+        } else if (cascadeMode === "on-needs-context" && verification.verdict === "needs_context") {
           const fallback = await runWithCallback(c, opts.fallbackCallback);
           verification = {
             ...fallback,

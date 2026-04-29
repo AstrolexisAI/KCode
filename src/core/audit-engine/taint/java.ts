@@ -169,10 +169,8 @@ const SINK_PATTERN_ANCHORS: Record<string, RegExp> = {
     /\b(?:new\s+(?:java\.io\.)?(?:File|FileInputStream|FileOutputStream|FileReader|FileWriter|RandomAccessFile)|(?:java\.nio\.file\.)?Files\.\w+|(?:java\.nio\.file\.)?Paths\.get|(?:java\.nio\.file\.)?Path\.of)\s*\(/,
   "java-033-ldap-non-literal":
     /\b(?:DirContext|InitialDirContext|InitialContext)\s*[\w.]*\.\s*search\s*\(/,
-  "java-034-trustbound-setattribute":
-    /\b(?:session|getSession\s*\(\s*\)\s*)\.\s*setAttribute\s*\(/,
-  "java-035-xss-header-non-literal":
-    /\bresponse\.(?:setHeader|addHeader)\s*\(/,
+  "java-034-trustbound-setattribute": /\b(?:session|getSession\s*\(\s*\)\s*)\.\s*setAttribute\s*\(/,
+  "java-035-xss-header-non-literal": /\bresponse\.(?:setHeader|addHeader)\s*\(/,
 };
 
 /**
@@ -212,7 +210,7 @@ export function extractSinkCallArg(
   //           .println(
   //                   "blah" + ...
   let combined = "";
-  let scannedFromIdx = candidateLine - 1;
+  const scannedFromIdx = candidateLine - 1;
   for (let i = 0; i < 5 && scannedFromIdx + i < lines.length; i++) {
     combined += (lines[scannedFromIdx + i] ?? "") + "\n";
     const m = anchor.exec(combined);
@@ -265,8 +263,7 @@ export function extractSinkCallArg(
             if (patternId === "java-030-xss-writer-non-literal") {
               // Skip a leading Locale; the rest are format-string
               // and varargs which all reach the output.
-              const startIdx =
-                args[0] && /^(?:java\.util\.)?Locale\./.test(args[0]) ? 1 : 0;
+              const startIdx = args[0] && /^(?:java\.util\.)?Locale\./.test(args[0]) ? 1 : 0;
               const tail = args.slice(startIdx).filter((a): a is string => !!a);
               if (tail.length === 0) return null;
               if (tail.length === 1) return tail[0] ?? null;
@@ -334,7 +331,7 @@ function extractFirstArg(callExpr: string): string | null {
   let depth = 0;
   let inString = false;
   let stringChar = "";
-  let start = open + 1;
+  const start = open + 1;
   for (let i = open; i < callExpr.length; i++) {
     const ch = callExpr[i];
     if (inString) {
@@ -397,10 +394,7 @@ function splitTopLevelConcat(expr: string): string[] {
  * here — caller is responsible for the variable walk and (in Phase 2)
  * for resolving method declarations.
  */
-export function classifyExpression(
-  expr: string,
-  ctx: ClassifyContext = {},
-): ClassifyResult {
+export function classifyExpression(expr: string, ctx: ClassifyContext = {}): ClassifyResult {
   const depth = ctx.depth ?? 0;
   const maxDepth = ctx.maxDepth ?? 8;
   if (depth > maxDepth) {
@@ -501,11 +495,7 @@ export function classifyExpression(
     }
     const nextVisited = new Set(visited);
     nextVisited.add(trimmed);
-    const assigns = findAllAssignmentsInScope(
-      ctx.fileContent,
-      trimmed,
-      ctx.currentLine,
-    );
+    const assigns = findAllAssignmentsInScope(ctx.fileContent, trimmed, ctx.currentLine);
     if (assigns.length === 0) {
       return { origin: "unknown", reason: `no assignment for '${trimmed}'` };
     }
@@ -534,16 +524,32 @@ export function classifyExpression(
       if (lastEvidence === undefined) lastEvidence = a.line;
     }
     if (hasTainted) {
-      return { origin: "tainted", reason: `'${trimmed}' has tainted branch`, evidenceLine: lastEvidence };
+      return {
+        origin: "tainted",
+        reason: `'${trimmed}' has tainted branch`,
+        evidenceLine: lastEvidence,
+      };
     }
     if (hasUnknown) {
-      return { origin: "unknown", reason: `'${trimmed}' has unclassified branch`, evidenceLine: lastEvidence };
+      return {
+        origin: "unknown",
+        reason: `'${trimmed}' has unclassified branch`,
+        evidenceLine: lastEvidence,
+      };
     }
     if (hasSanitized) {
-      return { origin: "sanitized", reason: `'${trimmed}' sanitized in all paths`, evidenceLine: lastEvidence };
+      return {
+        origin: "sanitized",
+        reason: `'${trimmed}' sanitized in all paths`,
+        evidenceLine: lastEvidence,
+      };
     }
     if (hasConstant) {
-      return { origin: "constant", reason: `'${trimmed}' constant in all paths`, evidenceLine: lastEvidence };
+      return {
+        origin: "constant",
+        reason: `'${trimmed}' constant in all paths`,
+        evidenceLine: lastEvidence,
+      };
     }
     return { origin: "unknown", reason: `'${trimmed}' empty merge` };
   }
@@ -570,10 +576,7 @@ export function classifyExpression(
  *   obj.methodName(args)      — instance method (obj traced to `new ClassName(...)`)
  *   Class.staticMethod(args)  — static method on a known class
  */
-export function classifyMethodCall(
-  callExpr: string,
-  ctx: ClassifyContext,
-): ClassifyResult {
+export function classifyMethodCall(callExpr: string, ctx: ClassifyContext): ClassifyResult {
   const depth = ctx.depth ?? 0;
   if (depth > (ctx.maxDepth ?? 8)) {
     return { origin: "unknown", reason: "max recursion in method resolve" };
@@ -737,10 +740,7 @@ export function resolveClassOfVariable(
  * This is a regex-based heuristic — sufficient for the OWASP
  * helper-class shape. Handles overloads by picking the first match.
  */
-export function findMethodBody(
-  fileContent: string,
-  methodName: string,
-): string | null {
+export function findMethodBody(fileContent: string, methodName: string): string | null {
   return findMethodSignature(fileContent, methodName)?.body ?? null;
 }
 
@@ -850,9 +850,7 @@ export function parseCallArgs(callExpr: string): string[] {
  * RHS along with its 1-indexed line within the body. Empty `return;`
  * (void return) is omitted from the result.
  */
-export function findReturnExpressions(
-  body: string,
-): Array<{ expr: string; line: number }> {
+export function findReturnExpressions(body: string): Array<{ expr: string; line: number }> {
   const out: Array<{ expr: string; line: number }> = [];
   const lines = body.split("\n");
   for (let i = 0; i < lines.length; i++) {
@@ -909,9 +907,7 @@ export function findAllAssignmentsInScope(
   const lines = fileContent.split("\n");
   const startLine = Math.min(beforeLine - 1, lines.length - 1);
   const stopLine = Math.max(0, startLine - lookback);
-  const assignRe = new RegExp(
-    String.raw`(?:^|[^=!<>\w])\b${escapeReg(varName)}\s*=(?!=)\s*(.*)$`,
-  );
+  const assignRe = new RegExp(String.raw`(?:^|[^=!<>\w])\b${escapeReg(varName)}\s*=(?!=)\s*(.*)$`);
   const out: Array<{ rhs: string; line: number; inBranch: boolean }> = [];
   // Track brace depth as we scan backward — when we exit the
   // enclosing block (depth becomes positive after seeing more `}`
@@ -1081,9 +1077,7 @@ export function evaluateConstantBoolExpr(
   for (let j = fromLineIdx - 1; j >= stop; j--) {
     const line = lines[j];
     if (line === undefined) continue;
-    const m = line.match(
-      /^\s*(?:final\s+)?(?:int|long|short|byte)\s+(\w+)\s*=\s*(-?\d+)\s*;/,
-    );
+    const m = line.match(/^\s*(?:final\s+)?(?:int|long|short|byte)\s+(\w+)\s*=\s*(-?\d+)\s*;/);
     if (m && m[1] !== undefined && m[2] !== undefined) {
       intLocals.set(m[1], parseInt(m[2], 10));
     }
@@ -1173,11 +1167,7 @@ export function classifyJavaCandidate(
   // handles concat, sanitizer wrappers, identifiers, and method
   // calls without a separate variable walk.
   if (isSinkStylePattern(candidate.pattern_id)) {
-    const arg = extractSinkCallArg(
-      fileContent,
-      candidate.pattern_id,
-      candidate.line,
-    );
+    const arg = extractSinkCallArg(fileContent, candidate.pattern_id, candidate.line);
     if (arg === null) {
       return { origin: "unknown", reason: "could not extract sink-call arg" };
     }
@@ -1195,12 +1185,15 @@ export function classifyJavaCandidate(
   }
 
   const visited = new Set<string>();
-  let curVar: string | null = initialVar;
-  let curLine = candidate.line;
+  const curVar: string | null = initialVar;
+  const curLine = candidate.line;
   const maxDepth = ctx.maxDepth ?? 8;
 
-  for (let step = 0; step < maxDepth; step++) {
-    if (curVar === null) break;
+  // The body unconditionally returns today (single-iteration pattern).
+  // The multi-step variable walk is a planned extension — future versions
+  // will reassign curVar and loop. Today the structure stays as an `if`
+  // so biome doesn't flag the unreachable post-loop return.
+  if (maxDepth > 0 && curVar !== null) {
     if (visited.has(curVar)) {
       return { origin: "unknown", reason: "variable cycle" };
     }
@@ -1218,7 +1211,7 @@ export function classifyJavaCandidate(
       fileContent,
       currentLine: assign.line,
       visited,
-      depth: step,
+      depth: 0,
     });
     return { ...cls, evidenceLine: assign.line };
   }

@@ -2331,6 +2331,69 @@ const PATTERN_RECIPES: Record<string, PatternRecipe> = {
     "DB::raw with $request interpolation — SQL injection",
     W.SQL,
   ),
+
+  // ── v2.10.4xx — OWASP Benchmark coverage round (java-022 through java-036) ──
+  // Manual-fix recipes for the patterns added during the OWASP Benchmark
+  // recall sweep. These don't auto-rewrite (the right fix is context-
+  // dependent and language-idiomatic) but they satisfy the recipe
+  // coverage gate and emit consistent guidance in the report.
+  "java-022-weak-random-security": r(
+    "java.util.Random for security purposes",
+    "Use java.security.SecureRandom for tokens, IDs, or any secret value.",
+  ),
+  "java-023-sql-injection-var-flow": r("User input flows into a concatenated SQL string", W.SQL),
+  "java-024-xss-writer-direct": r(
+    "request.getParameter() flows directly into response.getWriter()",
+    W.XSS,
+  ),
+  "java-025-command-injection": r(
+    "User input concatenated into a Runtime.exec / ProcessBuilder shell string",
+    W.SHELL,
+  ),
+  "java-026-path-traversal-var-flow": r(
+    "User input flows into a File / Files / Paths constructor",
+    W.PATH,
+  ),
+  "java-027-ldap-injection": r(
+    "User input concatenated into an LDAP filter or DN",
+    "Use parameterized LDAP queries (DirContext.search with filter arg-substitution).",
+  ),
+  "java-028-cookie-missing-secure-flags": r(
+    "Cookie created without Secure / HttpOnly flags",
+    "Call setSecure(true) and setHttpOnly(true) before adding the cookie to the response.",
+  ),
+  "java-029-trustbound-session-attr": r(
+    "Untrusted user input written to HttpSession.setAttribute",
+    "Validate / canonicalize the value before storing it in session state.",
+  ),
+  "java-030-xss-writer-non-literal": r(
+    "Non-literal value written via response.getWriter().print/println/write",
+    W.XSS,
+  ),
+  "java-031-cmdi-exec-non-literal": r(
+    "Non-literal command string passed to Runtime.exec / ProcessBuilder",
+    W.SHELL,
+  ),
+  "java-032-path-file-non-literal": r(
+    "Non-literal path passed to File / Files / Paths constructors",
+    W.PATH,
+  ),
+  "java-033-ldap-non-literal": r(
+    "Non-literal LDAP filter / DN passed into DirContext.search",
+    "Use parameterized LDAP queries (DirContext.search with filter arg-substitution).",
+  ),
+  "java-034-trustbound-setattribute": r(
+    "ServletRequest / HttpSession setAttribute with non-literal value",
+    "Validate / canonicalize the value before storing it across the trust boundary.",
+  ),
+  "java-035-xss-header-non-literal": r(
+    "Non-literal value passed to response.addHeader / setHeader (header injection / XSS)",
+    "Strip CR/LF + validate against an allow-list before setting the header.",
+  ),
+  "java-036-xss-printwriter-var": r(
+    "Non-literal variable written to a PrintWriter bound to response output",
+    W.XSS,
+  ),
 };
 
 function commentPrefix(path: string): string {
