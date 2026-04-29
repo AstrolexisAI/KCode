@@ -16,6 +16,8 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+      - name: Install ripgrep (required by Grep/PreviewGrepReplace tests)
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: bun install
       - name: Dependency audit
         run: bun audit
