@@ -74,10 +74,21 @@ export function registerAuditCommand(program: Command): void {
     .option("--api-key <key>", "Override API key")
     .option(
       "--fallback-model <name>",
-      "Cloud model to escalate to when primary is ambiguous (hybrid mode)",
+      "Second model for ensemble verification. Default cascade mode is " +
+        "'on-confirmed' (high-precision ensemble): fallback runs only when " +
+        "primary confirms; final verdict is `confirmed` only if BOTH agree. " +
+        "Override with --cascade-mode on-needs-context for the legacy " +
+        "escalate-on-ambiguous flow. v2.10.406.",
     )
     .option("--fallback-api-base <url>", "API base for fallback model")
     .option("--fallback-api-key <key>", "API key for fallback model")
+    .option(
+      "--cascade-mode <mode>",
+      "How --fallback-model is invoked: 'on-confirmed' (default — fallback " +
+        "runs only when primary confirms; final verdict requires both to " +
+        "agree) or 'on-needs-context' (legacy — fallback runs only when " +
+        "primary returns needs_context).",
+    )
     .option("--max-files <n>", "Max files to scan (default: unlimited)", "0")
     .option("--skip-verify", "Skip model verification (static-only output)", false)
     .option(
@@ -144,6 +155,7 @@ export function registerAuditCommand(program: Command): void {
           fallbackModel?: string;
           fallbackApiBase?: string;
           fallbackApiKey?: string;
+          cascadeMode?: string;
           maxFiles: string;
           skipVerify: boolean;
           since?: string;
@@ -227,34 +239,44 @@ export function registerAuditCommand(program: Command): void {
             });
         } else {
           const settings = await loadSettings(projectRoot);
-          // Pick a default provider based on which API key is actually
-          // present in the environment. Prior to v2.10.130 this hardcoded
-          // Anthropic; the branding-cleanup flip to OpenAI broke users
-          // who had only `ANTHROPIC_API_KEY` set and ran `kcode audit`
-          // with no flags. Now the provider follows the key.
-          const hasOpenAi = !!(opts.apiKey ?? settings.apiKey ?? process.env.OPENAI_API_KEY);
-          const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
-          const defaultModel = hasOpenAi || !hasAnthropic ? "gpt-4o" : "claude-sonnet-4-6";
-          const defaultBase =
-            hasOpenAi || !hasAnthropic
-              ? "https://api.openai.com/v1"
-              : "https://api.anthropic.com/v1";
-          const defaultKey = hasOpenAi
-            ? (opts.apiKey ?? settings.apiKey ?? process.env.OPENAI_API_KEY)
-            : process.env.ANTHROPIC_API_KEY;
+          // Routing is delegated to makeAuditLlmCallback: it picks the
+          // baseUrl from the model-name prefix and the apiKey from the
+          // matching per-provider field in `settings` (anthropicApiKey,
+          // xaiApiKey, kimiApiKey, ...). v2.10.405 — closes the bug
+          // where a saved OpenAI sk-proj-... key in `settings.apiKey`
+          // shadowed every -m provider and routed verifier calls to
+          // OpenAI's exhausted quota, returning 429 → needs_context
+          // for every finding.
+          //
+          // We deliberately do NOT pass `settings.apiKey` as the
+          // generic apiKey: that field is the OpenAI dashboard key
+          // and only applies when the model resolves to OpenAI.
+          // Commander quirk: the root program also defines `-m, --model`
+          // and `--fallback-model` (for the default chat command). When
+          // those flags appear on `kcode audit ...`, commander parses
+          // them into the PARENT's opts, not the subcommand's. So we
+          // fall back to program.opts() for model/fallbackModel.
+          // v2.10.405.
+          const parentOpts = program.opts() as { model?: string; fallbackModel?: string };
+          const pickedModel =
+            opts.model ?? parentOpts.model ?? settings.model ?? "claude-sonnet-4-6";
+          const pickedFallbackModel = opts.fallbackModel ?? parentOpts.fallbackModel;
           llmCallback = makeAuditLlmCallback({
-            model: opts.model ?? settings.model ?? defaultModel,
-            apiBase: opts.apiBase ?? settings.apiBase ?? defaultBase,
-            apiKey: opts.apiKey ?? settings.apiKey ?? defaultKey,
+            model: pickedModel,
+            apiBase: opts.apiBase ?? settings.apiBase,
+            apiKey: opts.apiKey,
+            settings: settings as unknown as Record<string, string | undefined>,
           });
-          if (opts.fallbackModel) {
+          if (pickedFallbackModel) {
             fallbackCallback = makeAuditLlmCallback({
-              model: opts.fallbackModel,
-              apiBase: opts.fallbackApiBase ?? defaultBase,
+              model: pickedFallbackModel,
+              apiBase: opts.fallbackApiBase,
               apiKey: opts.fallbackApiKey,
+              settings: settings as unknown as Record<string, string | undefined>,
             });
+            const mode = opts.cascadeMode ?? "on-confirmed";
             console.log(
-              `  \x1b[36mHybrid mode: primary ${opts.model ?? settings.model}, fallback ${opts.fallbackModel}\x1b[0m`,
+              `  \x1b[36mEnsemble cascade (${mode}): primary ${pickedModel}, fallback ${pickedFallbackModel}\x1b[0m`,
             );
             console.log("");
           }
@@ -275,6 +297,9 @@ export function registerAuditCommand(program: Command): void {
           projectRoot,
           llmCallback,
           fallbackCallback,
+          ...(opts.cascadeMode
+            ? { cascadeMode: opts.cascadeMode as "on-confirmed" | "on-needs-context" }
+            : {}),
           maxFiles,
           skipVerification: opts.skipVerify,
           generateExploits: opts.exploits,

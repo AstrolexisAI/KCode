@@ -505,7 +505,7 @@ describe("audit-engine orchestrator", () => {
     expect(fallbackCalls).toBe(0);
   });
 
-  test("runAudit in hybrid mode does NOT call fallback when primary is definitive", async () => {
+  test("runAudit cascade=on-needs-context does NOT call fallback when primary is definitive", async () => {
     writeFileSync(join(tmp, "clear.cpp"), `void f() { strcpy(a, b); }\n`);
 
     let fallbackCalls = 0;
@@ -528,10 +528,70 @@ describe("audit-engine orchestrator", () => {
       projectRoot: tmp,
       llmCallback: primary,
       fallbackCallback: fallback,
+      cascadeMode: "on-needs-context", // legacy escalate-on-ambiguous
     });
 
     expect(fallbackCalls).toBe(0); // primary was definitive, no escalation
     expect(result.confirmed_findings).toBeGreaterThanOrEqual(1);
+  });
+
+  test("runAudit cascade=on-confirmed (default) calls fallback when primary confirms", async () => {
+    writeFileSync(join(tmp, "clear.cpp"), `void f() { strcpy(a, b); }\n`);
+
+    let fallbackCalls = 0;
+    const primary = async (): Promise<string> =>
+      JSON.stringify({
+        verdict: "confirmed",
+        reasoning: "primary confirms",
+        evidence: { sink: "strcpy", suggested_fix: "use strncpy" },
+      });
+    const fallback = async (): Promise<string> => {
+      fallbackCalls++;
+      return JSON.stringify({
+        verdict: "confirmed",
+        reasoning: "fallback agrees",
+        evidence: { sink: "strcpy" },
+      });
+    };
+
+    const result = await runAudit({
+      projectRoot: tmp,
+      llmCallback: primary,
+      fallbackCallback: fallback,
+      // cascadeMode omitted → defaults to "on-confirmed" when fallbackCallback set
+    });
+
+    expect(fallbackCalls).toBeGreaterThanOrEqual(1); // ensemble confirmed → fallback was invoked
+    expect(result.confirmed_findings).toBeGreaterThanOrEqual(1);
+    expect(result.findings[0]?.verification.reasoning).toContain("ensemble ✓");
+  });
+
+  test("runAudit cascade=on-confirmed downgrades to FP when fallback disagrees", async () => {
+    writeFileSync(join(tmp, "disagree.cpp"), `void f() { strcpy(a, b); }\n`);
+
+    const primary = async (): Promise<string> =>
+      JSON.stringify({
+        verdict: "confirmed",
+        reasoning: "primary thinks unsafe",
+        evidence: { sink: "strcpy" },
+      });
+    const fallback = async (): Promise<string> =>
+      JSON.stringify({
+        verdict: "false_positive",
+        reasoning: "fallback says actually safe — bounded",
+        evidence: { sink: "strcpy" },
+      });
+
+    const result = await runAudit({
+      projectRoot: tmp,
+      llmCallback: primary,
+      fallbackCallback: fallback,
+    });
+
+    expect(result.confirmed_findings).toBe(0); // disagreement → downgrade
+    expect(result.false_positives).toBeGreaterThanOrEqual(1);
+    const reasoning = result.false_positives_detail?.[0]?.verification.reasoning ?? "";
+    expect(reasoning).toContain("ensemble ✗");
   });
 
   test("runAudit with skipVerification returns all candidates", async () => {
