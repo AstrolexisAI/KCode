@@ -12,16 +12,31 @@ import { kcodePath } from "./paths";
 const MLX_VENV = kcodePath("mlx-venv");
 const MLX_MARKER = kcodePath(".mlx-engine");
 
-/** Find Python 3 on macOS */
+/** Find Python 3 on macOS — tolerant to ENOENT thrown by spawnSync on missing absolute paths */
 function findPython3(): string | null {
+  // Try `which python3` first — uses the user's shell PATH, the most
+  // reliable lookup. Falls through to hardcoded candidates if missing.
+  try {
+    const which = Bun.spawnSync(["/usr/bin/which", "python3"], { stdout: "pipe", stderr: "pipe" });
+    if (which.exitCode === 0) {
+      const path = which.stdout.toString().trim();
+      if (path) return path;
+    }
+  } catch {
+    // /usr/bin/which not present — extremely unusual, fall through
+  }
+
   for (const name of [
-    "python3",
     "/usr/bin/python3",
     "/opt/homebrew/bin/python3",
     "/usr/local/bin/python3",
   ]) {
-    const proc = Bun.spawnSync([name, "--version"], { stdout: "pipe", stderr: "pipe" });
-    if (proc.exitCode === 0) return name;
+    try {
+      const proc = Bun.spawnSync([name, "--version"], { stdout: "pipe", stderr: "pipe" });
+      if (proc.exitCode === 0) return name;
+    } catch {
+      // ENOENT on absolute path — Bun throws instead of returning non-zero. Skip.
+    }
   }
   return null;
 }

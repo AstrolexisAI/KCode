@@ -229,25 +229,29 @@ export function recommendModel(
     usableVramMB?: number;
   },
 ): CatalogEntry {
-  // ── macOS Apple Silicon: unified memory + SSD offloading ──────
-  // On Apple Silicon, RAM = VRAM (unified memory). Models larger than RAM
-  // can still run via mlx_lm's disk offloading — Apple's fast NVMe SSDs
-  // (~7 GB/s) make this viable at reduced speed. We allow models up to
-  // 2x RAM with offloading, and up to 1x RAM at full speed.
+  // ── macOS Apple Silicon: unified memory ────────────────────────
+  // RAM and VRAM share the SAME pool. We must reserve memory for OS,
+  // browser, KCode itself, and KV cache — otherwise we OOM the system
+  // or thrash swap. Reserve max(8GB, 25% of RAM):
+  //   16GB → reserve 8GB  → usable 8GB
+  //   24GB → reserve 8GB  → usable 16GB
+  //   48GB → reserve 12GB → usable 36GB
+  //   64GB → reserve 16GB → usable 48GB
+  // SSD "offloading" via mmap on unified memory is a trap: it just
+  // forces the kernel to swap pages between the model and the OS in
+  // the same RAM. Performance collapses (1-3 tok/s) and kernel_task
+  // bloats. Never recommend a model > usable.
   if (hw.platform === "darwin" && hw.arch === "arm64") {
-    const ramMB = hw.ramMB;
+    const reservedMB = Math.max(8 * 1024, hw.ramMB * 0.25);
+    const usableMB = hw.ramMB - reservedMB;
     let best: CatalogEntry | null = null;
     for (const entry of MODEL_CATALOG) {
       if (!entry.mlxRepo) continue; // skip non-MLX models
       const modelMB = entry.sizeGB * 1024;
-      // Full speed: model fits in 80% of RAM (leave room for KV cache + OS)
-      // Offloaded: model up to 2x RAM — disk offloading kicks in, slower but works
-      const maxModelMB = ramMB * 2;
-      if (modelMB <= maxModelMB && (!best || entry.sizeGB > best.sizeGB)) {
+      if (modelMB <= usableMB && (!best || entry.sizeGB > best.sizeGB)) {
         best = entry;
       }
     }
-    // Fallback to GGUF-based selection if no MLX models match
     if (best) return best;
   }
 
