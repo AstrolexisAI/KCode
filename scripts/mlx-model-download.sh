@@ -40,18 +40,31 @@ fi
 pkill -f mlx_lm 2>/dev/null || true
 pkill -f huggingface_hub 2>/dev/null || true
 
-# 3. Install the official HF CLI + the Rust transfer accelerator.
+# 3. Install the HF CLI + Rust transfer accelerator.
+#    Pin huggingface_hub to the 0.x line because:
+#      - 1.x removed the `huggingface-cli` binary (renamed to `hf`)
+#      - 1.x removed the `[cli]` extra
+#      - mlx-lm's transformers dep still requires huggingface_hub<1.0
+#    Pinning gives one binary name + one compatible dep tree.
 step "Installing huggingface-cli + hf_transfer in the kcode venv…"
-if ! "$VENV/bin/pip" install -q -U "huggingface_hub[cli]" hf_transfer; then
+if ! "$VENV/bin/pip" install -q -U "huggingface_hub<1.0" hf_transfer; then
   die "pip install failed — check network / Python version"
 fi
-ok "Installed"
+
+# Resolve the CLI binary: 0.x ships `huggingface-cli`, 1.x ships `hf`.
+# We pinned to 0.x so the first should win, but stay tolerant.
+HF_CLI=""
+for cand in "$VENV/bin/huggingface-cli" "$VENV/bin/hf"; do
+  [ -x "$cand" ] && { HF_CLI="$cand"; break; }
+done
+[ -n "$HF_CLI" ] || die "huggingface-cli not found in venv after install"
+ok "Installed ($(basename "$HF_CLI"))"
 
 # 4. Pull the model. hf_transfer writes a real progress bar to stderr and
 #    resumes from partial files on retry.
 step "Downloading ${REPO} (parallel, resumable)…"
 echo
-if HF_HUB_ENABLE_HF_TRANSFER=1 "$VENV/bin/huggingface-cli" download "$REPO"; then
+if HF_HUB_ENABLE_HF_TRANSFER=1 "$HF_CLI" download "$REPO"; then
   echo
   ok "Model cached at ~/.cache/huggingface/hub/"
 else
