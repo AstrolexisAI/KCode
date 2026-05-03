@@ -642,14 +642,50 @@ async function runMain(
           await exitWithPause(1, `External server not reachable: ${externalServerUrl}`);
         }
       } else {
-        // Local llama.cpp server management
-        const serverRunning = await isServerRunning();
+        // Local llama.cpp / MLX server management
+        //
+        // One-shot MLX repo override: when --model is a HuggingFace
+        // owner/repo string (not a registered cloud model), pass it
+        // straight through to mlx_lm.server without persisting to
+        // server.json. Useful for "try this model right now" flows
+        // after `kcode models pull <repo>`.
+        const HF_REPO_RE = /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/;
+        const mlxRepoOverride = opts.model && HF_REPO_RE.test(opts.model) ? opts.model : undefined;
+
+        let serverRunning = await isServerRunning();
         let port: number = 0;
+
+        // If the user requested an override but a server is already up
+        // with a different model, stop it so the next start picks up the
+        // override. mlx_lm.server doesn't support hot-swap, so a clean
+        // restart is the only correct path.
+        if (mlxRepoOverride && serverRunning) {
+          try {
+            const runningPort = getServerPort();
+            const resp = runningPort
+              ? await fetch(`http://localhost:${runningPort}/v1/models`, {
+                  signal: AbortSignal.timeout(2000),
+                })
+              : null;
+            const loaded = resp?.ok ? ((await resp.json()) as { data?: { id?: string }[] }) : null;
+            const currentModel = loaded?.data?.[0]?.id;
+            if (currentModel && currentModel !== mlxRepoOverride) {
+              process.stderr.write(
+                `\x1b[2mSwitching model: ${currentModel} → ${mlxRepoOverride}\x1b[0m\n`,
+              );
+              const { stopServer } = await import("./core/llama-server");
+              await stopServer();
+              serverRunning = false;
+            }
+          } catch {
+            /* if the running server is wedged, fall through and try start */
+          }
+        }
 
         if (!serverRunning) {
           try {
             process.stderr.write("\x1b[2mStarting inference server...\x1b[0m");
-            const result = await startServer();
+            const result = await startServer({ mlxRepoOverride });
             port = result.port;
             process.stderr.write(`\r\x1b[2mLoading model into VRAM...\x1b[0m\x1b[K`);
           } catch (err) {
