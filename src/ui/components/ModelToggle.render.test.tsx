@@ -20,10 +20,7 @@ describe("ModelToggle render", () => {
   // Deterministic wait: poll lastFrame() until the "Loading models..." state
   // is gone. Sleep-based waits flake on CI under parallel load — see
   // model-discovery's 2s in-flight discovery race + dynamic imports.
-  async function waitForLoaded(
-    inst: ReturnType<typeof render>,
-    maxMs = 15000,
-  ): Promise<void> {
+  async function waitForLoaded(inst: ReturnType<typeof render>, maxMs = 15000): Promise<void> {
     const start = Date.now();
     while (Date.now() - start < maxMs) {
       const frame = inst.lastFrame() ?? "";
