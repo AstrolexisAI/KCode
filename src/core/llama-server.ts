@@ -67,6 +67,12 @@ function getServerPid(): number | null {
 /** Start the inference server with the configured model */
 export async function startServer(options?: {
   port?: number;
+  /**
+   * Override the MLX HuggingFace repo for this run only (does not persist
+   * to server.json). Validated against the HF naming pattern. When set on
+   * an MLX engine, takes precedence over config.mlxRepo.
+   */
+  mlxRepoOverride?: string;
 }): Promise<{ port: number; pid: number }> {
   // Check if already running
   if (await isServerRunning()) {
@@ -90,6 +96,15 @@ export async function startServer(options?: {
   const port = options?.port ?? config.port;
   const isMlx = config.engine === "mlx";
 
+  if (
+    options?.mlxRepoOverride &&
+    !/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/.test(options.mlxRepoOverride)
+  ) {
+    throw new Error(
+      `Invalid MLX repo override: "${options.mlxRepoOverride}" — must match owner/model format`,
+    );
+  }
+
   // Build command and args based on engine type
   let cmd: string;
   let args: string[];
@@ -99,7 +114,7 @@ export async function startServer(options?: {
     // If model > RAM, use a wrapper that sets mx.metal.set_wired_limit() for disk offloading.
     // Inspired by flash-moe's "Trust the OS" — let the page cache stream weights from NVMe SSD.
     cmd = config.enginePath; // venv python3
-    const mlxModel = config.mlxRepo ?? config.modelPath;
+    const mlxModel = options?.mlxRepoOverride ?? config.mlxRepo ?? config.modelPath;
 
     if (config.mlxWiredLimitMB) {
       // Disk offloading mode: cap wired memory so OS has room for page cache.

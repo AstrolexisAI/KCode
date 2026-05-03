@@ -17,6 +17,9 @@ import {
   removeModel,
   setDefaultModel,
 } from "../../core/models";
+import { kcodePath } from "../../core/paths";
+
+const HF_REPO_RE = /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/;
 
 export function registerModelsCommand(program: Command): void {
   const modelsCmd = program.command("models").description("Manage registered LLM models");
@@ -275,6 +278,32 @@ export function registerModelsCommand(program: Command): void {
       console.log(`  Total tokens generated:     ${totalTokens}`);
       console.log(`  Generation speed:           ${tokensPerSec.toFixed(1)} tokens/sec`);
       console.log(`  Total time:                 ${(totalMs / 1000).toFixed(2)} s`);
+    });
+
+  modelsCmd
+    .command("use <hf-repo>")
+    .description(
+      "Set the active MLX model to a HuggingFace repo (persists in ~/.kcode/server.json)",
+    )
+    .action(async (repo: string) => {
+      if (!HF_REPO_RE.test(repo)) {
+        console.error(`Invalid repo: "${repo}" — must be owner/name (e.g. mlx-community/...)`);
+        process.exit(1);
+      }
+      const path = kcodePath("server.json");
+      const file = Bun.file(path);
+      if (!(await file.exists())) {
+        console.error(`No ${path} found. Run 'kcode setup' first.`);
+        process.exit(1);
+      }
+      const cfg = (await file.json()) as Record<string, unknown>;
+      const previous = cfg.mlxRepo;
+      cfg.mlxRepo = repo;
+      cfg.codename = repo.split("/")[1] ?? repo;
+      cfg.engine = "mlx";
+      await Bun.write(path, `${JSON.stringify(cfg, null, 2)}\n`);
+      console.log(`Active MLX model: ${previous ?? "(none)"} → ${repo}`);
+      console.log("Restart kcode to load it: kcode server stop && kcode");
     });
 
   modelsCmd
