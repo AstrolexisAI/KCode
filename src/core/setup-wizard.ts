@@ -376,11 +376,12 @@ export async function runSetup(options?: {
         `    ${C.dim}Cloud skipped. Proceeding with local setup (expect slow inference).${C.reset}`,
       );
       console.log();
-    } else if (tier.offerAlternative) {
+    } else if (tier.offerAlternative && !options?.yes) {
       // Strong/medium hardware: ASK the user whether they want local
       // or cloud, don't assume local. A 12GB VRAM card can run
       // local but cloud might be preferable for quality/speed
       // reasons. Default = local (preserves local-first philosophy).
+      // Skipped under --yes (scripted installs always pick local).
       console.log(
         `    ${C.dim}Hardware tier: ${C.reset}${C.bold}${tier.tier}${C.reset} ${C.dim}— ${tier.reason}${C.reset}`,
       );
