@@ -556,20 +556,15 @@ export class ConversationManager {
       /* module not loaded */
     }
 
-    // Detect audit intent on first message to gate Edit/MultiEdit on
-    // source files behind a written AUDIT_REPORT.md. This prevents the
-    // model from "correcting" code based on hallucinated findings before
-    // the human has reviewed them.
-    if (this.state.messages.length === 0) {
-      try {
-        const { detectAuditIntent, setAuditIntent } = await import("./session-tracker.js");
-        if (detectAuditIntent(userMessage)) {
-          setAuditIntent(true);
-        }
-      } catch {
-        /* tracker optional */
-      }
-    }
+    // Audit mode is no longer auto-activated by keyword detection on the
+    // first message. The previous behavior misfired on phrases like
+    // "review my code" / "revisá esto", silently locked Edit/MultiEdit
+    // behind an AUDIT_REPORT.md, and exposed a 70-line prompt block that
+    // some cloud models (Grok) reproduced verbatim with *REDACTED* tags.
+    //
+    // Now: enter audit mode explicitly with `/scan`, exit with `/scan off`.
+    // detectAuditIntent() is still exported and used by future soft-hint
+    // logic, but it no longer flips the session state on its own.
 
     // Task orchestrator (level 0/1/2 routing) —
     // see ./conversation-task-routing.ts.

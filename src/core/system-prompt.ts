@@ -26,6 +26,7 @@ import {
   buildIdentity,
   buildMetacognition,
   buildOperatorRecoveryGuidance,
+  buildScanDiscipline,
   buildToneAndOutput,
   buildToolInstructions,
 } from "./system-prompt-layers";
@@ -166,6 +167,25 @@ RULES:
       priority: SectionPriority.HIGH,
       label: "anti-fabrication",
     });
+
+    // Scan-mode discipline is conditional. We only inject it when the
+    // user has explicitly opted into formal audit mode via /scan. Out
+    // of scan mode the block is omitted — saves ~2KB on every turn and
+    // removes the prompt-leak surface that some cloud models exploit
+    // (Grok was observed reproducing the block verbatim on a normal chat
+    // turn, with *REDACTED* tags spliced in).
+    try {
+      const { isAuditSession } = require("./session-tracker") as typeof import("./session-tracker");
+      if (isAuditSession()) {
+        sections.push({
+          content: buildScanDiscipline(),
+          priority: SectionPriority.HIGH,
+          label: "scan-discipline",
+        });
+      }
+    } catch {
+      /* tracker not available — skip */
+    }
     if (config.thinking) {
       sections.push({
         content: `## Extended Reasoning
