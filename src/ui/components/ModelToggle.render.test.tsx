@@ -17,6 +17,22 @@ describe("ModelToggle render", () => {
     instance = null;
   });
 
+  // Deterministic wait: poll lastFrame() until the "Loading models..." state
+  // is gone. Sleep-based waits flake on CI under parallel load — see
+  // model-discovery's 2s in-flight discovery race + dynamic imports.
+  async function waitForLoaded(
+    inst: ReturnType<typeof render>,
+    maxMs = 15000,
+  ): Promise<void> {
+    const start = Date.now();
+    while (Date.now() - start < maxMs) {
+      const frame = inst.lastFrame() ?? "";
+      if (frame && !frame.includes("Loading models")) return;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    throw new Error(`ModelToggle still loading after ${maxMs}ms`);
+  }
+
   test("shows loading state initially", () => {
     instance = renderWithTheme(
       <ModelToggle isActive={true} currentModel="gpt-4o" onDone={() => {}} />,
@@ -47,13 +63,12 @@ describe("ModelToggle render", () => {
         }}
       />,
     );
-    // ModelToggle's useEffect can wait up to 2s for in-flight model
-    // discovery before it flips `loading` to false and starts accepting
-    // keys. Under parallel test load that 2s is effectively a hard
-    // lower bound, so we wait 3s before pressing Esc.
-    await new Promise((r) => setTimeout(r, 3000));
+    // Wait for the "Loading models..." frame to clear — useInput is gated
+    // by `!loading`, so Esc is silently dropped while loading is true.
+    await waitForLoaded(instance);
     instance.stdin.write("\x1b");
-    await new Promise((r) => setTimeout(r, 250));
+    // Esc handler is synchronous, but give Ink a tick to flush the callback.
+    await new Promise((r) => setTimeout(r, 50));
     expect(result).toBe(null);
   });
 
