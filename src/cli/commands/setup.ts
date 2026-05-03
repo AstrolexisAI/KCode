@@ -54,7 +54,18 @@ export function registerSetupCommand(
     .option("--force", "Force re-download even if already installed")
     .option("--list", "List available models")
     .option("--auto", "Auto-detect hardware and recommend optimal model configuration")
-    .action(async (opts: { model?: string; force?: boolean; list?: boolean; auto?: boolean }) => {
+    .action(async function (
+      this: Command,
+      opts: { model?: string; force?: boolean; list?: boolean; auto?: boolean },
+    ) {
+      // Commander quirk: the root program also defines `-m, --model`, so
+      // `kcode setup --model X` parses X onto the parent's options bag and
+      // setup's opts.model ends up undefined. Fall back to the parent's
+      // value when our own is missing — explicit always wins over auto-pick.
+      if (!opts.model) {
+        const parentModel = (this.parent?.opts?.() as { model?: string } | undefined)?.model;
+        if (parentModel) opts.model = parentModel;
+      }
       if (opts.list) {
         console.log("\nAvailable mnemo:mark5 models:\n");
         for (const m of getAvailableModels()) {
