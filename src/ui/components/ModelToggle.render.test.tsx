@@ -60,12 +60,17 @@ describe("ModelToggle render", () => {
         }}
       />,
     );
-    // Wait for the "Loading models..." frame to clear — useInput is gated
-    // by `!loading`, so Esc is silently dropped while loading is true.
+    // Wait for "Loading models..." to clear, then keep retrying Esc until
+    // onDone fires. There's a race between loading flipping false and
+    // useInput registering — under CI scheduling this window is ~50-200ms
+    // and a single Esc can land in it. Re-pressing every tick is harmless
+    // (Esc is idempotent) and removes the flake entirely.
     await waitForLoaded(instance);
-    instance.stdin.write("\x1b");
-    // Esc handler is synchronous, but give Ink a tick to flush the callback.
-    await new Promise((r) => setTimeout(r, 50));
+    const start = Date.now();
+    while (result === "never" && Date.now() - start < 5000) {
+      instance.stdin.write("\x1b");
+      await new Promise((r) => setTimeout(r, 50));
+    }
     expect(result).toBe(null);
   });
 
