@@ -167,6 +167,43 @@ describe("model-catalog", () => {
   test("findCatalogEntry returns undefined for unknown codename", () => {
     expect(findCatalogEntry("mnemo:nonexistent")).toBeUndefined();
   });
+
+  // Regression: Apple Silicon must NEVER pick a model larger than usable
+  // unified memory budget. Old code picked the 80B (49 GB) on 48 GB Macs
+  // because it allowed up to ramMB * 2 via "SSD offload" — which on
+  // unified memory just causes catastrophic swap thrashing.
+  test("recommendModel on M5 Max 48GB picks model that fits in unified memory budget", () => {
+    const hw: HardwareInfo = {
+      platform: "darwin",
+      arch: "arm64",
+      gpus: [{ index: 0, name: "Apple M5 Max", vramMB: 36864 }],
+      totalVramMB: 36864,
+      ramMB: 49152, // 48 GB
+      cudaAvailable: false,
+    };
+    const rec = recommendModel(hw);
+    expect(rec).toBeDefined();
+    // Reserved = max(8GB, 25% of 48GB) = 12GB → usable = 36GB
+    // Must pick a model whose sizeGB <= 36 (mark5-max at 25 GB is the largest fit)
+    expect(rec.sizeGB).toBeLessThanOrEqual(36);
+    // Must NOT pick the 80B (48.5 GB) which previously was selected
+    expect(rec.codename).not.toBe("mnemo:mark5-80b");
+  });
+
+  test("recommendModel on M-series 16GB picks small model leaving room for OS", () => {
+    const hw: HardwareInfo = {
+      platform: "darwin",
+      arch: "arm64",
+      gpus: [{ index: 0, name: "Apple M3", vramMB: 12288 }],
+      totalVramMB: 12288,
+      ramMB: 16384, // 16 GB
+      cudaAvailable: false,
+    };
+    const rec = recommendModel(hw);
+    expect(rec).toBeDefined();
+    // Reserved = max(8GB, 4GB) = 8GB → usable = 8GB
+    expect(rec.sizeGB).toBeLessThanOrEqual(8);
+  });
 });
 
 // ─── Download Resume ───────────────────────────────────────────────────

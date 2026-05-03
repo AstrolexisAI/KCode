@@ -491,22 +491,20 @@ export async function runSetup(options?: {
     let statusStr: string;
 
     if (isMacMLX && m.mlxRepo) {
-      // macOS Apple Silicon: unified memory + SSD disk offloading
+      // Apple Silicon unified memory: reserve max(8GB, 25%) for OS + KV cache.
+      // Models above usable budget will swap aggressively — never recommend.
       const modelMB = m.sizeGB * 1024;
-      const fitsInRam = modelMB <= hw.ramMB * 0.8;
-      const fitsWithOffload = modelMB <= hw.ramMB * 2;
-      fits = fitsWithOffload;
+      const reservedMB = Math.max(8 * 1024, hw.ramMB * 0.25);
+      const usableMB = hw.ramMB - reservedMB;
+      const fitsInBudget = modelMB <= usableMB;
+      fits = fitsInBudget;
 
       if (isSelected) {
-        statusStr = fitsInRam
-          ? `${C.green}${C.bold}← SELECTED${C.reset}`
-          : `${C.green}${C.bold}← SELECTED ${C.yellow}(SSD offload)${C.reset}`;
-      } else if (fitsInRam) {
+        statusStr = `${C.green}${C.bold}← SELECTED${C.reset}`;
+      } else if (fitsInBudget) {
         statusStr = `${C.green}compatible${C.reset}`;
-      } else if (fitsWithOffload) {
-        statusStr = `${C.cyan}SSD offload${C.reset}`;
       } else {
-        statusStr = `${C.red}too large${C.reset}`;
+        statusStr = `${C.red}too large for unified RAM${C.reset}`;
       }
     } else {
       // Linux/Windows: check VRAM fit, GPU+RAM fit (mmap), or too large
@@ -551,23 +549,14 @@ export async function runSetup(options?: {
       `    ${C.yellow}Note: Using manually selected model instead of recommended ${recommended.codename}${C.reset}`,
     );
   }
-  // Show disk offloading info for macOS
+  // macOS Apple Silicon: unified memory budget info (no offload — see hardware-tier comments)
   if (isMacMLX) {
-    const modelMB = entry.sizeGB * 1024;
-    if (modelMB > hw.ramMB * 0.8) {
-      const overflowGB = ((modelMB - hw.ramMB * 0.8) / 1024).toFixed(1);
-      console.log();
-      console.log(`    ${C.cyan}SSD Disk Offloading enabled${C.reset}`);
-      console.log(
-        `    ${C.dim}   ~${overflowGB} GB will stream from NVMe SSD via page cache.${C.reset}`,
-      );
-      console.log(
-        `    ${C.dim}   Speed: slightly slower than full-RAM, but runs models up to 2x your RAM.${C.reset}`,
-      );
-      console.log(
-        `    ${C.dim}   Technique inspired by flash-moe: "Trust the OS" page cache principle.${C.reset}`,
-      );
-    }
+    const reservedGB = Math.max(8, Math.round((hw.ramMB * 0.25) / 1024));
+    const usableGB = Math.round(hw.ramMB / 1024) - reservedGB;
+    console.log();
+    console.log(
+      `    ${C.dim}Unified memory: reserved ~${reservedGB} GB for OS + apps + KV cache, ~${usableGB} GB usable for the model.${C.reset}`,
+    );
     // Show mmap/partial offload info for Linux/Windows
   } else if (hw.totalVramMB > 0 && hw.totalVramMB < entry.minVramMB) {
     const gpuPct = Math.min(100, Math.round((hw.totalVramMB / (entry.sizeGB * 1024)) * 100));
@@ -615,16 +604,9 @@ export async function runSetup(options?: {
   console.log();
 
   if (useMlx) {
-    const modelMB = entry.sizeGB * 1024;
-    const offloading = modelMB > hw.ramMB * 0.8;
     console.log(
       `    ${C.magenta}Apple Silicon detected — using MLX for optimized inference${C.reset}`,
     );
-    if (offloading) {
-      console.log(
-        `    ${C.cyan}Disk offloading active — model will stream from NVMe SSD${C.reset}`,
-      );
-    }
     console.log();
   }
 
