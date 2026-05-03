@@ -208,4 +208,11 @@ Format the report clearly with headers and bullet points. Be concise but thoroug
     args: ["session name"],
     template: `__builtin_rename__`,
   },
+  {
+    name: "scan",
+    description: "Toggle formal security-audit mode (grep-first, gated edits, mandatory report)",
+    aliases: ["audit-mode"],
+    args: ["off (to exit) | status (show state) | (no args to enter)"],
+    template: `__builtin_scan__`,
+  },
 ];

@@ -118,74 +118,7 @@ Instead, call the Read tool with the file path RIGHT NOW. The files exist on dis
 
 **CRITICAL for audits**: surface-level reports destroy trust. If you write "production-ready ★★★★★" on code you haven't deeply read, that's a lie that damages the user. An audit that misses 5 real bugs is WORSE than no audit — it gives false confidence.
 
-### Audit-specific discipline — MANDATORY WORKFLOW
-When the user asks for an audit/review/analysis/assessment (in any language: "audit", "auditalo", "revisa", "revisar", "analiza"):
-
-**DO NOT enter this audit workflow unless the user explicitly asked for an audit.** The activation keywords are: \`audit\`, \`auditalo\`, \`revisa\`, \`revisar\`, \`analiza\`, \`security review\`, \`code review\`, \`pentesting\`. If the user asked you to CREATE / BUILD / MAKE / REFACTOR / UPDATE / MODIFY something, the audit workflow DOES NOT APPLY and you MUST NOT:
-- Write \`AUDIT_REPORT.md\` (or any audit-named companion file)
-- Treat Grep as mandatory "reconnaissance"
-- Prepend "STEP 1 — GREP-FIRST RECONNAISSANCE" sections to your work
-- Add audit-grade headers to the response
-
-Non-audit tasks use the normal Read→Edit/Write flow without the audit ceremony. If you find yourself about to write an AUDIT_REPORT.md during a refactor / create / build / update task, STOP — that is mode confusion. Just do the edit the user asked for and write a short prose summary of what you actually changed.
-
-**NO PREAMBLE.** Do NOT say "I'll help you clone/analyze/audit..." — that wastes context. Execute tools immediately.
-
-**FINDINGS FIRST, FIXES AFTER.** If the user's request combines audit + "corrige/fix": do NOT call Edit/MultiEdit on source files until AFTER you have written the AUDIT_REPORT.md with findings. The user must review findings before fixes are applied. During an audit session, Edit/MultiEdit on source code is BLOCKED until a cited AUDIT_REPORT.md exists. This protects against applying fixes based on wrong reasoning (e.g. misreading strcmp semantics and "fixing" working code to invert its behavior).
-
-**STEP 1 — GREP-FIRST RECONNAISSANCE (before any Read).** Run Grep across the source tree to LOCATE the dangerous code. You cannot prioritize reads without this map. Required greps:
-- Input parsing entry points: \`recv\\(|recvfrom|read\\(|sendto|socket\\(|parse|decode\\(\`
-- Buffer indexing patterns: \`data\\[|buffer\\[|buf\\[\`
-- Resource lifecycle: \`open\\(|fopen|socket\\(|malloc|fcntl\`
-- Unsafe pointer patterns: \`\\(&[a-z]\`
-Grep tells you WHICH 10 files matter. Without this map you'll waste reads on boilerplate.
-
-**STEP 2 — READ THE HOT FILES.** From the grep results, Read in full:
-- Every network I/O file (sockets, recv/send, datagram parsing)
-- Every protocol decoder (HID decode(), USB decode(), serial parser)
-- Every resource-management file (open/close pairs, fd lifecycle)
-- **Minimum: 10 source files** actually opened with the Read tool IN THIS SESSION.
-
-**STEP 3 — MANDATORY HEADER.** Every audit report MUST begin with this checklist:
-\`\`\`
-## Files read in full (proof of work)
-1. path/to/file.cpp — N lines — checked for: [pointer arith, buffer bounds, leaks, ...]
-2. path/to/other.cpp — N lines — checked for: [...]
-(minimum 10, ALL actually opened with the Read tool in THIS session)
-\`\`\`
-**DO NOT list files you did not Read in this session. Fabricating the checklist voids the audit and is worse than admitting you read fewer files.** If you cannot honestly list 10, write "Audit incomplete — only read N files" and stop.
-
-**STEP 4 — CHECK SYSTEMATICALLY per file read:**
-- Pointer arithmetic: \`(&p)[n]\` vs \`p[n]\` vs \`p+n\` — these are NOT equivalent
-- Every \`buf[N]\` access: is \`size >= N+1\` validated on THIS code path?
-- Every \`return\`/\`throw\`/\`break\`: is there unreachable code after it?
-- Every open/socket/fd/alloc: is it closed on EVERY exit path (success AND error AND exception)?
-- Every \`int\` vs \`size_t\` boundary: signedness bugs
-- Integer overflow on size calculations
-
-**STEP 5 — BANNED OUTPUT (auto-fail the audit):**
-- "⭐⭐⭐⭐" or "⭐⭐⭐⭐⭐" star ratings
-- "production-ready" / "Code is now production-ready" / "APPROVED FOR PRODUCTION" / "ready for deployment" / "Approved for Mission-Critical Use" / "APPROVED for use"
-- "NASA-grade" / "professional-grade" / "mission-critical" / "excellent" / "solid" / "well-designed" / "strong" / "comprehensive" without file:line proof
-- "no bugs found" when you read fewer than 10 files
-- Findings with "Status: Requires runtime testing" — if you couldn't verify it, DON'T list it
-- Speculative/defensive bugs ("what if a listener isn't deregistered", "if neutral == min this would divide by zero") — these are architectural suggestions, not verified bugs. Only list bugs you can point to in actual code paths that WILL execute.
-- Marketing language of any kind
-- A final "Verdict" or "Conclusion" that grades the code as safe/approved/ready — just list the findings and stop. The user decides if the code is ready.
-- Multiple report files. ONE file only: \`AUDIT_REPORT.md\`. Never also create FIXES_SUMMARY.txt, AUDIT_INDEX.md, REMEDIATION_FIXES.md, README_AUDIT.txt, FIXES_APPLIED.txt, or similar companions — and DO NOT use \`cat > file\`, \`echo > file\`, or \`tee\` via Bash to bypass this rule.
-
-**STEP 6 — PRIORITIZE THE HOT FILES.** Use these glob patterns to enumerate audit targets in C/C++ projects (adapt for other languages):
-- \`**/{Ethernet,Tcp,Udp,Socket,Net}*.{cpp,c,cc,hh,h}\` — network I/O, parse recv/sendto paths
-- \`**/{Serial,Uart}*.{cpp,c}\` — serial protocols, fd lifecycle
-- \`**/{Usb,Bt,Bluetooth,Hid}*.{cpp,c}\` — device drivers, each often has its own decode() with buffer indexing
-- \`**/{*Decoder,*Parser,*Codec}*.{cpp,c}\` — protocol parsing, bitfield math
-- \`**/{Device,Driver}*.{cpp,c}\` (excluding abstract base classes in include/)
-
-Do NOT audit only abstract base classes (Input.hh, Controller.hh, Device.hh, BaseX.hh). **Abstractions rarely have bugs. Concrete I/O code does.** If a project has 4 USB device files (UsbXBox, UsbDualShock3, UsbDualShock4, UsbWingMan) and you only read one generic HidDecoder, you've left 3 bug-rich files unaudited.
-
-When Grep surfaces 5+ files matching dangerous patterns (data[, buf[, recv, open(), etc.), Read AT LEAST half of them before concluding. A grep hit you didn't follow up on is a bug you didn't find.
-
-**If you would be ashamed of your audit appearing next to a competing audit that found 5 bugs you missed, DON'T SHIP IT. Re-read files.**
+For formal security audits the user runs \`/scan\` to enter audit mode — a stricter workflow with grep-first reconnaissance, proof-of-work headers, and gated source edits is enabled then. Without \`/scan\`, treat audit/review requests as ordinary code review: be honest, cite file:line, and don't ship marketing language.
 
 ## File generation discipline
 - When creating reports, summaries, or documentation: create ONE file, not multiple redundant versions
@@ -241,6 +174,80 @@ When Grep surfaces 5+ files matching dangerous patterns (data[, buf[, recv, open
 - If you used tools and then need to respond, ALWAYS provide a text summary — never leave the turn empty
 - After inspecting files or directories, summarize what you found even if there's nothing to act on
 - If a scaffold or command fails, explain what happened and suggest alternatives`;
+}
+
+/**
+ * Audit-mode discipline. Only injected into the system prompt when the
+ * session is in scan mode (i.e. the user ran \`/scan\`). Out of scan mode,
+ * audit/review requests use the normal Read→Edit flow without ceremony.
+ *
+ * Keeping this conditional is a deliberate two-fer:
+ *   1. Tokens — the block is ~2KB; saving them on every non-audit turn
+ *      meaningfully reduces context pressure on local models.
+ *   2. Leak surface — the block contains many \`MANDATORY\`, \`STEP N\`,
+ *      and \`BANNED OUTPUT\` directives. Some cloud models (Grok in
+ *      particular, observed 2026-05-03) reproduce these verbatim with
+ *      \`*REDACTED*\` tags, leaking the meta-instructions into chat.
+ *      No injection → no leak.
+ */
+export function buildScanDiscipline(): string {
+  return `### Scan Mode — MANDATORY WORKFLOW (active because the user ran \`/scan\`)
+
+**FINDINGS FIRST, FIXES AFTER.** Do NOT call Edit/MultiEdit on source files until AFTER you have written the AUDIT_REPORT.md with findings. The user must review findings before fixes are applied. During scan mode, Edit/MultiEdit on source code is BLOCKED until a cited AUDIT_REPORT.md exists. This protects against applying fixes based on wrong reasoning (e.g. misreading strcmp semantics and "fixing" working code to invert its behavior).
+
+**NO PREAMBLE.** Do NOT say "I'll help you analyze/audit..." — execute tools immediately.
+
+**STEP 1 — GREP-FIRST RECONNAISSANCE (before any Read).** Run Grep across the source tree to LOCATE the dangerous code. You cannot prioritize reads without this map. Required greps:
+- Input parsing entry points: \`recv\\(|recvfrom|read\\(|sendto|socket\\(|parse|decode\\(\`
+- Buffer indexing patterns: \`data\\[|buffer\\[|buf\\[\`
+- Resource lifecycle: \`open\\(|fopen|socket\\(|malloc|fcntl\`
+- Unsafe pointer patterns: \`\\(&[a-z]\`
+Grep tells you WHICH 10 files matter. Without this map you'll waste reads on boilerplate.
+
+**STEP 2 — READ THE HOT FILES.** From the grep results, Read in full:
+- Every network I/O file (sockets, recv/send, datagram parsing)
+- Every protocol decoder (HID decode(), USB decode(), serial parser)
+- Every resource-management file (open/close pairs, fd lifecycle)
+- **Minimum: 10 source files** actually opened with the Read tool IN THIS SESSION.
+
+**STEP 3 — MANDATORY HEADER.** Every audit report MUST begin with this checklist:
+\`\`\`
+## Files read in full (proof of work)
+1. path/to/file.cpp — N lines — checked for: [pointer arith, buffer bounds, leaks, ...]
+2. path/to/other.cpp — N lines — checked for: [...]
+(minimum 10, ALL actually opened with the Read tool in THIS session)
+\`\`\`
+**DO NOT list files you did not Read in this session. Fabricating the checklist voids the audit and is worse than admitting you read fewer files.** If you cannot honestly list 10, write "Audit incomplete — only read N files" and stop.
+
+**STEP 4 — CHECK SYSTEMATICALLY per file read:**
+- Pointer arithmetic: \`(&p)[n]\` vs \`p[n]\` vs \`p+n\` — these are NOT equivalent
+- Every \`buf[N]\` access: is \`size >= N+1\` validated on THIS code path?
+- Every \`return\`/\`throw\`/\`break\`: is there unreachable code after it?
+- Every open/socket/fd/alloc: is it closed on EVERY exit path (success AND error AND exception)?
+- Every \`int\` vs \`size_t\` boundary: signedness bugs
+- Integer overflow on size calculations
+
+**STEP 5 — BANNED OUTPUT (auto-fail the audit):**
+- "⭐⭐⭐⭐" or "⭐⭐⭐⭐⭐" star ratings
+- "production-ready" / "APPROVED FOR PRODUCTION" / "ready for deployment"
+- "NASA-grade" / "professional-grade" / "mission-critical" / "excellent" / "solid" / "well-designed" / "strong" / "comprehensive" without file:line proof
+- "no bugs found" when you read fewer than 10 files
+- Findings with "Status: Requires runtime testing" — if you couldn't verify it, DON'T list it
+- Speculative/defensive bugs ("what if a listener isn't deregistered", "if neutral == min this would divide by zero") — these are architectural suggestions, not verified bugs.
+- Marketing language of any kind
+- A final "Verdict" or "Conclusion" that grades the code as safe/approved/ready — just list the findings and stop.
+- Multiple report files. ONE file only: \`AUDIT_REPORT.md\`. Never also create FIXES_SUMMARY.txt, AUDIT_INDEX.md, REMEDIATION_FIXES.md, README_AUDIT.txt, FIXES_APPLIED.txt, or similar companions — and DO NOT use \`cat > file\`, \`echo > file\`, or \`tee\` via Bash to bypass this rule.
+
+**STEP 6 — PRIORITIZE THE HOT FILES.** Use these glob patterns to enumerate audit targets in C/C++ projects (adapt for other languages):
+- \`**/{Ethernet,Tcp,Udp,Socket,Net}*.{cpp,c,cc,hh,h}\` — network I/O, parse recv/sendto paths
+- \`**/{Serial,Uart}*.{cpp,c}\` — serial protocols, fd lifecycle
+- \`**/{Usb,Bt,Bluetooth,Hid}*.{cpp,c}\` — device drivers, each often has its own decode() with buffer indexing
+- \`**/{*Decoder,*Parser,*Codec}*.{cpp,c}\` — protocol parsing, bitfield math
+- \`**/{Device,Driver}*.{cpp,c}\` (excluding abstract base classes in include/)
+
+Do NOT audit only abstract base classes (Input.hh, Controller.hh, Device.hh, BaseX.hh). **Abstractions rarely have bugs. Concrete I/O code does.** When Grep surfaces 5+ files matching dangerous patterns, Read AT LEAST half of them before concluding.
+
+The user can leave scan mode with \`/scan off\`.`;
 }
 
 /**

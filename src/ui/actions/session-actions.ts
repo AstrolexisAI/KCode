@@ -970,6 +970,38 @@ export async function handleSessionAction(
       lines.push(`  Diff: /snapshots diff <id1> <id2>`);
       return lines.join("\n");
     }
+    case "scan": {
+      const { isAuditSession, setAuditIntent } = await import("../../core/session-tracker.js");
+      const sub = (args ?? "").trim().toLowerCase();
+      const active = isAuditSession();
+
+      if (sub === "status" || sub === "?") {
+        return active
+          ? "  Scan mode: ON — Edit/MultiEdit on source files is gated by AUDIT_REPORT.md."
+          : "  Scan mode: OFF — normal Read/Edit flow.";
+      }
+
+      if (sub === "off" || sub === "exit" || sub === "stop") {
+        if (!active) return "  Scan mode is already off.";
+        setAuditIntent(false);
+        return "  Scan mode OFF. Edit/MultiEdit on source files no longer gated.";
+      }
+
+      if (active) {
+        return "  Scan mode is already ON. Use '/scan off' to exit, '/scan status' to inspect.";
+      }
+      setAuditIntent(true);
+      const lines = [
+        "  Scan mode ON.",
+        "  Workflow now active:",
+        "    1. Grep-first reconnaissance across the source tree",
+        "    2. Read at least 10 hot files in full",
+        "    3. Write AUDIT_REPORT.md with file:line citations",
+        "    4. Source-file edits are BLOCKED until the report cites them",
+        "  Exit with: /scan off",
+      ];
+      return lines.join("\n");
+    }
     default:
       return null;
   }
