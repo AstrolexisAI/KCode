@@ -54,9 +54,10 @@ export function registerSetupCommand(
     .option("--force", "Force re-download even if already installed")
     .option("--list", "List available models")
     .option("--auto", "Auto-detect hardware and recommend optimal model configuration")
+    .option("-y, --yes", "Non-interactive: skip all prompts (for scripted installs)")
     .action(async function (
       this: Command,
-      opts: { model?: string; force?: boolean; list?: boolean; auto?: boolean },
+      opts: { model?: string; force?: boolean; list?: boolean; auto?: boolean; yes?: boolean },
     ) {
       // Commander quirk: the root program also defines `-m, --model`, so
       // `kcode setup --model X` parses X onto the parent's options bag and
@@ -126,7 +127,7 @@ export function registerSetupCommand(
       }
 
       try {
-        await runSetup({ model: opts.model, force: opts.force });
+        await runSetup({ model: opts.model, force: opts.force, yes: opts.yes });
       } catch (err) {
         console.error(`\x1b[31mSetup failed: ${err instanceof Error ? err.message : err}\x1b[0m`);
         await exitWithPause(1);
