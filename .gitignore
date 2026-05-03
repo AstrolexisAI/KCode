@@ -75,3 +75,4 @@ benchmarks/audit/results/run-*.json
 # Local-only working files (kept on disk, never committed).
 kulsh/
 docs/brochure.pdf
+__pycache__/
