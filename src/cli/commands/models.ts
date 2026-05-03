@@ -292,18 +292,59 @@ export function registerModelsCommand(program: Command): void {
       }
       const path = kcodePath("server.json");
       const file = Bun.file(path);
-      if (!(await file.exists())) {
-        console.error(`No ${path} found. Run 'kcode setup' first.`);
-        process.exit(1);
+      let cfg: Record<string, unknown>;
+      let bootstrapped = false;
+
+      if (await file.exists()) {
+        cfg = (await file.json()) as Record<string, unknown>;
+      } else {
+        // Bootstrap mode: no server.json yet (user downloaded the model
+        // manually and never finished `kcode setup`). Synthesize a minimal
+        // MLX config so the user doesn't have to sit through a redundant
+        // wizard. Requires the MLX venv to exist — that's what runs
+        // mlx_lm.server.
+        const venvPython = kcodePath("mlx-venv", "bin", "python3");
+        if (!existsSync(venvPython)) {
+          console.error(`MLX venv not found at ${venvPython}`);
+          console.error(
+            "Run the download script first (it builds the venv):\n" +
+              "  bash <(curl -fsSL https://raw.githubusercontent.com/AstrolexisAI/KCode/master/scripts/mlx-model-download.sh) " +
+              repo,
+          );
+          process.exit(1);
+        }
+        cfg = {
+          enginePath: venvPython,
+          modelPath: "",
+          codename: repo.split("/")[1] ?? repo,
+          port: 10091,
+          contextSize: 32768,
+          gpuLayers: -1,
+          gpus: [],
+          engine: "mlx",
+        };
+        // Mark setup as complete so the main kcode entry point boots into
+        // the TUI instead of re-launching the setup wizard.
+        await Bun.write(
+          kcodePath(".setup-complete"),
+          `${new Date().toISOString()}\n${cfg.codename}\n`,
+        );
+        bootstrapped = true;
       }
-      const cfg = (await file.json()) as Record<string, unknown>;
+
       const previous = cfg.mlxRepo;
       cfg.mlxRepo = repo;
       cfg.codename = repo.split("/")[1] ?? repo;
       cfg.engine = "mlx";
       await Bun.write(path, `${JSON.stringify(cfg, null, 2)}\n`);
-      console.log(`Active MLX model: ${previous ?? "(none)"} → ${repo}`);
-      console.log("Restart kcode to load it: kcode server stop && kcode");
+
+      if (bootstrapped) {
+        console.log(`Active MLX model: ${repo}`);
+        console.log(`Bootstrapped ${path} (no setup wizard needed).`);
+      } else {
+        console.log(`Active MLX model: ${previous ?? "(none)"} → ${repo}`);
+      }
+      console.log("Start kcode: kcode");
     });
 
   modelsCmd
