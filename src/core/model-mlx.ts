@@ -26,11 +26,7 @@ function findPython3(): string | null {
     // /usr/bin/which not present — extremely unusual, fall through
   }
 
-  for (const name of [
-    "/usr/bin/python3",
-    "/opt/homebrew/bin/python3",
-    "/usr/local/bin/python3",
-  ]) {
+  for (const name of ["/usr/bin/python3", "/opt/homebrew/bin/python3", "/usr/local/bin/python3"]) {
     try {
       const proc = Bun.spawnSync([name, "--version"], { stdout: "pipe", stderr: "pipe" });
       if (proc.exitCode === 0) return name;
