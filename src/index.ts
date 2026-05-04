@@ -737,6 +737,45 @@ async function runMain(
           } catch (err) {
             log.debug("kulvex", `model registry update failed: ${err}`);
           }
+
+          // Override the saved-preference restore in App.tsx. Without
+          // this, the previous session's lastSessionModel (e.g. a stale
+          // localhost:10091 entry) wins after the TUI mounts, defeating
+          // the whole point of sharing Kulvex. Also disable multi-model
+          // routing — multi-model assumes several local options exist
+          // and may pick the dead local entry.
+          try {
+            const fs = await import("node:fs");
+            const path = await import("node:path");
+            const os = await import("node:os");
+            const settingsFile = path.join(os.homedir(), ".kcode", "settings.json");
+            let settings: Record<string, unknown> = {};
+            if (fs.existsSync(settingsFile)) {
+              try {
+                settings = JSON.parse(fs.readFileSync(settingsFile, "utf-8")) as Record<
+                  string,
+                  unknown
+                >;
+              } catch {
+                settings = {};
+              }
+            }
+            settings.lastSessionModel = kulvexEndpoint.modelId;
+            settings.confirmedModel = kulvexEndpoint.modelId;
+            settings.model = kulvexEndpoint.modelId;
+            // Only flip multiModel off; keep the rest of multiModel
+            // settings (toggles, provider preferences) untouched.
+            if (settings.multiModel === true) {
+              settings.multiModel = false;
+              process.stderr.write(
+                "\x1b[2m  (multi-model routing temporarily off while sharing Kulvex; re-enable with /multimodel)\x1b[0m\n",
+              );
+            }
+            fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2));
+          } catch (err) {
+            log.debug("kulvex", `settings.json update failed: ${err}`);
+          }
+
           externalServerUrl = kulvexEndpoint.baseUrl;
           profileCheckpoint("server_ready");
           // Fall through to the same external-server health check below
