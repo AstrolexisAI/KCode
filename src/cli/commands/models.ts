@@ -338,6 +338,48 @@ export function registerModelsCommand(program: Command): void {
       cfg.engine = "mlx";
       await Bun.write(path, `${JSON.stringify(cfg, null, 2)}\n`);
 
+      // Also update the model registry + saved preference so the next
+      // `kcode` boot uses this model end-to-end without surprises:
+      //   - models.json: register the repo as a model entry pointing
+      //     at the local mlx_lm.server URL, set as default. Without
+      //     this, models.json may still default to a stale entry
+      //     (e.g. a Kulvex shared model that's now unreachable) and
+      //     kcode crashes with "External server not reachable".
+      //   - settings.json: align lastSessionModel + confirmedModel so
+      //     App.tsx's saved-preference restore is a no-op. Without
+      //     this, the TUI flips back to whatever model was active
+      //     last session as soon as it mounts.
+      const port = (cfg.port as number | undefined) ?? 10091;
+      const localUrl = `http://localhost:${port}`;
+      try {
+        await addModel({
+          name: repo,
+          baseUrl: localUrl,
+          contextSize: (cfg.contextSize as number | undefined) ?? 32768,
+          description: `Local MLX ${repo}`,
+        });
+        await setDefaultModel(repo);
+      } catch (err) {
+        console.error(`Warning: model registry update failed: ${err}`);
+      }
+      try {
+        const settingsPath = kcodePath("settings.json");
+        let s: Record<string, unknown> = {};
+        if (existsSync(settingsPath)) {
+          try {
+            s = JSON.parse(await Bun.file(settingsPath).text()) as Record<string, unknown>;
+          } catch {
+            s = {};
+          }
+        }
+        s.lastSessionModel = repo;
+        s.confirmedModel = repo;
+        s.model = repo;
+        await Bun.write(settingsPath, JSON.stringify(s, null, 2));
+      } catch (err) {
+        console.error(`Warning: settings.json update failed: ${err}`);
+      }
+
       if (bootstrapped) {
         console.log(`Active MLX model: ${repo}`);
         console.log(`Bootstrapped ${path} (no setup wizard needed).`);
