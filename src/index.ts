@@ -243,9 +243,53 @@ process.on("unhandledRejection", (reason) => {
   }
 });
 
+// Stop the local inference server on exit so it doesn't keep ~25GB of
+// model weights resident in unified memory after kcode quits. On Mac
+// this is the difference between "Chrome opens" and "system pages to
+// SSD". Users who want a persistent daemon should use `kcode daemon`
+// or set KCODE_PERSIST_SERVER=1 to opt out.
+async function stopLocalServerIfRunning(): Promise<void> {
+  if (process.env.KCODE_PERSIST_SERVER === "1") return;
+  try {
+    const { isServerRunning, stopServer } = await import("./core/llama-server");
+    if (await isServerRunning()) {
+      await stopServer();
+    }
+  } catch (e) {
+    log.debug("shutdown", `Local server stop failed: ${e}`);
+  }
+}
+
+// Synchronous best-effort kill for `process.on("exit")`, where async
+// work has already missed the boat. Reads the PID file and SIGTERMs
+// it directly. Paired with stopLocalServerIfRunning() above so signal
+// paths (which CAN await) get the graceful 5-second wait, while the
+// raw exit path still frees the memory.
+function killLocalServerSync(): void {
+  if (process.env.KCODE_PERSIST_SERVER === "1") return;
+  try {
+    const { existsSync, readFileSync } = require("node:fs") as typeof import("node:fs");
+    const path = require("node:path") as typeof import("node:path");
+    const os = require("node:os") as typeof import("node:os");
+    const pidFile = path.join(os.homedir(), ".kcode", "server.pid");
+    if (!existsSync(pidFile)) return;
+    const pid = parseInt(readFileSync(pidFile, "utf-8").trim(), 10);
+    if (pid > 0) {
+      try {
+        process.kill(pid, "SIGTERM");
+      } catch {
+        /* already dead */
+      }
+    }
+  } catch {
+    /* swallow — process is exiting anyway */
+  }
+}
+
 // Graceful cleanup on signals
-function cleanupAndExit() {
+async function cleanupAndExit() {
   clearSudoPasswordCache();
+  await stopLocalServerIfRunning();
   lazyShutdownLsp().catch((e) => {
     log.debug("shutdown", `LSP shutdown error: ${e}`);
   });
@@ -261,6 +305,11 @@ function cleanupAndExit() {
 
 process.on("SIGINT", cleanupAndExit);
 process.on("SIGTERM", cleanupAndExit);
+// Catches /quit, /exit, Ctrl+D — Ink's useApp().exit() resolves the
+// render promise and falls through to the natural process exit, which
+// fires only this hook (not SIGINT). Sync best-effort kill keeps the
+// MLX server from outliving the TUI.
+process.on("exit", killLocalServerSync);
 
 // ─── CLI Setup ──────────────────────────────────────────────────
 
