@@ -620,6 +620,66 @@ async function runMain(
       // — otherwise modelName is "" and the detection below fails,
       // causing llama-server.ts to throw "Server not configured"
       // even though cloud is perfectly set up.
+      // Kulvex discovery — runs FIRST, before model resolution. If the
+      // platform is up with a model loaded, register it + set as default
+      // + align settings.json so the App.tsx saved-preference restore
+      // doesn't immediately overwrite us back to a stale local entry.
+      // Skipped when --model is an explicit HF repo override or env says
+      // KCODE_KULVEX_DISCOVER=off.
+      if (!(opts.model && /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/.test(opts.model))) {
+        try {
+          const { discoverKulvex } = await import("./core/kulvex-discovery");
+          const ep = await discoverKulvex();
+          if (ep) {
+            process.stderr.write(
+              `\x1b[32m✓\x1b[0m Sharing Kulvex inference at ${ep.baseUrl} (model: ${ep.modelId})\n`,
+            );
+            try {
+              const { addModel, setDefaultModel } = await import("./core/models");
+              await addModel({
+                name: ep.modelId,
+                baseUrl: ep.baseUrl,
+                description: `Shared Kulvex model (${ep.baseUrl})`,
+              });
+              await setDefaultModel(ep.modelId);
+            } catch (err) {
+              log.debug("kulvex", `model registry update failed: ${err}`);
+            }
+            try {
+              const fs = await import("node:fs");
+              const path = await import("node:path");
+              const os = await import("node:os");
+              const settingsFile = path.join(os.homedir(), ".kcode", "settings.json");
+              let settings: Record<string, unknown> = {};
+              if (fs.existsSync(settingsFile)) {
+                try {
+                  settings = JSON.parse(fs.readFileSync(settingsFile, "utf-8")) as Record<
+                    string,
+                    unknown
+                  >;
+                } catch {
+                  settings = {};
+                }
+              }
+              settings.lastSessionModel = ep.modelId;
+              settings.confirmedModel = ep.modelId;
+              settings.model = ep.modelId;
+              if (settings.multiModel === true) {
+                settings.multiModel = false;
+                process.stderr.write(
+                  "\x1b[2m  (multi-model routing temporarily off while sharing Kulvex; re-enable with /multimodel)\x1b[0m\n",
+                );
+              }
+              fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2));
+            } catch (err) {
+              log.debug("kulvex", `settings.json update failed: ${err}`);
+            }
+          }
+        } catch (err) {
+          log.debug("kulvex", `discovery failed: ${err}`);
+        }
+      }
+
       let externalServerUrl: string | null = null;
       try {
         const { getModelBaseUrl, getModelProvider, getDefaultModel } = await import(
@@ -703,89 +763,12 @@ async function runMain(
         const HF_REPO_RE = /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/;
         const mlxRepoOverride = opts.model && HF_REPO_RE.test(opts.model) ? opts.model : undefined;
 
-        // Discover Kulvex platform inference *before* starting our own
-        // local server. If Kulvex is running with a model loaded, we
-        // route through it instead of spinning up a duplicate process
-        // and loading the same 25+ GB of weights into unified memory
-        // twice. Disable with KCODE_KULVEX_DISCOVER=off.
-        let kulvexEndpoint: { baseUrl: string; modelId: string } | null = null;
-        if (!mlxRepoOverride) {
-          try {
-            const { discoverKulvex } = await import("./core/kulvex-discovery");
-            kulvexEndpoint = await discoverKulvex();
-          } catch (err) {
-            log.debug("kulvex", `discovery failed: ${err}`);
-          }
-        }
+        // Kulvex discovery already ran earlier (before model resolution).
+        // If it found something, externalServerUrl was set and we took
+        // the cloud-style branch above — we never reach here when Kulvex
+        // is shared. This branch is only entered for local-server bring-up.
 
-        if (kulvexEndpoint) {
-          // Pretend Kulvex is the inference server: route requests
-          // there and skip our own server start. The conversation layer
-          // already handles arbitrary baseUrls, so we just need to
-          // surface the endpoint via the same code path used for cloud.
-          process.stderr.write(
-            `\x1b[32m✓\x1b[0m Sharing Kulvex inference at ${kulvexEndpoint.baseUrl} (model: ${kulvexEndpoint.modelId})\n`,
-          );
-          try {
-            const { addModel, setDefaultModel } = await import("./core/models");
-            await addModel({
-              name: kulvexEndpoint.modelId,
-              baseUrl: kulvexEndpoint.baseUrl,
-              description: `Shared Kulvex model (${kulvexEndpoint.baseUrl})`,
-            });
-            await setDefaultModel(kulvexEndpoint.modelId);
-          } catch (err) {
-            log.debug("kulvex", `model registry update failed: ${err}`);
-          }
-
-          // Override the saved-preference restore in App.tsx. Without
-          // this, the previous session's lastSessionModel (e.g. a stale
-          // localhost:10091 entry) wins after the TUI mounts, defeating
-          // the whole point of sharing Kulvex. Also disable multi-model
-          // routing — multi-model assumes several local options exist
-          // and may pick the dead local entry.
-          try {
-            const fs = await import("node:fs");
-            const path = await import("node:path");
-            const os = await import("node:os");
-            const settingsFile = path.join(os.homedir(), ".kcode", "settings.json");
-            let settings: Record<string, unknown> = {};
-            if (fs.existsSync(settingsFile)) {
-              try {
-                settings = JSON.parse(fs.readFileSync(settingsFile, "utf-8")) as Record<
-                  string,
-                  unknown
-                >;
-              } catch {
-                settings = {};
-              }
-            }
-            settings.lastSessionModel = kulvexEndpoint.modelId;
-            settings.confirmedModel = kulvexEndpoint.modelId;
-            settings.model = kulvexEndpoint.modelId;
-            // Only flip multiModel off; keep the rest of multiModel
-            // settings (toggles, provider preferences) untouched.
-            if (settings.multiModel === true) {
-              settings.multiModel = false;
-              process.stderr.write(
-                "\x1b[2m  (multi-model routing temporarily off while sharing Kulvex; re-enable with /multimodel)\x1b[0m\n",
-              );
-            }
-            fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2));
-          } catch (err) {
-            log.debug("kulvex", `settings.json update failed: ${err}`);
-          }
-
-          externalServerUrl = kulvexEndpoint.baseUrl;
-          profileCheckpoint("server_ready");
-          // Fall through to the same external-server health check below
-          // by re-entering the parent if/else with externalServerUrl set.
-          // Since we're already past that branch, do the equivalent inline:
-          // accept the discovered endpoint without further checks (we just
-          // hit /v1/models successfully a moment ago).
-        }
-
-        let serverRunning = !kulvexEndpoint && (await isServerRunning());
+        let serverRunning = await isServerRunning();
         let port: number = 0;
 
         // If the user requested an override but a server is already up
@@ -815,15 +798,7 @@ async function runMain(
           }
         }
 
-        // When Kulvex is shared, the rest of the local-server bring-up
-        // (start, health-loop, port resolution) is skipped — we already
-        // verified its /v1/models in discoverKulvex. Routing now goes
-        // through externalServerUrl on the cloud-style code path.
-        if (kulvexEndpoint) {
-          // Nothing more to do here; the cloud branch above already set
-          // externalServerUrl. Subsequent conversation turns will hit
-          // kulvexEndpoint.baseUrl directly.
-        } else if (!serverRunning) {
+        if (!serverRunning) {
           try {
             process.stderr.write("\x1b[2mStarting inference server...\x1b[0m");
             const result = await startServer({ mlxRepoOverride });
@@ -842,12 +817,8 @@ async function runMain(
           port = getServerPort()!;
         }
 
-        // Skip the local health-loop entirely when sharing Kulvex.
-        if (kulvexEndpoint) {
-          // already-ready: discovery succeeded above.
-          // Continue to the rest of startup.
-        } else {
-          // Wait until model is fully loaded and ready — do NOT proceed without this
+        // Wait until model is fully loaded and ready — do NOT proceed without this
+        {
           const maxWait = 180_000;
           const start = Date.now();
           let ready = false;
@@ -898,7 +869,7 @@ async function runMain(
             );
             process.exit(1);
           }
-        } // close else (no kulvex; ran the local health-loop)
+        } // close health-loop block
       } // close else (local llama.cpp server management)
     }
   }
