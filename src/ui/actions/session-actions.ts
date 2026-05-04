@@ -12,6 +12,12 @@ export async function handleSessionAction(
 
   switch (action) {
     case "clear": {
+      // Reset BOTH the visible message list AND the conversation manager's
+      // internal state. Without the reset() call the LLM still has the full
+      // history on the next turn — visually the screen looked stale because
+      // any incoming message would re-attach to the prior context, defeating
+      // the user's intent.
+      conversationManager.reset();
       setCompleted(() => [
         {
           kind: "banner",
