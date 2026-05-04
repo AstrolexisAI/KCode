@@ -10,6 +10,7 @@ export { registerDoctorCommand } from "./doctor";
 export { registerGrammarsCommand } from "./grammars";
 export { registerHistoryCommand } from "./history";
 export { registerInitCommand } from "./init";
+export { registerKulvexCommand } from "./kulvex";
 export { registerLicenseCommand } from "./license";
 export { registerMcpCommand } from "./mcp";
 export { registerMeshCommand } from "./mesh";

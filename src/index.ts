@@ -85,6 +85,7 @@ import {
   registerGrammarsCommand,
   registerHistoryCommand,
   registerInitCommand,
+  registerKulvexCommand,
   registerLicenseCommand,
   registerMcpCommand,
   registerMeshCommand,
@@ -448,6 +449,7 @@ registerDoctorCommand(program);
 registerTeachCommand(program);
 registerStatsCommand(program);
 registerInitCommand(program);
+registerKulvexCommand(program);
 registerLicenseCommand(program);
 registerNewCommand(program);
 registerResumeCommand(program);
@@ -701,7 +703,50 @@ async function runMain(
         const HF_REPO_RE = /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/;
         const mlxRepoOverride = opts.model && HF_REPO_RE.test(opts.model) ? opts.model : undefined;
 
-        let serverRunning = await isServerRunning();
+        // Discover Kulvex platform inference *before* starting our own
+        // local server. If Kulvex is running with a model loaded, we
+        // route through it instead of spinning up a duplicate process
+        // and loading the same 25+ GB of weights into unified memory
+        // twice. Disable with KCODE_KULVEX_DISCOVER=off.
+        let kulvexEndpoint: { baseUrl: string; modelId: string } | null = null;
+        if (!mlxRepoOverride) {
+          try {
+            const { discoverKulvex } = await import("./core/kulvex-discovery");
+            kulvexEndpoint = await discoverKulvex();
+          } catch (err) {
+            log.debug("kulvex", `discovery failed: ${err}`);
+          }
+        }
+
+        if (kulvexEndpoint) {
+          // Pretend Kulvex is the inference server: route requests
+          // there and skip our own server start. The conversation layer
+          // already handles arbitrary baseUrls, so we just need to
+          // surface the endpoint via the same code path used for cloud.
+          process.stderr.write(
+            `\x1b[32m✓\x1b[0m Sharing Kulvex inference at ${kulvexEndpoint.baseUrl} (model: ${kulvexEndpoint.modelId})\n`,
+          );
+          try {
+            const { addModel, setDefaultModel } = await import("./core/models");
+            await addModel({
+              name: kulvexEndpoint.modelId,
+              baseUrl: kulvexEndpoint.baseUrl,
+              description: `Shared Kulvex model (${kulvexEndpoint.baseUrl})`,
+            });
+            await setDefaultModel(kulvexEndpoint.modelId);
+          } catch (err) {
+            log.debug("kulvex", `model registry update failed: ${err}`);
+          }
+          externalServerUrl = kulvexEndpoint.baseUrl;
+          profileCheckpoint("server_ready");
+          // Fall through to the same external-server health check below
+          // by re-entering the parent if/else with externalServerUrl set.
+          // Since we're already past that branch, do the equivalent inline:
+          // accept the discovered endpoint without further checks (we just
+          // hit /v1/models successfully a moment ago).
+        }
+
+        let serverRunning = !kulvexEndpoint && (await isServerRunning());
         let port: number = 0;
 
         // If the user requested an override but a server is already up
@@ -731,7 +776,15 @@ async function runMain(
           }
         }
 
-        if (!serverRunning) {
+        // When Kulvex is shared, the rest of the local-server bring-up
+        // (start, health-loop, port resolution) is skipped — we already
+        // verified its /v1/models in discoverKulvex. Routing now goes
+        // through externalServerUrl on the cloud-style code path.
+        if (kulvexEndpoint) {
+          // Nothing more to do here; the cloud branch above already set
+          // externalServerUrl. Subsequent conversation turns will hit
+          // kulvexEndpoint.baseUrl directly.
+        } else if (!serverRunning) {
           try {
             process.stderr.write("\x1b[2mStarting inference server...\x1b[0m");
             const result = await startServer({ mlxRepoOverride });
@@ -750,55 +803,63 @@ async function runMain(
           port = getServerPort()!;
         }
 
-        // Wait until model is fully loaded and ready — do NOT proceed without this
-        const maxWait = 180_000;
-        const start = Date.now();
-        let ready = false;
-        while (Date.now() - start < maxWait) {
-          try {
-            const healthResp = await fetch(`http://localhost:${port}/health`, {
-              signal: AbortSignal.timeout(3000),
-            });
-            if (healthResp.ok) {
-              const health = (await healthResp.json()) as Record<string, unknown>;
-              if (health.status === "ok") {
-                const modelsResp = await fetch(`http://localhost:${port}/v1/models`, {
-                  signal: AbortSignal.timeout(3000),
-                });
-                if (modelsResp.ok) {
-                  ready = true;
-                  break;
+        // Skip the local health-loop entirely when sharing Kulvex.
+        if (kulvexEndpoint) {
+          // already-ready: discovery succeeded above.
+          // Continue to the rest of startup.
+        } else {
+          // Wait until model is fully loaded and ready — do NOT proceed without this
+          const maxWait = 180_000;
+          const start = Date.now();
+          let ready = false;
+          while (Date.now() - start < maxWait) {
+            try {
+              const healthResp = await fetch(`http://localhost:${port}/health`, {
+                signal: AbortSignal.timeout(3000),
+              });
+              if (healthResp.ok) {
+                const health = (await healthResp.json()) as Record<string, unknown>;
+                if (health.status === "ok") {
+                  const modelsResp = await fetch(`http://localhost:${port}/v1/models`, {
+                    signal: AbortSignal.timeout(3000),
+                  });
+                  if (modelsResp.ok) {
+                    ready = true;
+                    break;
+                  }
                 }
               }
+            } catch (err) {
+              log.debug("index", `Server health check not ready yet: ${err}`);
             }
-          } catch (err) {
-            log.debug("index", `Server health check not ready yet: ${err}`);
+
+            const elapsed = Math.round((Date.now() - start) / 1000);
+            if (!serverRunning) {
+              process.stderr.write(
+                `\r\x1b[2mLoading model into VRAM... (${elapsed}s)\x1b[0m\x1b[K`,
+              );
+            }
+            await new Promise((r) => setTimeout(r, 500));
           }
 
-          const elapsed = Math.round((Date.now() - start) / 1000);
-          if (!serverRunning) {
-            process.stderr.write(`\r\x1b[2mLoading model into VRAM... (${elapsed}s)\x1b[0m\x1b[K`);
+          if (ready) {
+            profileCheckpoint("server_ready");
+            if (!serverRunning) {
+              process.stderr.write(`\r\x1b[32m✓\x1b[0m Model loaded on port ${port}\x1b[K\n`);
+            }
+          } else {
+            // Model failed to load — suggest cloud fallback
+            console.error(`\n\x1b[31m✗ Model failed to load within ${maxWait / 1000}s.\x1b[0m`);
+            console.error(`  Check: \x1b[2m~/.kcode/server.log\x1b[0m`);
+            console.error(
+              `\n  \x1b[33mTip:\x1b[0m If your hardware can't run local models, use cloud inference:`,
+            );
+            console.error(
+              `  Run \x1b[1mkcode setup\x1b[0m or use \x1b[1m/cloud\x1b[0m to configure Anthropic, OpenAI, or other providers.\n`,
+            );
+            process.exit(1);
           }
-          await new Promise((r) => setTimeout(r, 500));
-        }
-
-        if (ready) {
-          profileCheckpoint("server_ready");
-          if (!serverRunning) {
-            process.stderr.write(`\r\x1b[32m✓\x1b[0m Model loaded on port ${port}\x1b[K\n`);
-          }
-        } else {
-          // Model failed to load — suggest cloud fallback
-          console.error(`\n\x1b[31m✗ Model failed to load within ${maxWait / 1000}s.\x1b[0m`);
-          console.error(`  Check: \x1b[2m~/.kcode/server.log\x1b[0m`);
-          console.error(
-            `\n  \x1b[33mTip:\x1b[0m If your hardware can't run local models, use cloud inference:`,
-          );
-          console.error(
-            `  Run \x1b[1mkcode setup\x1b[0m or use \x1b[1m/cloud\x1b[0m to configure Anthropic, OpenAI, or other providers.\n`,
-          );
-          process.exit(1);
-        }
+        } // close else (no kulvex; ran the local health-loop)
       } // close else (local llama.cpp server management)
     }
   }
