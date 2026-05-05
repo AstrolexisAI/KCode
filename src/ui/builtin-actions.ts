@@ -81,6 +81,7 @@ export async function handleBuiltinAction(
   appConfig: KCodeConfig,
   args?: string,
   switchTheme?: (name: string) => void,
+  resetUiState?: () => void,
 ): Promise<string> {
   const ctx: ActionContext = {
     conversationManager,
@@ -88,6 +89,7 @@ export async function handleBuiltinAction(
     appConfig,
     args,
     switchTheme,
+    resetUiState,
   };
 
   for (const handler of handlers) {

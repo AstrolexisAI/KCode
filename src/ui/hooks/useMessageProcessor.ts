@@ -1414,6 +1414,23 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
               config,
               expanded.prompt,
               switchTheme,
+              () => {
+                // /clear and similar handlers call this to reset
+                // App.tsx-owned UI state that's separate from the
+                // conversation manager. Setters not exposed here
+                // (sessionCostUsd, activeTabs, etc.) keep their
+                // values, which is intentional — they reflect cross-
+                // session UI state that survives a clear.
+                setTokenCount(0);
+                setTurnTokens(0);
+                setToolUseCount(0);
+                setRunningAgentCount(0);
+                setBashStreamOutput("");
+                setStreamingText("");
+                setStreamingThinking("");
+                setIsThinking(false);
+                setLoadingMessage("");
+              },
             );
 
             // /context — toggle the context grid display

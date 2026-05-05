@@ -18,6 +18,12 @@ export async function handleSessionAction(
       // any incoming message would re-attach to the prior context, defeating
       // the user's intent.
       conversationManager.reset();
+      // Also reset the App-level React state for token counters / cost
+      // meter / tool counts. The conversation reset clears
+      // cumulativeUsage, but the UI keeps its own copy in useState that
+      // stream-handler updates per turn — without this, the status line
+      // still shows "tok:145,714 • tools:19" after /clear.
+      ctx.resetUiState?.();
       setCompleted(() => [
         {
           kind: "banner",
