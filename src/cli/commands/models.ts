@@ -336,6 +336,39 @@ export function registerModelsCommand(program: Command): void {
       cfg.mlxRepo = repo;
       cfg.codename = repo.split("/")[1] ?? repo;
       cfg.engine = "mlx";
+
+      // Auto-size context based on available unified memory. The previous
+      // contextSize (32k default from the wizard, or whatever the user
+      // last left) doesn't track the new model's KV-cache footprint —
+      // and on a 48 GB Mac the difference between 32k and "model max"
+      // is the difference between fitting and OOMing 30s into a long
+      // session. Compute the largest 32k/64k/128k/256k ceiling that
+      // fits after accounting for model weights, OS reserve, and
+      // headroom.
+      try {
+        const { autoSizeContext } = await import("../../core/context-sizing");
+        const os = await import("node:os");
+        const sized = autoSizeContext(repo, os.totalmem());
+        if (sized) {
+          const previousCtx = cfg.contextSize as number | undefined;
+          cfg.contextSize = sized.contextSize;
+          if (previousCtx && previousCtx !== sized.contextSize) {
+            console.log(
+              `Auto-sized context: ${previousCtx} → ${sized.contextSize} tokens` +
+                ` (model max ${sized.shape.maxPositionEmbeddings}, ` +
+                `weights ~${(sized.modelSizeBytes / 1024 ** 3).toFixed(1)} GB)`,
+            );
+          }
+        } else {
+          console.log(
+            "Note: context auto-sizing skipped — model not yet downloaded. " +
+              "Re-run after the download completes for an optimal ceiling.",
+          );
+        }
+      } catch (err) {
+        console.error(`Warning: context auto-sizing failed: ${err}`);
+      }
+
       await Bun.write(path, `${JSON.stringify(cfg, null, 2)}\n`);
 
       // Also update the model registry + saved preference so the next
@@ -355,6 +388,9 @@ export function registerModelsCommand(program: Command): void {
         await addModel({
           name: repo,
           baseUrl: localUrl,
+          // cfg.contextSize was just (re)written above by the auto-sizing
+          // block. Reuse it so the registry's contextSize matches what
+          // server.json will hand to mlx_lm.server.
           contextSize: (cfg.contextSize as number | undefined) ?? 32768,
           description: `Local MLX ${repo}`,
         });
