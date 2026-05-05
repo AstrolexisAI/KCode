@@ -216,22 +216,22 @@ export function buildSkeletonReport(filePath: string, verdict: SkeletonVerdict):
 }
 
 export function buildProliferationReport(filePath: string, verdict: ProliferationVerdict): string {
-  const lines: string[] = [];
-  lines.push(`BLOCKED — FILE NOT CREATED: "${basename(filePath)}" would proliferate siblings.`);
-  lines.push("");
-  lines.push(`"${verdict.existingSibling}" already exists. Creating "${basename(filePath)}"`);
-  lines.push(`alongside it leaves two divergent copies — the user will not know which`);
-  lines.push(`one is authoritative, and the next session will find three.`);
-  lines.push("");
-  lines.push(`You MUST do ONE of:`);
-  lines.push(`  a) Use Edit or MultiEdit on "${verdict.existingSibling}" to make the`);
-  lines.push(`     changes in place.`);
-  lines.push(`  b) Use Write on "${verdict.existingSibling}" directly to replace its`);
-  lines.push(`     contents (NOT a new ${verdict.variant ?? "variant"} copy).`);
-  lines.push("");
-  lines.push(`If the user explicitly asked for a separate file under a different name,`);
-  lines.push(`pick a name that does NOT look like a variant of an existing file.`);
-  return lines.join("\n");
+  // Migrated to the tiered guard format (warning-tier: blocks but offers a
+  // concrete recovery path). Same enforcement, less hostile message.
+  const variant = verdict.variant ?? "variant";
+  const next =
+    `Choose one: ` +
+    `(a) Edit/MultiEdit on "${verdict.existingSibling}" to make the changes in place. ` +
+    `(b) Write on "${verdict.existingSibling}" directly to replace its contents (not a new ${variant} copy). ` +
+    `If the user explicitly asked for a separate file, pick a name that does not look like a variant of an existing file.`;
+
+  const { warning } = require("./guard-severity") as typeof import("./guard-severity");
+  return warning({
+    guardId: "sibling-proliferation",
+    problem: `"${basename(filePath)}" would proliferate siblings of "${verdict.existingSibling}".`,
+    cause: `Two divergent copies leave the user without an authoritative source — and the next session typically finds three.`,
+    next,
+  }).message;
 }
 
 // ─── Degradation check (optional strengthener) ───────────────────

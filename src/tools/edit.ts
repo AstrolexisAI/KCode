@@ -243,27 +243,41 @@ async function _executeEditInner(input: Record<string, unknown>): Promise<ToolRe
     const content = readFileSync(file_path, "utf-8");
 
     if (old_string === new_string) {
-      return {
-        tool_use_id: "",
-        content:
-          'PHANTOM_TYPO_BLOCKED: old_string and new_string are byte-identical. This means the \'bug\' you think you see in the file does NOT exist — your diagnosis was a hallucinated typo. STOP guessing at code. If the user reported a runtime problem ("service is down", "chart doesn\'t render", "no funciona"), the fix is NOT in the source — it\'s visible in the runtime output. Do one of: (1) open the browser console / server log / test output to see the ACTUAL error, (2) Read the file again carefully and diff against expected behavior, (3) ask the user what they see. Do NOT retry this Edit and do NOT rewrite the whole file with Write as an escape — that will destroy information.',
-        is_error: true,
-      };
+      const { warning } = await import("../core/guard-severity");
+      const guard = warning({
+        guardId: "phantom-typo",
+        problem:
+          "old_string and new_string are byte-identical — this Edit would not change anything.",
+        cause:
+          "The model usually triggers this by reconstructing file contents from memory and missing a real diff. The 'bug' may not exist at this location.",
+        next:
+          "Re-Read this file (or the relevant line range) to see the actual content, then retry Edit with a diff that's truly different. " +
+          "If the user reported a runtime issue, the bug may be in logs/console output, not the source.",
+      });
+      return { tool_use_id: "", content: guard.message, is_error: true };
     }
 
     const occurrences = content.split(old_string).length - 1;
 
     if (occurrences === 0) {
-      let errorMsg = `Error: old_string not found in ${file_path}`;
+      const { warning } = await import("../core/guard-severity");
       const closest = findClosestMatch(content, old_string);
-      if (closest) {
-        errorMsg += `\n\nDid you mean this? (${closest.similarity}% similar, line ${closest.lineNumber}):\n\`\`\`\n${closest.match}\n\`\`\``;
-      }
-      return {
-        tool_use_id: "",
-        content: errorMsg,
-        is_error: true,
-      };
+      const cause = closest
+        ? `Closest match in the file is ${closest.similarity}% similar at line ${closest.lineNumber}, which suggests the model's old_string drifted from the actual content (whitespace, newlines, or partial recall).`
+        : "old_string does not appear anywhere in the file's current content.";
+      const next = closest
+        ? `Re-Read ${file_path} around line ${closest.lineNumber}, copy the exact text into old_string, and retry. Do not synthesize from memory.`
+        : `Re-Read ${file_path} to confirm what's actually in the file before retrying.`;
+      const hint = closest
+        ? `\n\nClosest match (line ${closest.lineNumber}, ${closest.similarity}%):\n\`\`\`\n${closest.match}\n\`\`\``
+        : "";
+      const guard = warning({
+        guardId: "edit-not-found",
+        problem: `old_string not found in ${file_path}.`,
+        cause,
+        next,
+      });
+      return { tool_use_id: "", content: guard.message + hint, is_error: true };
     }
 
     if (occurrences > 1 && !replace_all) {

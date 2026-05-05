@@ -538,33 +538,41 @@ export function checkEditLocationMismatch(
 // ─── Warning formatter ───────────────────────────────────────────
 
 export function buildLocationWarning(verdict: LocationMismatchVerdict): string {
-  const lines: string[] = [];
-  lines.push("");
-  lines.push(`⚠️  EDIT LOCATION MISMATCH (non-blocking warning)`);
-  lines.push(`   ${verdict.reason}`);
-
+  // Migrated to advisory-tier (still non-blocking). Same signal, less
+  // dramatic prose — the previous "⚠️ DO NOT claim '✅ fixed'" tone
+  // matched the audit-mode strictness even on routine edits.
+  const cause = verdict.reason;
+  const extra: string[] = [];
   if (verdict.unmatchedLineHints.length > 1) {
-    lines.push(
-      `   Additional line hints not near this edit: ${verdict.unmatchedLineHints
+    extra.push(
+      `Additional line hints not near this edit: ${verdict.unmatchedLineHints
         .slice(1, 4)
         .map((h) => `"${h.phrase}"`)
-        .join(", ")}`,
+        .join(", ")}.`,
     );
   }
   if (verdict.unmatchedSymbolHints.length > 1) {
-    lines.push(
-      `   Additional symbols not near this edit: ${verdict.unmatchedSymbolHints
+    extra.push(
+      `Additional symbols not near this edit: ${verdict.unmatchedSymbolHints
         .slice(1, 4)
         .map((h) => `${h.value}@${h.symbolLine}`)
-        .join(", ")}`,
+        .join(", ")}.`,
     );
   }
-  lines.push("");
-  lines.push(`   The Edit succeeded, but the target region doesn't match where`);
-  lines.push(`   the user's recent messages pointed. If this Edit doesn't actually`);
-  lines.push(`   fix the reported issue, re-read the code region the user referenced`);
-  lines.push(`   before making another Edit. Do NOT claim "✅ fixed" on the next`);
-  lines.push(`   turn without verifying the user's actual bug is addressed.`);
+  const next =
+    "If this Edit doesn't actually address the reported issue, re-read the code region the user referenced before making another Edit. " +
+    "Verify the change resolved the user's actual bug before claiming completion." +
+    (extra.length > 0 ? "\nAdditional context: " + extra.join(" ") : "");
 
-  return lines.join("\n");
+  const { advisory } = require("./guard-severity") as typeof import("./guard-severity");
+  return (
+    "\n" +
+    advisory({
+      guardId: "edit-location-mismatch",
+      problem:
+        "The Edit succeeded, but its target line is far from where the user's recent messages pointed.",
+      cause,
+      next,
+    }).message
+  );
 }

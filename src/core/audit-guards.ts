@@ -400,34 +400,31 @@ export function checkAuditEditGuard(filePath: string): AuditEditGuardResult {
 
   const report = findAuditReportForFile(filePath);
   if (!report) {
+    const { warning } = require("./guard-severity") as typeof import("./guard-severity");
     return {
       blocked: true,
-      reason:
-        `BLOCKED: This session is auditing code and there is no AUDIT_REPORT.md ` +
-        `yet. In audit sessions, you must WRITE the audit report with findings ` +
-        `FIRST, so the user can review them, BEFORE modifying source files. ` +
-        `\n\nFlow:\n` +
-        `  1. Grep + Read (reconnaissance)\n` +
-        `  2. Write AUDIT_REPORT.md with file:line citations for every finding\n` +
-        `  3. Wait for user approval, THEN apply Edit/MultiEdit fixes\n\n` +
-        `Rationale: a model can be wrong about a bug. If you "fix" code before ` +
-        `the human reviews your findings, you might invert working logic ` +
-        `(e.g. misinterpreting strcmp/wcscmp return values).`,
+      reason: warning({
+        guardId: "audit-edit-before-report",
+        problem:
+          "Scan mode is active and no AUDIT_REPORT.md exists yet — source edits are gated until the report is written.",
+        cause:
+          "A model can misdiagnose a bug. Writing fixes before the user reviews findings can invert working logic (e.g. flipping strcmp/wcscmp comparisons).",
+        next: "Use Grep + Read for reconnaissance, write AUDIT_REPORT.md with file:line citations for every finding, then retry the Edit. Exit scan mode with /scan off if you didn't intend to audit.",
+      }).message,
     };
   }
 
   if (!reportCitesFile(report, filePath)) {
+    const { warning } = require("./guard-severity") as typeof import("./guard-severity");
     return {
       blocked: true,
-      reason:
-        `BLOCKED: Cannot edit "${basename(filePath)}" — the audit report at ` +
-        `"${report}" does not cite this file with a "file:line" reference. ` +
-        `\n\nIn audit sessions, only files explicitly cited in AUDIT_REPORT.md ` +
-        `may be modified. Either:\n` +
-        `  (a) Add a finding for "${basename(filePath)}" with a file:line ` +
-        `citation to the report, then retry, OR\n` +
-        `  (b) Do not modify this file — it is not a documented finding.\n\n` +
-        `This prevents scope creep and untracked "fixes" during audits.`,
+      reason: warning({
+        guardId: "audit-edit-uncited",
+        problem: `"${basename(filePath)}" is not cited in the audit report at "${report}".`,
+        cause:
+          "Scan mode requires that every modified file appear in AUDIT_REPORT.md with a file:line reference, so the user can review the proposed change before it lands.",
+        next: `Add a finding for "${basename(filePath)}" (with file:line citation) to ${report}, then retry the Edit. If this file is not actually a finding, do not modify it.`,
+      }).message,
     };
   }
 

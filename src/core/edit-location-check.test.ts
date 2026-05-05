@@ -393,13 +393,17 @@ describe("buildLocationWarning", () => {
         'User mentioned "updateMarsChartWithRealData" (at line 200) but Edit is ~150 lines away (at line 50).',
     };
     const warning = buildLocationWarning(verdict);
-    expect(warning).toContain("EDIT LOCATION MISMATCH");
-    expect(warning).toContain("non-blocking");
+    // The warning was migrated to the tiered-guard format (advisory tier).
+    // Contract: includes the symbol the user mentioned, the line number,
+    // and is identifiably a non-blocking note rather than a hard error.
+    expect(warning).toContain("Note:");
+    expect(warning).toContain("edit-location-mismatch");
     expect(warning).toContain("updateMarsChartWithRealData");
     expect(warning).toContain("line 200");
     expect(warning).toContain("line 50");
     expect(warning).toMatch(/re-read/i);
-    expect(warning).toContain("fixed");
+    // Migrated wording: was "Do NOT claim '✅ fixed'", now "before claiming completion"
+    expect(warning).toMatch(/claiming completion|fixed/i);
   });
 
   test("lists additional unmatched symbols when present", () => {
