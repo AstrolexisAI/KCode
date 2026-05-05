@@ -123,7 +123,21 @@ const TOGETHER: ProviderSpec = {
   baseUrl: "https://api.together.xyz",
 };
 
-export const ALL_PROVIDERS: ProviderSpec[] = [ANTHROPIC, OPENAI, GROQ, DEEPSEEK, TOGETHER];
+const XAI: ProviderSpec = {
+  id: "xai",
+  label: "xAI",
+  endpoint: "https://api.x.ai/v1/models",
+  headers: (apiKey) => ({ authorization: `Bearer ${apiKey}` }),
+  parse: parseDataIdArray,
+  // Stored as "openai" because xAI is OpenAI-compatible at the wire
+  // level — request-builder.ts treats them the same. provider-capabilities.ts
+  // has a separate "xai" entry that handles the few quirks (e.g.
+  // reasoning_effort acceptance per model variant).
+  provider: "openai",
+  baseUrl: "https://api.x.ai",
+};
+
+export const ALL_PROVIDERS: ProviderSpec[] = [ANTHROPIC, OPENAI, GROQ, DEEPSEEK, TOGETHER, XAI];
 
 /**
  * Parser for the common { data: [{ id: string }, ...] } shape used
@@ -182,6 +196,16 @@ export function guessContextSize(modelId: string): number {
 
   // DeepSeek
   if (/deepseek-(?:r1|v3|coder)/.test(id)) return 128_000;
+
+  // xAI / Grok — grok-4* ship with a 2M-token context window; the
+  // earlier grok-3 family is 131k. grok-code is 256k.
+  if (/^grok-4/.test(id)) return 2_000_000;
+  if (/^grok-3-mini/.test(id)) return 131_072;
+  if (/^grok-3/.test(id)) return 131_072;
+  if (/^grok-code/.test(id)) return 262_144;
+  if (/^grok-2/.test(id)) return 131_072;
+  if (/^grok-vision/.test(id)) return 8_192;
+  if (/^grok-/.test(id)) return 131_072;
 
   // Default for unknown modern models
   return 128_000;
@@ -322,6 +346,7 @@ export async function collectProviderKeys(): Promise<Map<string, string>> {
   pick("groq", ["GROQ_API_KEY", "KCODE_GROQ_API_KEY"]);
   pick("deepseek", ["DEEPSEEK_API_KEY", "KCODE_DEEPSEEK_API_KEY"]);
   pick("together", ["TOGETHER_API_KEY", "TOGETHER_AI_API_KEY", "KCODE_TOGETHER_API_KEY"]);
+  pick("xai", ["XAI_API_KEY", "GROK_API_KEY", "KCODE_XAI_API_KEY"]);
 
   // Final fallback: keys stored in ~/.kcode/settings.json. The /cloud
   // command saves API keys here (anthropicApiKey, xaiApiKey, etc.)
@@ -345,6 +370,7 @@ export async function collectProviderKeys(): Promise<Map<string, string>> {
       fallback("groq", "groqApiKey");
       fallback("deepseek", "deepseekApiKey");
       fallback("together", "togetherApiKey");
+      fallback("xai", "xaiApiKey");
     }
   } catch {
     // settings.json unreadable or malformed — skip, not fatal
