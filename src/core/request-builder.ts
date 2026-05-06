@@ -12,6 +12,7 @@ import {
 } from "./message-converters";
 import type { ModelProvider } from "./models";
 import { getModelBaseUrl, getModelProvider } from "./models";
+import { offlineAwareFetch } from "./offline";
 import { getProviderCaps } from "./provider-capabilities";
 import { parseAnthropicSSEStream, parseSSEStream, type SSEChunk } from "./sse-parser";
 import type { ToolRegistry } from "./tool-registry";
@@ -823,7 +824,9 @@ export async function executeModelRequest(
   const timeoutMs = 300_000; // 5 minutes
   const timeoutId = setTimeout(() => controller?.abort(), timeoutMs);
 
-  const fetchFn = config.customFetch ?? globalThis.fetch;
+  // Default to offline-aware fetch so localhost/LAN models keep working
+  // but cloud APIs are blocked when KCODE_OFFLINE=1 is active.
+  const fetchFn = config.customFetch ?? offlineAwareFetch;
   const response = await fetchFn(req.url, {
     method: "POST",
     headers: req.headers,

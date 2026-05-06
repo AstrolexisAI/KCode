@@ -14,6 +14,7 @@
 
 import { log } from "./logger";
 import { listModels } from "./models";
+import { offlineAwareFetch } from "./offline";
 import type { BenchmarkTaskType } from "./router";
 
 // Per-candidate timeouts: local models can take 5-15s on complex decomposition
@@ -251,7 +252,7 @@ async function callConductor(
 
   const isLocal = /localhost|127\.0\.0\.1/.test(model.baseUrl);
   const timeoutMs = isLocal ? CONDUCTOR_TIMEOUT_MS_LOCAL : CONDUCTOR_TIMEOUT_MS_CLOUD;
-  const res = await fetch(endpoint, {
+  const res = await offlineAwareFetch(endpoint, {
     method: "POST",
     headers,
     body: JSON.stringify(body),

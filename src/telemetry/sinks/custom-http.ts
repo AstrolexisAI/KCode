@@ -1,6 +1,7 @@
 // KCode - Custom HTTP Telemetry Sink
 // Generic HTTP webhook sink for forwarding telemetry events to any endpoint.
 
+import { offlineAwareFetch } from "../../core/offline";
 import type { TelemetryEvent, TelemetrySink } from "../types";
 
 export interface CustomHTTPSinkOptions {
@@ -35,7 +36,7 @@ export class CustomHTTPSink implements TelemetrySink {
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
-      const response = await fetch(this.url, {
+      const response = await offlineAwareFetch(this.url, {
         method: this.method,
         headers: {
           "Content-Type": "application/json",

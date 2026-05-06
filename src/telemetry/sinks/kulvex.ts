@@ -2,6 +2,7 @@
 // Batches anonymous usage events and sends to kulvex.ai every 24 hours.
 // 100% opt-in. Never sends prompts, responses, code, file paths, or API keys.
 
+import { offlineAwareFetch } from "../../core/offline";
 import type { TelemetryEvent, TelemetrySink } from "../types";
 
 const KULVEX_TELEMETRY_URL = "https://kulvex.ai/api/telemetry";
@@ -51,7 +52,7 @@ export class KulvexSink implements TelemetrySink {
     };
 
     try {
-      await fetch(KULVEX_TELEMETRY_URL, {
+      await offlineAwareFetch(KULVEX_TELEMETRY_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

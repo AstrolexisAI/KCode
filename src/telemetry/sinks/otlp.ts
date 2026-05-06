@@ -1,6 +1,7 @@
 // KCode - OTLP/HTTP Telemetry Sink
 // Sends events to an OpenTelemetry-compatible endpoint using OTLP/HTTP JSON protocol.
 
+import { offlineAwareFetch } from "../../core/offline";
 import type { TelemetryEvent, TelemetrySink } from "../types";
 
 export interface OTLPSinkOptions {
@@ -80,7 +81,7 @@ export class OTLPSink implements TelemetrySink {
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
-      const response = await fetch(this.endpoint, {
+      const response = await offlineAwareFetch(this.endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
