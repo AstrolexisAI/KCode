@@ -415,6 +415,7 @@ program
   .option("--file <url>", "Download a file (URL or local path) and add to context at startup")
   .option("--debug", "Enable agent debug tracing (shows decision reasoning)")
   .option("--offline", "Force offline mode (block all remote network requests)")
+  .option("--no-banner", "Suppress the startup banner")
   .option("--lang <locale>", "Set UI language (en, es, fr, de, ja, ko, pt, zh)")
   .option("--startup-profile", "Show startup profiling breakdown (timing, memory, modules)")
   .allowExcessArguments(true)
@@ -524,6 +525,7 @@ async function runMain(
     file?: string;
     debug?: boolean;
     offline?: boolean;
+    banner?: boolean;
     lang?: string;
     startupProfile?: boolean;
   },
@@ -1703,6 +1705,27 @@ async function runMain(
     });
   } catch {
     /* non-fatal */
+  }
+
+  // Boot banner — version + offline state + model + verify pointer.
+  // Honors KCODE_NO_BANNER and the --no-banner flag.
+  // Goes to stderr so it does not pollute piped stdout.
+  if (opts.banner === false) process.env.KCODE_NO_BANNER = "1";
+  try {
+    const { printBanner } = await import("./ui/boot-banner");
+    const { getOfflineMode } = await import("./core/offline/mode");
+    const offlineState = getOfflineMode().getState();
+    printBanner({
+      version: VERSION,
+      model: config.model,
+      contextSize: config.contextWindowSize,
+      offlineForced: offlineState.forced,
+      offlineDetected: offlineState.detected && !offlineState.forced,
+      apiBase: config.apiBase,
+      cwd: config.workingDirectory,
+    });
+  } catch {
+    /* banner is non-essential, never block startup */
   }
 
   // Interactive mode: start the Ink-based terminal UI

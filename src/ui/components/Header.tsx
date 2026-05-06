@@ -15,6 +15,10 @@ interface HeaderProps {
   runningAgents?: number;
   sessionName?: string;
   permissionMode?: string;
+  /** When true, render an OFFLINE badge — gov / air-gap deployments. */
+  offlineMode?: boolean;
+  /** When true, render a SCAN badge — audit-mode session. */
+  scanMode?: boolean;
 }
 
 function formatSessionTime(ms: number): string {
@@ -54,6 +58,8 @@ export default function Header({
   runningAgents = 0,
   sessionName,
   permissionMode,
+  offlineMode = false,
+  scanMode = false,
 }: HeaderProps) {
   const { theme } = useTheme();
   const [elapsed, setElapsed] = useState(0);
@@ -78,6 +84,22 @@ export default function Header({
       <Text bold color={theme.primary}>
         KCode
       </Text>
+      {offlineMode && (
+        <>
+          <Text color={theme.dimmed}>|</Text>
+          <Text bold color={theme.success}>
+            OFFLINE
+          </Text>
+        </>
+      )}
+      {scanMode && (
+        <>
+          <Text color={theme.dimmed}>|</Text>
+          <Text bold color={theme.warning}>
+            SCAN
+          </Text>
+        </>
+      )}
       {sessionName && (
         <>
           <Text color={theme.dimmed}>|</Text>

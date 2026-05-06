@@ -4,7 +4,9 @@
 import { Box, Text, useApp } from "ink";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { ConversationManager } from "../core/conversation.js";
+import { getOfflineMode } from "../core/offline/mode.js";
 import { getRateLimitUsage } from "../core/request-builder.js";
+import { isAuditSession } from "../core/session-tracker.js";
 import { SkillManager } from "../core/skills.js";
 import { getSubscription, type SubscriptionTier } from "../core/subscription.js";
 import { CHARS_PER_TOKEN } from "../core/token-budget.js";
@@ -1217,34 +1219,54 @@ export default function App({ config, conversationManager, tools, initialSession
         {/* Agent pool panel — auto-hides when empty */}
         <AgentPanel />
 
-        {/* Kodi companion — hidden during /model (toggle) so it doesn't compete
-            with the picker's re-renders and cause visual flicker on arrow keys */}
-        {mode !== "toggle" && (
-          <KodiCompanion
-            mode={mode}
-            toolUseCount={toolUseCount}
-            tokenCount={tokenCount}
-            sessionCostUsd={sessionCostUsd}
-            activeToolName={activeTabs.length > 0 ? activeTabs[activeTabs.length - 1]!.name : null}
-            isThinking={isThinking}
-            runningAgents={runningAgentCount}
-            sessionElapsedMs={Date.now() - sessionStart}
-            lastEvent={lastKodiEvent}
-            model={config.model}
-            version={config.version ?? "?"}
-            workingDirectory={config.workingDirectory}
-            permissionMode={conversationManager.getPermissions().getMode()}
-            activeProfile={config.activeProfile}
-            contextWindowSize={config.contextWindowSize}
-            sessionName={sessionName}
-            sessionStartTime={sessionStart}
-            subscriptionUsage5h={getRateLimitUsage()?.fiveHour}
-            subscriptionUsage7d={getRateLimitUsage()?.sevenDay}
-            tier={subscriptionTier}
-            tierFeatures={subscriptionFeatures}
-            sessionModelBreakdown={sessionModelBreakdown}
-          />
-        )}
+        {/* Status row.
+            In offline / disciplined mode → render the compact Header.
+            Otherwise → render the playful KodiCompanion (the default).
+            Hidden during /model (toggle) so it doesn't compete with the
+            picker's re-renders and cause visual flicker on arrow keys. */}
+        {mode !== "toggle" &&
+          (getOfflineMode().isActive() ? (
+            <Header
+              model={config.model}
+              workingDirectory={config.workingDirectory}
+              tokenCount={tokenCount}
+              toolUseCount={toolUseCount}
+              sessionStartTime={sessionStart}
+              contextWindowSize={config.contextWindowSize}
+              runningAgents={runningAgentCount}
+              sessionName={sessionName}
+              permissionMode={conversationManager.getPermissions().getMode()}
+              offlineMode={true}
+              scanMode={isAuditSession()}
+            />
+          ) : (
+            <KodiCompanion
+              mode={mode}
+              toolUseCount={toolUseCount}
+              tokenCount={tokenCount}
+              sessionCostUsd={sessionCostUsd}
+              activeToolName={
+                activeTabs.length > 0 ? activeTabs[activeTabs.length - 1]!.name : null
+              }
+              isThinking={isThinking}
+              runningAgents={runningAgentCount}
+              sessionElapsedMs={Date.now() - sessionStart}
+              lastEvent={lastKodiEvent}
+              model={config.model}
+              version={config.version ?? "?"}
+              workingDirectory={config.workingDirectory}
+              permissionMode={conversationManager.getPermissions().getMode()}
+              activeProfile={config.activeProfile}
+              contextWindowSize={config.contextWindowSize}
+              sessionName={sessionName}
+              sessionStartTime={sessionStart}
+              subscriptionUsage5h={getRateLimitUsage()?.fiveHour}
+              subscriptionUsage7d={getRateLimitUsage()?.sevenDay}
+              tier={subscriptionTier}
+              tierFeatures={subscriptionFeatures}
+              sessionModelBreakdown={sessionModelBreakdown}
+            />
+          ))}
         <ActivePlanPanel plan={activePlan} />
         {pendingLastModel && (
           <QuestionDialog

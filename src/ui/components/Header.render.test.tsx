@@ -98,4 +98,53 @@ describe("Header render", () => {
     const out = instance.lastFrame()!;
     expect(out).toContain("50%");
   });
+
+  test("shows OFFLINE badge when offlineMode=true", () => {
+    instance = renderWithTheme(
+      <Header
+        model="m"
+        workingDirectory="/x"
+        tokenCount={0}
+        toolUseCount={0}
+        offlineMode={true}
+      />,
+    );
+    expect(instance.lastFrame()).toContain("OFFLINE");
+  });
+
+  test("does not show OFFLINE badge by default", () => {
+    instance = renderWithTheme(
+      <Header model="m" workingDirectory="/x" tokenCount={0} toolUseCount={0} />,
+    );
+    expect(instance.lastFrame()).not.toContain("OFFLINE");
+  });
+
+  test("shows SCAN badge when scanMode=true", () => {
+    instance = renderWithTheme(
+      <Header
+        model="m"
+        workingDirectory="/x"
+        tokenCount={0}
+        toolUseCount={0}
+        scanMode={true}
+      />,
+    );
+    expect(instance.lastFrame()).toContain("SCAN");
+  });
+
+  test("OFFLINE and SCAN can both render", () => {
+    instance = renderWithTheme(
+      <Header
+        model="m"
+        workingDirectory="/x"
+        tokenCount={0}
+        toolUseCount={0}
+        offlineMode={true}
+        scanMode={true}
+      />,
+    );
+    const out = instance.lastFrame()!;
+    expect(out).toContain("OFFLINE");
+    expect(out).toContain("SCAN");
+  });
 });
