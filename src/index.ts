@@ -95,6 +95,7 @@ import {
   registerProCommands,
   registerRemoteCommand,
   registerResumeCommand,
+  registerSbomCommand,
   registerSearchCommand,
   registerServeCommand,
   registerServerCommand,
@@ -453,6 +454,7 @@ registerKulvexCommand(program);
 registerLicenseCommand(program);
 registerNewCommand(program);
 registerResumeCommand(program);
+registerSbomCommand(program);
 registerSearchCommand(program);
 registerWatchCommand(program);
 registerUpdateCommand(program, VERSION);

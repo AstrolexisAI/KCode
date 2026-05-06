@@ -20,6 +20,7 @@ export { registerPluginCommand } from "./plugin";
 export { registerProCommands } from "./pro";
 export { registerRemoteCommand } from "./remote";
 export { registerResumeCommand } from "./resume";
+export { registerSbomCommand } from "./sbom";
 export { registerSearchCommand } from "./search";
 export { registerServeCommand } from "./serve";
 export { registerServerCommand } from "./server";

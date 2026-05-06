@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import { formatDeepDiagnostics, runDeepDiagnostics, runDiagnostics } from "../../core/doctor";
 import { renderHealthReport, runHealthChecks } from "../../core/doctor/health-score";
+import { renderSecureReport, runSecureChecks } from "../../core/doctor/secure-checks";
 import { getProfileReport, printProfileReport } from "../../core/startup-profiler";
 
 export function registerDoctorCommand(program: Command): void {
@@ -16,7 +17,24 @@ export function registerDoctorCommand(program: Command): void {
       "--providers",
       "Probe every configured cloud provider (auth + content round-trip) to pinpoint which one is behind 'empty response' errors",
     )
-    .action(async (opts: { deep?: boolean; legacy?: boolean; providers?: boolean }) => {
+    .option(
+      "--secure",
+      "Run gov / air-gap readiness checks (offline mode, no cloud keys, no telemetry, pinned deps, file permissions, binary signature)",
+    )
+    .action(
+      async (opts: {
+        deep?: boolean;
+        legacy?: boolean;
+        providers?: boolean;
+        secure?: boolean;
+      }) => {
+        if (opts.secure) {
+          const results = await runSecureChecks();
+          process.stdout.write(renderSecureReport(results));
+          const fails = results.filter((r) => r.status === "fail").length;
+          if (fails > 0) process.exitCode = 1;
+          return;
+        }
       if (opts.providers) {
         const { probeAllProviders, renderProbeReport } = await import(
           "../../core/doctor/provider-probe"
