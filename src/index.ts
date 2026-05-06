@@ -551,19 +551,24 @@ async function runMain(
   const isManaged = process.env.KCODE_MANAGED === "1";
 
   // ─── Offline mode initialization ─────────────────────────
+  // Forced ON by either: --offline CLI flag, KCODE_OFFLINE=1 env var, or settings.offline.enabled.
+  // The env var path is the gov / air-gap deployment knob — set it in the systemd unit / wrapper script.
   {
     const { initOfflineMode } = await import("./core/offline/mode");
     const config = await buildConfig(cwd);
+    const envOffline = process.env.KCODE_OFFLINE === "1";
+    const forced = !!opts.offline || envOffline;
     const offlineInstance = initOfflineMode({
       settings: config.offline,
-      forced: !!opts.offline,
+      forced,
     });
-    // Auto-detect connectivity if not forced and autoDetect is not disabled
-    if (!opts.offline && config.offline?.autoDetect !== false) {
+    // Auto-detect connectivity only when not forced and autoDetect is not disabled
+    if (!forced && config.offline?.autoDetect !== false) {
       await offlineInstance.checkConnectivity();
     }
     if (offlineInstance.isActive()) {
-      log.info("index", "Running in offline mode");
+      const reason = envOffline ? "KCODE_OFFLINE=1" : opts.offline ? "--offline" : "auto-detected";
+      log.info("index", `Running in offline mode (${reason})`);
     }
   }
 

@@ -286,6 +286,51 @@ export interface ModelRouteResult {
   apiKey?: string;
 }
 
+// ─── Endpoint liveness ──────────────────────────────────────────
+//
+// Local entries in models.json can outlive the server they pointed at
+// (user stopped llama-server, switched model, etc.). When the router
+// picks a dead entry, the chat fetch fails downstream and the user
+// sees a connection error mid-conversation. Probe /v1/models before
+// returning a local route, and cache the result for a short TTL so
+// we don't hammer the same dead port on every turn.
+//
+// Cloud endpoints are not probed — DNS+TLS+API are virtually always
+// up, the probe would add latency, and a transient 5xx would
+// blacklist a working provider.
+
+const ENDPOINT_PROBE_TTL_MS = 30_000;
+const ENDPOINT_PROBE_TIMEOUT_MS = 1500;
+const _endpointProbeCache = new Map<string, { alive: boolean; checkedAt: number }>();
+
+/** Reset the in-memory liveness cache (testing). */
+export function _resetEndpointProbeCache(): void {
+  _endpointProbeCache.clear();
+}
+
+/**
+ * Probe `${baseUrl}/v1/models` with a short timeout. Cached for
+ * ENDPOINT_PROBE_TTL_MS so repeated routing decisions in the same
+ * turn don't re-probe.
+ */
+export async function isEndpointAlive(baseUrl: string): Promise<boolean> {
+  const now = Date.now();
+  const cached = _endpointProbeCache.get(baseUrl);
+  if (cached && now - cached.checkedAt < ENDPOINT_PROBE_TTL_MS) {
+    return cached.alive;
+  }
+  let alive = false;
+  try {
+    const url = `${baseUrl.replace(/\/+$/, "")}/v1/models`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(ENDPOINT_PROBE_TIMEOUT_MS) });
+    alive = res.ok;
+  } catch {
+    alive = false;
+  }
+  _endpointProbeCache.set(baseUrl, { alive, checkedAt: now });
+  return alive;
+}
+
 /**
  * Select the best model for a task using benchmark tags.
  * Returns the full route info (model + baseUrl + apiKey) so callers can
@@ -306,13 +351,22 @@ export async function selectBenchmarkModel(
     // the current model. Routing may have previously switched to a cloud model
     // mid-session; chat tasks should always snap back to local.
     if (requiredTags.includes("local")) {
-      const localModel = models.find((m) => LOCAL_PATTERNS.test(m.baseUrl));
-      if (localModel) {
-        if (localModel.name !== defaultModel) {
-          log.info("router/multi", `${taskType} → local: ${localModel.name}`);
+      // Walk all local candidates and probe each — a dead entry should
+      // fall through to the next, not be returned as if it were live.
+      const localCandidates = models.filter((m) => LOCAL_PATTERNS.test(m.baseUrl));
+      for (const candidate of localCandidates) {
+        if (await isEndpointAlive(candidate.baseUrl)) {
+          if (candidate.name !== defaultModel) {
+            log.info("router/multi", `${taskType} → local: ${candidate.name}`);
+          }
+          return { model: candidate.name, baseUrl: candidate.baseUrl };
         }
-        return { model: localModel.name, baseUrl: localModel.baseUrl };
+        log.info(
+          "router/multi",
+          `skip dead local endpoint: ${candidate.name} @ ${candidate.baseUrl}`,
+        );
       }
+      // No live local — fall through to next tag group (cloud, etc.)
       continue;
     }
 

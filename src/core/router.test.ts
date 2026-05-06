@@ -1,5 +1,12 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { classifyTask, resetRoutingRules, withCloudFailover } from "./router.ts";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import {
+  _resetEndpointProbeCache,
+  classifyTask,
+  isEndpointAlive,
+  resetRoutingRules,
+  selectBenchmarkModel,
+  withCloudFailover,
+} from "./router.ts";
 
 // ─── classifyTask ──────────────────────────────────────────────────
 
@@ -275,5 +282,125 @@ describe("withCloudFailover", () => {
     const result = await withCloudFailover(["m1", "m2"], fn);
     expect(result).toBe("ok-m2");
     expect(fn).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ─── isEndpointAlive ──────────────────────────────────────────────
+
+describe("isEndpointAlive", () => {
+  const realFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    _resetEndpointProbeCache();
+  });
+
+  test("returns true when /v1/models responds 200", async () => {
+    globalThis.fetch = mock(async () => new Response("{}", { status: 200 })) as typeof fetch;
+    expect(await isEndpointAlive("http://localhost:11111")).toBe(true);
+  });
+
+  test("returns false when fetch throws (port not open)", async () => {
+    globalThis.fetch = mock(async () => {
+      throw new Error("ECONNREFUSED");
+    }) as typeof fetch;
+    expect(await isEndpointAlive("http://localhost:22222")).toBe(false);
+  });
+
+  test("returns false on non-2xx response", async () => {
+    globalThis.fetch = mock(async () => new Response("err", { status: 502 })) as typeof fetch;
+    expect(await isEndpointAlive("http://localhost:33333")).toBe(false);
+  });
+
+  test("caches result within TTL — second call does not re-fetch", async () => {
+    let calls = 0;
+    globalThis.fetch = mock(async () => {
+      calls++;
+      return new Response("{}", { status: 200 });
+    }) as typeof fetch;
+    await isEndpointAlive("http://localhost:44444");
+    await isEndpointAlive("http://localhost:44444");
+    await isEndpointAlive("http://localhost:44444");
+    expect(calls).toBe(1);
+  });
+
+  test("trims trailing slashes on baseUrl", async () => {
+    let probedUrl = "";
+    globalThis.fetch = mock(async (url: string | URL | Request) => {
+      probedUrl = typeof url === "string" ? url : url.toString();
+      return new Response("{}", { status: 200 });
+    }) as typeof fetch;
+    await isEndpointAlive("http://localhost:55555///");
+    expect(probedUrl).toBe("http://localhost:55555/v1/models");
+  });
+});
+
+// ─── selectBenchmarkModel skips dead local endpoints ──────────────
+
+describe("selectBenchmarkModel — local endpoint liveness", () => {
+  const realFetch = globalThis.fetch;
+
+  beforeEach(() => {
+    _resetEndpointProbeCache();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  test("dead first local entry → falls through to live second", async () => {
+    mock.module("./models.js", () => ({
+      listModels: async () => [
+        {
+          name: "dead-local",
+          baseUrl: "http://localhost:9999",
+          tags: ["chat"],
+          capabilities: ["chat"],
+        },
+        {
+          name: "live-local",
+          baseUrl: "http://127.0.0.1:10091",
+          tags: ["chat"],
+          capabilities: ["chat"],
+        },
+      ],
+    }));
+
+    globalThis.fetch = mock(async (url: string | URL | Request) => {
+      const u = typeof url === "string" ? url : url.toString();
+      if (u.includes("9999")) throw new Error("ECONNREFUSED");
+      if (u.includes("10091")) return new Response("{}", { status: 200 });
+      return new Response("nope", { status: 404 });
+    }) as typeof fetch;
+
+    const route = await selectBenchmarkModel("chat", "some-other-default");
+    expect(route?.model).toBe("live-local");
+    expect(route?.baseUrl).toBe("http://127.0.0.1:10091");
+  });
+
+  test("all local entries dead → returns null (caller falls back to default)", async () => {
+    mock.module("./models.js", () => ({
+      listModels: async () => [
+        {
+          name: "dead-a",
+          baseUrl: "http://localhost:9001",
+          tags: ["chat"],
+          capabilities: ["chat"],
+        },
+        {
+          name: "dead-b",
+          baseUrl: "http://localhost:9002",
+          tags: ["chat"],
+          capabilities: ["chat"],
+        },
+      ],
+    }));
+
+    globalThis.fetch = mock(async () => {
+      throw new Error("ECONNREFUSED");
+    }) as typeof fetch;
+
+    const route = await selectBenchmarkModel("chat", "fallback-model");
+    expect(route).toBeNull();
   });
 });
