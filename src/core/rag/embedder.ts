@@ -7,6 +7,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { log } from "../logger";
+import { offlineAwareFetch } from "../offline";
 import type { EmbeddingBackend, EmbeddingConfig } from "./types";
 
 // ─── Pluggable Embedder Interface ─────────────────────────────
@@ -54,7 +55,7 @@ export class LocalEmbedder implements EmbedderInterface {
 
   async embed(text: string): Promise<number[]> {
     try {
-      const res = await fetch(`${this.endpoint}/api/embeddings`, {
+      const res = await offlineAwareFetch(`${this.endpoint}/api/embeddings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: this.model, prompt: text }),
@@ -96,7 +97,7 @@ export class CloudEmbedder implements EmbedderInterface {
 
   async embed(text: string): Promise<number[]> {
     try {
-      const res = await fetch("https://api.openai.com/v1/embeddings", {
+      const res = await offlineAwareFetch("https://api.openai.com/v1/embeddings", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -120,7 +121,7 @@ export class CloudEmbedder implements EmbedderInterface {
 
   async embedBatch(texts: string[]): Promise<number[][]> {
     try {
-      const res = await fetch("https://api.openai.com/v1/embeddings", {
+      const res = await offlineAwareFetch("https://api.openai.com/v1/embeddings", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -286,7 +287,7 @@ async function embedWithOllama(
   texts: string[],
   model: string = "nomic-embed-text",
 ): Promise<number[][]> {
-  const resp = await fetch("http://localhost:11434/api/embed", {
+  const resp = await offlineAwareFetch("http://localhost:11434/api/embed", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model, input: texts }),
@@ -307,7 +308,7 @@ async function embedWithLlamaCpp(
   texts: string[],
   endpoint: string = "http://localhost:10091",
 ): Promise<number[][]> {
-  const resp = await fetch(`${endpoint}/v1/embeddings`, {
+  const resp = await offlineAwareFetch(`${endpoint}/v1/embeddings`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ model: "embedding", input: texts }),
@@ -328,7 +329,7 @@ async function embedWithLlamaCpp(
 export async function detectBestBackend(): Promise<EmbeddingBackend> {
   // 1. Check Ollama for embedding models
   try {
-    const r = await fetch("http://localhost:11434/api/tags", {
+    const r = await offlineAwareFetch("http://localhost:11434/api/tags", {
       signal: AbortSignal.timeout(2000),
     });
     const data = (await r.json()) as { models?: Array<{ name: string }> };
@@ -342,7 +343,7 @@ export async function detectBestBackend(): Promise<EmbeddingBackend> {
 
   // 2. Check llama.cpp embedding endpoint
   try {
-    const r = await fetch("http://localhost:10091/v1/embeddings", {
+    const r = await offlineAwareFetch("http://localhost:10091/v1/embeddings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ input: "test", model: "embedding" }),

@@ -4,6 +4,7 @@
 import { createECDH, createHmac, createSign, randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { log } from "./logger";
+import { offlineAwareFetch } from "./offline";
 import { kcodePath } from "./paths";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -341,7 +342,7 @@ export async function sendPushNotification(
     );
 
     // POST to the push service
-    const response = await fetch(subscription.endpoint, {
+    const response = await offlineAwareFetch(subscription.endpoint, {
       method: "POST",
       headers: {
         ...encrypted.headers,

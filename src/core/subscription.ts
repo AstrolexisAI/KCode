@@ -32,6 +32,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { log } from "./logger";
+import { offlineAwareFetch } from "./offline";
 import { kcodePath } from "./paths";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -118,7 +119,7 @@ async function fetchFromServer(): Promise<Subscription> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
     try {
-      return await fetch(SUBSCRIPTION_ENDPOINT, {
+      return await offlineAwareFetch(SUBSCRIPTION_ENDPOINT, {
         method: "GET",
         headers: {
           authorization: `Bearer ${bearerToken}`,

@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { loadUserSettingsRaw } from "./config.js";
 import { checkOfflineLicense, hasLicenseFeature } from "./license";
 import { log } from "./logger";
+import { offlineAwareFetch } from "./offline";
 import { kcodeHome, kcodePath } from "./paths";
 
 // Resolve lazily: tests set kcodeHome() after import, and pro.ts paths
@@ -358,7 +359,7 @@ async function validateProKey(key: string): Promise<boolean> {
 
   // Phone home
   try {
-    const resp = await fetch(VALIDATE_URL, {
+    const resp = await offlineAwareFetch(VALIDATE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ key }),

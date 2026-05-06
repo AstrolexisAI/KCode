@@ -6,6 +6,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { log } from "./logger";
 import type { ExtendedManifestFields } from "./marketplace/types";
+import { offlineAwareFetch } from "./offline";
 import { kcodePath } from "./paths";
 
 const REGISTRY_URL = "https://registry.kulvex.ai/plugins";
@@ -73,7 +74,7 @@ export function clearRegisteredComponents(): void {
  */
 export async function fetchRegistry(): Promise<RegistryEntry[]> {
   try {
-    const resp = await fetch(REGISTRY_URL + "/index.json", {
+    const resp = await offlineAwareFetch(REGISTRY_URL + "/index.json", {
       signal: AbortSignal.timeout(5000),
     });
     if (resp.ok) return (await resp.json()) as RegistryEntry[];

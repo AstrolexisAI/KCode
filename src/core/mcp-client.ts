@@ -3,6 +3,7 @@
 
 import { type Subprocess, spawn } from "bun";
 import { log } from "./logger";
+import { offlineAwareFetch } from "./offline";
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -755,7 +756,7 @@ export class McpHttpConnection {
 
   private async connectSse(url: string, headers: Record<string, string>): Promise<void> {
     try {
-      const response = await fetch(url, {
+      const response = await offlineAwareFetch(url, {
         method: "GET",
         headers,
         signal: this.sseAbortController!.signal,
@@ -890,7 +891,7 @@ export class McpHttpConnection {
 
     // Standard HTTP: POST and read response inline
     const headers = this.buildHeaders("application/json");
-    const response = await fetch(url, {
+    const response = await offlineAwareFetch(url, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
@@ -904,7 +905,7 @@ export class McpHttpConnection {
       const refreshed = await this.tryRefreshToken();
       if (refreshed) {
         const retryHeaders = this.buildHeaders("application/json");
-        const retryResponse = await fetch(url, {
+        const retryResponse = await offlineAwareFetch(url, {
           method: "POST",
           headers: retryHeaders,
           body: JSON.stringify(body),
@@ -959,7 +960,7 @@ export class McpHttpConnection {
 
       try {
         const headers = this.buildHeaders("application/json");
-        const response = await fetch(url, {
+        const response = await offlineAwareFetch(url, {
           method: "POST",
           headers,
           body: JSON.stringify(body),
@@ -1224,7 +1225,7 @@ export class McpHttpConnection {
     if (!url) return;
     const headers = this.buildHeaders("application/json");
     const body = JSON.stringify({ jsonrpc: "2.0", id, result });
-    fetch(url, { method: "POST", headers, body }).catch(() => {
+    offlineAwareFetch(url, { method: "POST", headers, body }).catch(() => {
       // Best-effort response
     });
   }

@@ -7,6 +7,7 @@ import { createCipheriv, createDecipheriv, createHash, pbkdf2Sync, randomBytes }
 import { createServer, type Server } from "node:http";
 import { homedir, platform } from "node:os";
 import { log } from "./logger";
+import { offlineAwareFetch } from "./offline";
 import { kcodeHome, kcodePath } from "./paths";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -417,7 +418,7 @@ export class McpOAuthClient {
     }
 
     requireHttpsEndpoint(this.config.tokenUrl, "OAuth token URL");
-    const response = await fetch(this.config.tokenUrl, {
+    const response = await offlineAwareFetch(this.config.tokenUrl, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: body.toString(),
@@ -445,7 +446,7 @@ export class McpOAuthClient {
     }
 
     requireHttpsEndpoint(this.config.tokenUrl, "OAuth token URL");
-    const response = await fetch(this.config.tokenUrl, {
+    const response = await offlineAwareFetch(this.config.tokenUrl, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: body.toString(),
@@ -618,7 +619,7 @@ export async function discoverOAuthConfig(serverUrl: string): Promise<OAuthConfi
     const url = new URL(serverUrl);
     const wellKnownUrl = `${url.origin}/.well-known/oauth-authorization-server`;
 
-    const response = await fetch(wellKnownUrl, {
+    const response = await offlineAwareFetch(wellKnownUrl, {
       signal: AbortSignal.timeout(10_000),
     });
 

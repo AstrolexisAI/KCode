@@ -20,6 +20,8 @@
 //
 // Opt-out: KCODE_DISABLE_REPO_GROUNDING=1.
 
+import { offlineAwareFetch } from "./offline";
+
 export type RepoVerifyStatus = "verified" | "missing" | "unknown";
 
 export interface RepoClaim {
@@ -92,7 +94,7 @@ async function verifyOne(
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-    const resp = await fetch(`https://github.com/${repo}`, {
+    const resp = await offlineAwareFetch(`https://github.com/${repo}`, {
       method: "HEAD",
       redirect: "manual",
       signal: ctrl.signal,

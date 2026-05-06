@@ -14,6 +14,7 @@ import { existsSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { log } from "./logger";
+import { offlineAwareFetch } from "./offline";
 
 // ─── Constants ───────────────────────────────────────────────────
 
@@ -108,7 +109,7 @@ async function transcribeViaKulvex(audioPath: string): Promise<string> {
   const formData = new FormData();
   formData.append("file", new Blob([audioData], { type: "audio/wav" }), "audio.wav");
 
-  const resp = await fetch(`${KULVEX_API_BASE}/api/voice/transcribe`, {
+  const resp = await offlineAwareFetch(`${KULVEX_API_BASE}/api/voice/transcribe`, {
     method: "POST",
     body: formData,
     signal: AbortSignal.timeout(30_000),
@@ -209,7 +210,7 @@ export async function voiceToText(durationSec?: number): Promise<string> {
 
     if (!skipKulvex) {
       try {
-        const resp = await fetch(`${KULVEX_API_BASE}/api/monitoring/health`, {
+        const resp = await offlineAwareFetch(`${KULVEX_API_BASE}/api/monitoring/health`, {
           signal: AbortSignal.timeout(2000),
         });
         if (resp.ok) {

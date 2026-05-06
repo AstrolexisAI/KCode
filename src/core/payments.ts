@@ -3,6 +3,7 @@
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { log } from "./logger";
+import { offlineAwareFetch } from "./offline";
 import { kcodeHome, kcodePath } from "./paths";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -113,7 +114,7 @@ async function stripeRequest(
     options.body = new URLSearchParams(params).toString();
   }
 
-  const resp = await fetch(url, options);
+  const resp = await offlineAwareFetch(url, options);
   const body = (await resp.json()) as Record<string, unknown>;
 
   if (!resp.ok) {

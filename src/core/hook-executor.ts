@@ -4,6 +4,7 @@
 import { spawn } from "node:child_process";
 import type { HookAction, HookConfig, HookEntry, HookMatcher, HookOutput } from "./hook-types";
 import { log } from "./logger";
+import { offlineAwareFetch } from "./offline";
 import { evaluatePromptHook } from "./prompt-hooks";
 
 // ─── Constants ──────────────────────────────────────────────────
@@ -302,7 +303,7 @@ export async function executeHookHttp(
   try {
     const method = (action.method ?? "POST").toUpperCase();
     const httpTimeout = action.timeout ?? HTTP_TIMEOUT;
-    const resp = await fetch(action.url, {
+    const resp = await offlineAwareFetch(action.url, {
       method,
       headers: {
         "Content-Type": "application/json",

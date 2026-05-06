@@ -8,6 +8,7 @@ import { log } from "./logger";
 import { CDNFetcher } from "./marketplace/cdn-fetcher";
 import type { MarketplaceSettings, MarketplaceSource } from "./marketplace/types";
 import { verifyPlugin } from "./marketplace/verifier";
+import { offlineAwareFetch } from "./offline";
 import { kcodeHome, kcodePath } from "./paths";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -207,7 +208,7 @@ async function fetchRemoteRegistry(registryUrl: string): Promise<MarketplacePlug
   }
 
   try {
-    const resp = await fetch(`${registryUrl}/plugins`, {
+    const resp = await offlineAwareFetch(`${registryUrl}/plugins`, {
       signal: AbortSignal.timeout(5000),
     });
     if (resp.ok) {
