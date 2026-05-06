@@ -15,6 +15,7 @@ import {
 import { basename, dirname, join } from "node:path";
 import type { HardwareInfo } from "./hardware";
 import { log } from "./logger";
+import { offlineAwareFetch } from "./offline";
 import {
   createLibSymlinks,
   downloadFile,
@@ -57,7 +58,7 @@ export async function downloadEngine(
   progress("Fetching latest llama.cpp release...");
 
   // Get latest release from GitHub API
-  const releaseResp = await fetch(
+  const releaseResp = await offlineAwareFetch(
     "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest",
     {
       headers: { "User-Agent": "KCode" },

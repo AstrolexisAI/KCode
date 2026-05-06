@@ -25,6 +25,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { log } from "./logger";
 import type { ModelEntry, ModelsConfig } from "./models";
 import { loadModelsConfig, saveModelsConfig } from "./models";
+import { offlineAwareFetch } from "./offline";
 import { kcodePath } from "./paths";
 
 // ─── Provider adapters ──────────────────────────────────────────
@@ -230,7 +231,7 @@ export async function fetchProviderModels(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(spec.endpoint, {
+    const res = await offlineAwareFetch(spec.endpoint, {
       method: "GET",
       headers: spec.headers(apiKey),
       signal: controller.signal,

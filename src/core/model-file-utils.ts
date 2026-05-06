@@ -20,6 +20,7 @@ import {
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { log } from "./logger";
+import { offlineAwareFetch } from "./offline";
 import { kcodeHome } from "./paths";
 
 const KCODE_HOME = kcodeHome();
@@ -55,7 +56,7 @@ export async function downloadFile(
     headers["Range"] = `bytes=${resumeOffset}-`;
   }
 
-  const response = await fetch(url, {
+  const response = await offlineAwareFetch(url, {
     headers,
     redirect: "follow",
   });

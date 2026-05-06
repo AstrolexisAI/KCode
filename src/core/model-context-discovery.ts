@@ -33,6 +33,7 @@
 
 import { log } from "./logger";
 import { guessContextSize } from "./model-context-sizes";
+import { offlineAwareFetch } from "./offline";
 
 // In-process cache — keyed by model name. Persists for the session
 // only; the setup wizard and migration-005 write the resolved
@@ -64,7 +65,7 @@ async function tryFetch(
   timeoutMs = 5000,
 ): Promise<unknown | null> {
   try {
-    const resp = await fetch(url, {
+    const resp = await offlineAwareFetch(url, {
       method: "GET",
       headers,
       signal: AbortSignal.timeout(timeoutMs),

@@ -3,6 +3,7 @@
 // No hardcoded model names — everything comes from the provider.
 
 import { log } from "./logger";
+import { offlineAwareFetch } from "./offline";
 
 export interface DiscoveredModel {
   id: string;
@@ -18,7 +19,7 @@ async function fetchOpenAICompatibleModels(
   apiKey: string,
 ): Promise<DiscoveredModel[]> {
   const url = `${baseUrl.replace(/\/+$/, "")}/v1/models`;
-  const res = await fetch(url, {
+  const res = await offlineAwareFetch(url, {
     headers: { Authorization: `Bearer ${apiKey}` },
     signal: AbortSignal.timeout(10_000),
   });
@@ -108,7 +109,7 @@ const NON_TEXT_PREFIXES = [
  * Anthropic uses x-api-key header and returns max_input_tokens (not context_window).
  */
 async function fetchAnthropicModels(apiKey: string): Promise<DiscoveredModel[]> {
-  const res = await fetch("https://api.anthropic.com/v1/models", {
+  const res = await offlineAwareFetch("https://api.anthropic.com/v1/models", {
     headers: {
       "x-api-key": apiKey,
       "anthropic-version": "2023-06-01",

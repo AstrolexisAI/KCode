@@ -296,19 +296,19 @@ describe("isEndpointAlive", () => {
   });
 
   test("returns true when /v1/models responds 200", async () => {
-    globalThis.fetch = mock(async () => new Response("{}", { status: 200 })) as typeof fetch;
+    globalThis.fetch = mock(async () => new Response("{}", { status: 200 })) as unknown as typeof fetch;
     expect(await isEndpointAlive("http://localhost:11111")).toBe(true);
   });
 
   test("returns false when fetch throws (port not open)", async () => {
     globalThis.fetch = mock(async () => {
       throw new Error("ECONNREFUSED");
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
     expect(await isEndpointAlive("http://localhost:22222")).toBe(false);
   });
 
   test("returns false on non-2xx response", async () => {
-    globalThis.fetch = mock(async () => new Response("err", { status: 502 })) as typeof fetch;
+    globalThis.fetch = mock(async () => new Response("err", { status: 502 })) as unknown as typeof fetch;
     expect(await isEndpointAlive("http://localhost:33333")).toBe(false);
   });
 
@@ -317,7 +317,7 @@ describe("isEndpointAlive", () => {
     globalThis.fetch = mock(async () => {
       calls++;
       return new Response("{}", { status: 200 });
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
     await isEndpointAlive("http://localhost:44444");
     await isEndpointAlive("http://localhost:44444");
     await isEndpointAlive("http://localhost:44444");
@@ -329,7 +329,7 @@ describe("isEndpointAlive", () => {
     globalThis.fetch = mock(async (url: string | URL | Request) => {
       probedUrl = typeof url === "string" ? url : url.toString();
       return new Response("{}", { status: 200 });
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
     await isEndpointAlive("http://localhost:55555///");
     expect(probedUrl).toBe("http://localhost:55555/v1/models");
   });
@@ -371,7 +371,7 @@ describe("selectBenchmarkModel — local endpoint liveness", () => {
       if (u.includes("9999")) throw new Error("ECONNREFUSED");
       if (u.includes("10091")) return new Response("{}", { status: 200 });
       return new Response("nope", { status: 404 });
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
     const route = await selectBenchmarkModel("chat", "some-other-default");
     expect(route?.model).toBe("live-local");
@@ -398,7 +398,7 @@ describe("selectBenchmarkModel — local endpoint liveness", () => {
 
     globalThis.fetch = mock(async () => {
       throw new Error("ECONNREFUSED");
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
     const route = await selectBenchmarkModel("chat", "fallback-model");
     expect(route).toBeNull();

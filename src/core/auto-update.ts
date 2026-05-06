@@ -16,6 +16,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, renameSync, unlinkSync 
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { log } from "./logger";
+import { offlineAwareFetch } from "./offline";
 import { kcodePath } from "./paths";
 
 // ─── Constants ──────────────────────────────────────────────────
@@ -227,7 +228,7 @@ export function shouldCheckForUpdate(): boolean {
 
 async function fetchManifest(): Promise<Manifest | null> {
   try {
-    const resp = await fetch(getManifestUrl(), {
+    const resp = await offlineAwareFetch(getManifestUrl(), {
       headers: { "User-Agent": "KCode-AutoUpdate" },
       signal: AbortSignal.timeout(10_000),
       // Bypass intermediate caches so a fresh release is visible
@@ -361,7 +362,7 @@ async function downloadVerified(opts: {
   onProgress?: (pct: number) => void;
 }): Promise<string> {
   const { url, expectedSha256, expectedSize, tmpName, onProgress } = opts;
-  const resp = await fetch(url, {
+  const resp = await offlineAwareFetch(url, {
     signal: AbortSignal.timeout(300_000),
     headers: { "User-Agent": "KCode-AutoUpdate" },
     redirect: "follow",
