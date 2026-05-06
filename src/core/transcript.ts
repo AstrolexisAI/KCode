@@ -1,6 +1,12 @@
 // KCode - Session Transcript Persistence
-// Saves conversation transcripts to ~/.kcode/transcripts/ in JSONL format
+// Saves conversation transcripts to ~/.kcode/transcripts/ in JSONL format.
+//
+// Each entry is hash-chained (SHA-256) for tamper-evidence:
+//   entry.prevHash = previous entry's hash (or "GENESIS" for the first)
+//   entry.hash     = sha256(canonical(entry minus the hash field))
+// Verification: kcode sessions verify <filename>. Closes NIST AU-9 / AU-10.
 
+import { createHash } from "node:crypto";
 import {
   appendFileSync,
   existsSync,
@@ -29,7 +35,33 @@ export interface TranscriptEntry {
   role: string;
   type: TranscriptEntryType;
   content: string;
+  /** SHA-256 of the previous entry's `hash`, or "GENESIS" for the first. */
+  prevHash?: string;
+  /** SHA-256 of the canonical serialization of this entry (minus `hash`). */
+  hash?: string;
 }
+
+// ─── Hash chain helpers ─────────────────────────────────────────
+
+/**
+ * Stable JSON serialization with sorted keys. Two entries with the
+ * same logical content always produce the same bytes — a stray
+ * library-injected key order would otherwise break verification.
+ */
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj).sort();
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalJson(obj[k])}`).join(",")}}`;
+}
+
+/** Compute the chain hash for an entry, given the prior hash. */
+export function computeEntryHash(entry: Omit<TranscriptEntry, "hash">): string {
+  return createHash("sha256").update(canonicalJson(entry)).digest("hex");
+}
+
+export const GENESIS_HASH = "GENESIS";
 
 interface SessionMeta {
   filename: string;
@@ -39,7 +71,9 @@ interface SessionMeta {
 
 // ─── Constants ───────────────────────────────────────────────────
 
-const TRANSCRIPTS_DIR = kcodePath("transcripts");
+// Lazy: resolve at call time so KCODE_HOME overrides take effect in
+// tests / sandboxed environments without depending on module-load order.
+const TRANSCRIPTS_DIR = (): string => kcodePath("transcripts");
 const MAX_SESSIONS = 100;
 
 // ─── Credential Sanitization ────────────────────────────────────
@@ -103,8 +137,8 @@ export class TranscriptManager {
   }
 
   private ensureDir(): void {
-    if (!existsSync(TRANSCRIPTS_DIR)) {
-      mkdirSync(TRANSCRIPTS_DIR, { recursive: true });
+    if (!existsSync(TRANSCRIPTS_DIR())) {
+      mkdirSync(TRANSCRIPTS_DIR(), { recursive: true });
     }
   }
 
@@ -122,7 +156,9 @@ export class TranscriptManager {
       .slice(0, 40)
       .replace(/-$/, "");
     const filename = `${timestamp}-${slug || "session"}.jsonl`;
-    this.sessionFile = join(TRANSCRIPTS_DIR, filename);
+    this.sessionFile = join(TRANSCRIPTS_DIR(), filename);
+    // Reset chain — every session is its own self-contained chain.
+    this.lastHash = GENESIS_HASH;
 
     // Write initial user message
     this.appendEntry({
@@ -136,16 +172,28 @@ export class TranscriptManager {
     this.pruneOldSessions();
   }
 
+  /** Last entry's hash, used to chain the next one. Reset per session. */
+  private lastHash: string = GENESIS_HASH;
+
   /**
    * Append a transcript entry to the current session file.
-   * Uses append mode for crash safety.
+   * Uses append mode for crash safety. Each entry is SHA-256
+   * hash-chained: tampering with any historical line breaks the
+   * chain and is detected by `verifySessionChain`.
    */
   appendEntry(entry: TranscriptEntry): void {
     if (!this.sessionFile) return;
 
     try {
-      // Sanitize credentials from content before persisting
-      const sanitized = { ...entry, content: sanitizeTranscriptContent(entry.content) };
+      const sanitized: TranscriptEntry = {
+        timestamp: entry.timestamp,
+        role: entry.role,
+        type: entry.type,
+        content: sanitizeTranscriptContent(entry.content),
+        prevHash: this.lastHash,
+      };
+      sanitized.hash = computeEntryHash(sanitized);
+      this.lastHash = sanitized.hash;
       appendFileSync(this.sessionFile, JSON.stringify(sanitized) + "\n", "utf-8");
     } catch (err) {
       log.debug("transcript", `Failed to append transcript entry: ${err}`);
@@ -180,7 +228,7 @@ export class TranscriptManager {
   listSessions(): SessionMeta[] {
     this.ensureDir();
 
-    const files = readdirSync(TRANSCRIPTS_DIR)
+    const files = readdirSync(TRANSCRIPTS_DIR())
       .filter((f) => f.endsWith(".jsonl"))
       .sort()
       .reverse();
@@ -200,7 +248,7 @@ export class TranscriptManager {
    * Load all entries from a session file.
    */
   loadSession(filename: string): TranscriptEntry[] {
-    const filePath = join(TRANSCRIPTS_DIR, filename);
+    const filePath = join(TRANSCRIPTS_DIR(), filename);
     if (!existsSync(filePath)) return [];
 
     const content = readFileSync(filePath, "utf-8");
@@ -223,7 +271,7 @@ export class TranscriptManager {
    */
   private pruneOldSessions(): void {
     try {
-      const files = readdirSync(TRANSCRIPTS_DIR)
+      const files = readdirSync(TRANSCRIPTS_DIR())
         .filter((f) => f.endsWith(".jsonl"))
         .sort(); // oldest first
 
@@ -231,7 +279,7 @@ export class TranscriptManager {
       if (excess > 0) {
         for (let i = 0; i < excess; i++) {
           try {
-            unlinkSync(join(TRANSCRIPTS_DIR, files[i]!));
+            unlinkSync(join(TRANSCRIPTS_DIR(), files[i]!));
           } catch (err) {
             log.debug("transcript", `Failed to delete old transcript ${files[i]}: ${err}`);
           }
@@ -246,7 +294,7 @@ export class TranscriptManager {
           const fileDate = new Date(match[1]!);
           if (fileDate < cutoffDate) {
             try {
-              unlinkSync(join(TRANSCRIPTS_DIR, f));
+              unlinkSync(join(TRANSCRIPTS_DIR(), f));
             } catch (err) {
               log.debug("transcript", `Failed to delete expired transcript ${f}: ${err}`);
             }
@@ -271,7 +319,7 @@ export class TranscriptManager {
   getLatestSession(): string | null {
     this.ensureDir();
 
-    const files = readdirSync(TRANSCRIPTS_DIR)
+    const files = readdirSync(TRANSCRIPTS_DIR())
       .filter((f) => f.endsWith(".jsonl"))
       .sort();
 
@@ -453,4 +501,97 @@ export class TranscriptManager {
       duration,
     };
   }
+}
+
+// ─── Hash-chain verifier ────────────────────────────────────────
+
+export type ChainStatus = "valid" | "invalid" | "unchained" | "missing";
+
+export interface ChainVerification {
+  status: ChainStatus;
+  totalEntries: number;
+  /** Index of the first broken entry, if any. */
+  brokenAt?: number;
+  /** Reason the chain failed, when status === "invalid". */
+  reason?: string;
+}
+
+/**
+ * Verify a session transcript's hash chain.
+ *
+ *   - "valid"      — every entry's hash matches the recomputed hash
+ *                    AND chains correctly back through prevHash.
+ *   - "invalid"    — at least one entry's hash mismatches or skips.
+ *   - "unchained"  — the file pre-dates the chain feature (no hash
+ *                    fields). Reported separately so legacy sessions
+ *                    don't show as failures.
+ *   - "missing"    — file does not exist.
+ *
+ * Operates on the raw file (not via loadSession) so we can be exact
+ * about which entry / which line is the break.
+ */
+export function verifySessionChain(filename: string): ChainVerification {
+  const filePath = join(TRANSCRIPTS_DIR(), filename);
+  if (!existsSync(filePath)) return { status: "missing", totalEntries: 0 };
+
+  const content = readFileSync(filePath, "utf-8");
+  const lines = content.split("\n").filter((l) => l.trim().length > 0);
+  if (lines.length === 0) return { status: "valid", totalEntries: 0 };
+
+  let prev = GENESIS_HASH;
+  let chained = false;
+  for (let i = 0; i < lines.length; i++) {
+    let entry: TranscriptEntry;
+    try {
+      entry = JSON.parse(lines[i]!) as TranscriptEntry;
+    } catch {
+      return {
+        status: "invalid",
+        totalEntries: lines.length,
+        brokenAt: i,
+        reason: "malformed JSON",
+      };
+    }
+    if (entry.hash === undefined && entry.prevHash === undefined) {
+      // Pre-chain entry — only legal if NO entry in this file has
+      // hash fields. Mixed = tampered.
+      if (chained) {
+        return {
+          status: "invalid",
+          totalEntries: lines.length,
+          brokenAt: i,
+          reason: "entry missing hash in an otherwise chained file",
+        };
+      }
+      continue;
+    }
+    chained = true;
+    if (entry.prevHash !== prev) {
+      return {
+        status: "invalid",
+        totalEntries: lines.length,
+        brokenAt: i,
+        reason: `prevHash mismatch (expected ${prev.slice(0, 12)}…, got ${(entry.prevHash ?? "").slice(0, 12)}…)`,
+      };
+    }
+    const recomputed = computeEntryHash({
+      timestamp: entry.timestamp,
+      role: entry.role,
+      type: entry.type,
+      content: entry.content,
+      prevHash: entry.prevHash,
+    });
+    if (recomputed !== entry.hash) {
+      return {
+        status: "invalid",
+        totalEntries: lines.length,
+        brokenAt: i,
+        reason: "content hash mismatch — entry was modified after writing",
+      };
+    }
+    prev = entry.hash!;
+  }
+  return chained
+    ? { status: "valid", totalEntries: lines.length }
+    : { status: "unchained", totalEntries: lines.length };
 }

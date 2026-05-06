@@ -149,4 +149,35 @@ export function registerSessionsCommand(program: Command): void {
 
       db.close();
     });
+
+  sessionsCmd
+    .command("verify <filename>")
+    .description("Verify the SHA-256 hash chain of a transcript file (NIST AU-9/AU-10)")
+    .action(async (filename: string) => {
+      const { verifySessionChain } = await import("../../core/transcript");
+      const result = verifySessionChain(filename);
+      switch (result.status) {
+        case "valid":
+          console.log(
+            `  \x1b[32m✓\x1b[0m chain valid — ${result.totalEntries} entr${result.totalEntries === 1 ? "y" : "ies"} verified`,
+          );
+          break;
+        case "unchained":
+          console.log(
+            `  \x1b[33m⚠\x1b[0m unchained file — ${result.totalEntries} entr${result.totalEntries === 1 ? "y" : "ies"} predate the hash-chain feature`,
+          );
+          break;
+        case "missing":
+          console.log(`  \x1b[31m✗\x1b[0m no such transcript: ${filename}`);
+          process.exitCode = 1;
+          break;
+        case "invalid":
+          console.log(
+            `  \x1b[31m✗\x1b[0m chain INVALID at entry #${(result.brokenAt ?? 0) + 1} of ${result.totalEntries}`,
+          );
+          if (result.reason) console.log(`    reason: ${result.reason}`);
+          process.exitCode = 1;
+          break;
+      }
+    });
 }

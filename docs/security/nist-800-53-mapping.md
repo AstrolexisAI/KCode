@@ -30,8 +30,8 @@ self-issued ATO. Independent verification is expected.
 | AU-2 | Audit Events | Implemented (partial) | Tool invocations, prompts, model responses, and slash commands are recorded per-session in `~/.kcode/sessions/<id>.jsonl`. Coverage of "configuration change" events is on the roadmap. |
 | AU-3 | Content of Audit Records | Implemented | Each record has timestamp (ISO-8601), session ID, event type, tool name, args, and outcome. Full message content is captured by default; `KCODE_REDACT_LOGS=1` masks bodies for privacy-sensitive deployments. |
 | AU-6 | Audit Review, Analysis, Reporting | Inherited | Logs are JSONL — pipe to Splunk / ELK / Loki. KCode does not ship its own SIEM. |
-| AU-9 | Protection of Audit Information | Partial | Session log files are written under the user's home with default umask. Hash-chaining for tamper-evidence is on the roadmap. |
-| AU-10 | Non-repudiation | Partial | Same as AU-9 — once hash-chain lands, each entry will be cryptographically linked to the previous. |
+| AU-9 | Protection of Audit Information | Implemented | Each transcript entry is SHA-256 hash-chained to the previous (`prevHash` + `hash` fields). Tampering with any historical line — content edit, deletion, swap — is detectable. Verify with `kcode sessions verify <filename>` (`src/core/transcript.ts:verifySessionChain`). |
+| AU-10 | Non-repudiation | Implemented | The hash chain (see AU-9) cryptographically links each entry to the previous. An attacker would need to recompute every subsequent entry's hash to forge undetected; the chain head is the operator's commitment. |
 | AU-12 | Audit Generation | Implemented | Every tool invocation generates an event; cannot be disabled by the model. The user can disable with `KCODE_AUDIT_LOG=off` (deliberately discoverable, not silent). |
 
 ## Configuration Management (CM)
@@ -100,7 +100,6 @@ strengthened or simplified evidence:
 Items where KCode is partial today and the next gov-readiness
 iteration will close the gap:
 
-- **AU-9 / AU-10** — hash-chained audit log for tamper-evidence.
 - **CM-3** — settings-change events surfaced as audit records.
 - **SR-3** — reproducible builds (currently signed but not bit-for-bit
   reproducible across environments).
