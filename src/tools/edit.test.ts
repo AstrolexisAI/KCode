@@ -60,6 +60,41 @@ describe("edit tool", () => {
     expect(content).toBe("The quick brown fox");
   });
 
+  test("auto-Read: failed Edit response includes a window of current file content", async () => {
+    // The model needs ground-truth content to recover. The failed
+    // response embeds a line-numbered window so the next attempt
+    // doesn't synthesize old_string from memory.
+    const lines = Array.from({ length: 30 }, (_, i) => `line ${i + 1}: actual content`);
+    const filePath = await createTempFile("ctx.txt", lines.join("\n"));
+
+    const result = await executeEdit({
+      file_path: filePath,
+      old_string: "line 15: drifted text from memory",
+      new_string: "line 15: replaced",
+    });
+
+    expect(result.is_error).toBe(true);
+    // Window should include line 15 (the closest match) with line numbers
+    expect(result.content).toContain("Current content of");
+    expect(result.content).toContain("15\t");
+    expect(result.content).toContain("line 15: actual content");
+  });
+
+  test("auto-Read: when no close match, includes the start of the file", async () => {
+    const filePath = await createTempFile("nomatch.txt", "alpha\nbeta\ngamma\ndelta\n");
+
+    const result = await executeEdit({
+      file_path: filePath,
+      old_string: "this string is nothing like the file",
+      new_string: "x",
+    });
+
+    expect(result.is_error).toBe(true);
+    expect(result.content).toContain("Current content of");
+    // First-line slice should be present
+    expect(result.content).toContain("1\talpha");
+  });
+
   // ─── old_string not unique ───
 
   test("error when old_string is not unique", async () => {

@@ -106,7 +106,7 @@ describe("audit-session Edit guard", () => {
 
     expect(result.is_error).toBe(true);
     expect(result.content).toContain("BLOCKED");
-    expect(result.content).toContain("does not cite");
+    expect(result.content).toContain("is not cited");
     expect(result.content).toContain("unrelated.cpp");
   });
 

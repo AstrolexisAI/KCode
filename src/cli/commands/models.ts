@@ -385,6 +385,24 @@ export function registerModelsCommand(program: Command): void {
       const port = (cfg.port as number | undefined) ?? 10091;
       const localUrl = `http://localhost:${port}`;
       try {
+        // Remove any *other* registry entries pointing at the same local
+        // URL. The previous local model (e.g. an old qwen3-coder
+        // registered against :10091) cannot serve traffic anymore — the
+        // mlx_lm.server is about to load `repo` instead. If we leave the
+        // stale entry, the multi-model router can pick it and the chat
+        // call fails with "model not found" or 404. The endpoint-alive
+        // probe added in router.ts skips dead candidates, but only at
+        // the cost of a 1.5s probe per call. Cleaning the registry up
+        // front is cheaper and more honest.
+        const existing = await listModels();
+        for (const m of existing) {
+          if (m.name === repo) continue; // we'll update this one via addModel
+          if (m.baseUrl === localUrl) {
+            await removeModel(m.name);
+            console.log(`  Removed stale entry: ${m.name} (was pointing at ${localUrl})`);
+          }
+        }
+
         await addModel({
           name: repo,
           baseUrl: localUrl,

@@ -116,6 +116,28 @@ function lineSimilarity(a: string, b: string): number {
 }
 
 /**
+ * Extract a window of lines around a 1-based line number with line-number
+ * prefix (mirrors the Read tool format), so the model can re-anchor on
+ * the actual current content without issuing a separate Read call.
+ */
+function extractContextWindow(
+  content: string,
+  lineNumber1Based: number,
+  before = 8,
+  after = 12,
+): string {
+  const lines = content.split("\n");
+  const start = Math.max(1, lineNumber1Based - before);
+  const end = Math.min(lines.length, lineNumber1Based + after);
+  const width = String(end).length;
+  const out: string[] = [];
+  for (let i = start; i <= end; i++) {
+    out.push(`${String(i).padStart(width, " ")}\t${lines[i - 1] ?? ""}`);
+  }
+  return out.join("\n");
+}
+
+/**
  * Find the closest matching substring in the file content when old_string is not found.
  * Compares line-by-line similarity for candidate blocks of the same line count.
  * Returns the best match and its similarity score, or null if nothing is close enough.
@@ -265,12 +287,20 @@ async function _executeEditInner(input: Record<string, unknown>): Promise<ToolRe
       const cause = closest
         ? `Closest match in the file is ${closest.similarity}% similar at line ${closest.lineNumber}, which suggests the model's old_string drifted from the actual content (whitespace, newlines, or partial recall).`
         : "old_string does not appear anywhere in the file's current content.";
+      // Auto-Read injection: instead of just *telling* the model to
+      // re-Read, embed the relevant slice of the file directly in the
+      // error response. This is the difference between "the model
+      // re-issues Edit with stale recalled text" and "the model
+      // re-issues Edit with fresh ground-truth context." The window
+      // is narrow (closest match ± a few lines, or first slice of
+      // file if no close match) — not the whole file.
+      const window = closest
+        ? extractContextWindow(content, closest.lineNumber)
+        : extractContextWindow(content, 1, 0, 40);
       const next = closest
-        ? `Re-Read ${file_path} around line ${closest.lineNumber}, copy the exact text into old_string, and retry. Do not synthesize from memory.`
-        : `Re-Read ${file_path} to confirm what's actually in the file before retrying.`;
-      const hint = closest
-        ? `\n\nClosest match (line ${closest.lineNumber}, ${closest.similarity}%):\n\`\`\`\n${closest.match}\n\`\`\``
-        : "";
+        ? `Use the exact text from the window below at line ${closest.lineNumber} as your new old_string. Do not synthesize from memory.`
+        : `Inspect the window below — it shows the file's actual current content. Pick exact text from it.`;
+      const hint = `\n\nCurrent content of ${file_path} ${closest ? `around line ${closest.lineNumber}` : "(start)"}:\n\`\`\`\n${window}\n\`\`\``;
       const guard = warning({
         guardId: "edit-not-found",
         problem: `old_string not found in ${file_path}.`,
