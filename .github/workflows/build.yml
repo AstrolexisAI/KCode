@@ -99,6 +99,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # id-token: write is required for sigstore keyless-OIDC signing.
+      # Without this the cosign sign-blob step fails with a 403 on the
+      # token mint. See https://docs.sigstore.dev/cosign/openid_signing/
+      id-token: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -113,6 +117,37 @@ jobs:
             chmod +x "release/$target"
           done
           ls -la release/
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.5.0'
+
+      - name: Sign binaries (sigstore keyless OIDC)
+        run: |
+          # Keyless signing: identity is the GH Actions workflow itself,
+          # signature is anchored in Rekor's transparency log. Anyone
+          # can verify with `cosign verify-blob` — no shared secret.
+          for f in release/kcode-*; do
+            # Skip already-emitted .sig / .pem in case of re-runs
+            case "$f" in
+              *.sig|*.pem) continue ;;
+            esac
+            echo "Signing $f"
+            cosign sign-blob --yes \
+              --output-certificate "${f}.pem" \
+              --output-signature "${f}.sig" \
+              "$f"
+          done
+          ls -la release/
+
+      - name: Generate SHA256SUMS
+        run: |
+          cd release
+          # Regenerate after sigs land so the sums file covers everything
+          # downstream verifiers may want to check (binaries + sigs + certs).
+          sha256sum kcode-* > SHA256SUMS
+          cat SHA256SUMS
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
