@@ -56,8 +56,13 @@ const RULES: RedactionRule[] = [
   // #111, v293 repro.
   {
     name: "password_prose",
+    // Strength gate `(?:['"]|(?=…[0-9!#$%^&*+=._-]))` requires either
+    // an opening quote OR that the captured token contains a digit /
+    // special — which is what real passwords look like. Without this,
+    // any English/Spanish prose mentioning "password" + next-word would
+    // false-positive (verified 2026-05-08 macOS Gemma session).
     pattern:
-      /\b(password\s+['"]?)(?!(?:policy|policies|field|fields|manager|managers|reset|resets|required|strength|hash|hashes|hashing|protection|expiry|validator|validators|rules|length|setup|input|confirm|confirmation|recovery|prompt|placeholder|example|examples|box|boxes|form|forms|generation|generator|generators|security)\b)([a-zA-Z0-9_.!#$%^&*+=-]{4,})/gi,
+      /\b(password\s+(?:['"]|(?=[a-zA-Z0-9_.!#$%^&*+=-]*[0-9!#$%^&*+=._-])))(?!(?:policy|policies|field|fields|manager|managers|reset|resets|required|strength|hash|hashes|hashing|protection|expiry|validator|validators|rules|length|setup|input|confirm|confirmation|recovery|prompt|placeholder|example|examples|box|boxes|form|forms|generation|generator|generators|security)\b)([a-zA-Z0-9_.!#$%^&*+=-]{4,})/gi,
   },
   {
     name: "passwd_assign",
@@ -66,8 +71,11 @@ const RULES: RedactionRule[] = [
   // Prose form "contraseña tronco" / "contraseña 'tronco'" (Spanish).
   {
     name: "contrasena_prose",
+    // Same strength gate as password_prose — required after Gemma in
+    // a real session wrote "introduce tu contraseña cuando te lo pida"
+    // and the redactor flagged "cuando" as a secret.
     pattern:
-      /\b(contrase[nñ]a\s+['"]?)(?!(?:fuerte|débil|debil|segura|temporal|nueva|válida|valida|incorrecta|por\b|para\b|actual|anterior|predeterminada|requerida|ingresada|correcta|larga|corta|encriptada|nunca)\b)([a-zA-Z0-9_.!#$%^&*+=-]{4,})/gi,
+      /\b(contrase[nñ]a\s+(?:['"]|(?=[a-zA-Z0-9_.!#$%^&*+=-]*[0-9!#$%^&*+=._-])))(?!(?:fuerte|débil|debil|segura|temporal|nueva|válida|valida|incorrecta|por\b|para\b|actual|anterior|predeterminada|requerida|ingresada|correcta|larga|corta|encriptada|nunca)\b)([a-zA-Z0-9_.!#$%^&*+=-]{4,})/gi,
   },
   // Prose form "usuario curly" / "usuario 'curly'" / "user curly".
   // v293 repro: model read bitcoin.conf and then emitted 'usuario
@@ -78,12 +86,12 @@ const RULES: RedactionRule[] = [
   {
     name: "usuario_prose",
     pattern:
-      /\b(usuario\s+['"]?)(?!(?:final|com[uú]n|registrado|invitado|admin\b|administrador|anonimo|an[oó]nimo|activo|nuevo|actual|por\b|para\b|de\b)\b)([a-zA-Z0-9_.!#$%^&*+=-]{3,})/gi,
+      /\b(usuario\s+(?:['"]|(?=[a-zA-Z0-9_.!#$%^&*+=-]*[0-9!#$%^&*+=._-])))(?!(?:final|com[uú]n|registrado|invitado|admin\b|administrador|anonimo|an[oó]nimo|activo|nuevo|actual|por\b|para\b|de\b)\b)([a-zA-Z0-9_.!#$%^&*+=-]{3,})/gi,
   },
   {
     name: "user_prose",
     pattern:
-      /\b(user\s+['"]?)(?!(?:interface|manual|story|stories|experience|agent\b|role|roles|input|default|group|groups|account|accounts|space|guide)\b)([a-zA-Z0-9_.!#$%^&*+=-]{3,})/gi,
+      /\b(user\s+(?:['"]|(?=[a-zA-Z0-9_.!#$%^&*+=-]*[0-9!#$%^&*+=._-])))(?!(?:interface|manual|story|stories|experience|agent\b|role|roles|input|default|group|groups|account|accounts|space|guide)\b)([a-zA-Z0-9_.!#$%^&*+=-]{3,})/gi,
   },
   // "rpcuser X" / "rpc user X" without the equals sign.
   {
