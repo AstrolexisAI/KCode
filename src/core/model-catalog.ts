@@ -41,12 +41,15 @@ export interface CatalogEntry {
 }
 
 // ── Model Catalog ────────────────────────────────────────────────────────
-// mark5-pico: Qwen3-4B dense — tiny, fits 4GB GPUs or CPU-only, tool calling
-// mark5-nano: Qwen3-8B dense — fast, fits 12GB GPUs, native tool calling
-// mark5-mini to mark5-max: Qwen3-Coder-30B-A3B MoE (30B total, 3.3B active)
-//   MoE models need 16GB+ because all experts must be in VRAM even though
-//   only 3.3B params are active per token.
-// mark5-80b: Qwen3-Coder-Next (dense 80B) — flagship
+// mark5-pico: Qwen3-4B dense — tiny, fits 4GB GPUs or CPU-only
+// mark5-nano: Qwen3-8B dense — fast, fits 12GB GPUs
+// mark5-mini to mark5-max: Gemma-4-{26B,31B} — strong agentic tool use
+//   verified 2026-05-08 on macOS (gateway/IP/ARP analysis from minimal
+//   prompt). Replaced previous Qwen3-Coder-A3B entries which were
+//   marked tool-fitness=weak after they ignored cross-os-hint trailers
+//   and gave up on macOS network prompts.
+// (Previous mark5-80b — Qwen3-Coder-Next 80B — removed; no Gemma at
+//  80B and the 30B variants cover the same use cases.)
 export const MODEL_CATALOG: CatalogEntry[] = [
   {
     codename: "mnemo:mark5-pico",
@@ -74,51 +77,39 @@ export const MODEL_CATALOG: CatalogEntry[] = [
   },
   {
     codename: "mnemo:mark5-mini",
-    paramBillions: 30,
-    quant: "IQ3_M",
+    paramBillions: 26,
+    quant: "Q4_K_M",
     sizeGB: 13.5,
     minVramMB: 16384,
-    contextSize: 32768,
+    contextSize: 131072,
     localFile: "mark5-mini.gguf",
-    description: "MoE 30B — fits 16GB GPUs (3.3B active per token)",
-    mlxRepo: "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit",
+    description: "Gemma 4 26B — fits 16GB GPUs, strong tool use",
+    mlxRepo: "mlx-community/gemma-4-26b-a4b-it-4bit",
     mlxQuant: "4bit",
   },
   {
     codename: "mnemo:mark5-mid",
-    paramBillions: 30,
+    paramBillions: 31,
     quant: "Q4_K_M",
     sizeGB: 18.6,
     minVramMB: 24576,
-    contextSize: 32768,
+    contextSize: 131072,
     localFile: "mark5-mid.gguf",
-    description: "MoE 30B — fits 24GB GPUs (3.3B active per token)",
-    mlxRepo: "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit",
+    description: "Gemma 4 31B — fits 24GB GPUs, strong tool use",
+    mlxRepo: "mlx-community/gemma-4-31b-it-4bit",
     mlxQuant: "4bit",
   },
   {
     codename: "mnemo:mark5-max",
-    paramBillions: 30,
-    quant: "Q6_K",
-    sizeGB: 25,
-    minVramMB: 32768,
-    contextSize: 32768,
+    paramBillions: 31,
+    quant: "Q8_0",
+    sizeGB: 33,
+    minVramMB: 36864,
+    contextSize: 131072,
     localFile: "mark5-max.gguf",
-    description: "Best quality MoE — fits 32GB GPUs (3.3B active per token)",
-    mlxRepo: "mlx-community/Qwen3-Coder-30B-A3B-Instruct-8bit",
+    description: "Gemma 4 31B at 8-bit — best quality, fits 36GB+ GPUs",
+    mlxRepo: "mlx-community/gemma-4-31b-it-8bit",
     mlxQuant: "8bit",
-  },
-  {
-    codename: "mnemo:mark5-80b",
-    paramBillions: 80,
-    quant: "Q4_K_M",
-    sizeGB: 48.5,
-    minVramMB: 53248,
-    contextSize: 40960,
-    localFile: "mark5-80b.gguf",
-    description: "Maximum power — flagship dense 80B model",
-    mlxRepo: "mlx-community/Qwen3-Coder-Next-4bit",
-    mlxQuant: "4bit",
   },
   // ── Community Models ───────────────────────────────────────────────────
   // Open-source models from external teams, served as GGUF via HuggingFace.

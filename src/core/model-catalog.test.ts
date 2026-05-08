@@ -12,8 +12,8 @@ import { calculateOptimalTensorSplit, formatTensorSplit, modelFitsMultiGpu } fro
 // ─── Model Catalog Validation ──────────────────────────────────────────
 
 describe("model-catalog", () => {
-  test("catalog has at least 12 models (6 original + 6 community)", () => {
-    expect(MODEL_CATALOG.length).toBeGreaterThanOrEqual(12);
+  test("catalog has at least 11 models (5 mark5 + 6 community)", () => {
+    expect(MODEL_CATALOG.length).toBeGreaterThanOrEqual(11);
   });
 
   test("all entries have required fields", () => {
@@ -105,18 +105,19 @@ describe("model-catalog", () => {
 
   // ── Original mark5 series still intact ─────────────────────────────
 
-  test("original mark5 series models are present", () => {
+  test("mark5 series models are present (mark5-80b dropped 2026-05-08 with Qwen3-Coder removal)", () => {
     const mark5Names = [
       "mnemo:mark5-pico",
       "mnemo:mark5-nano",
       "mnemo:mark5-mini",
       "mnemo:mark5-mid",
       "mnemo:mark5-max",
-      "mnemo:mark5-80b",
     ];
     for (const name of mark5Names) {
       expect(findCatalogEntry(name)).toBeDefined();
     }
+    // mark5-80b should NOT be present anymore
+    expect(findCatalogEntry("mnemo:mark5-80b")).toBeUndefined();
   });
 
   // ── getAvailableModels ─────────────────────────────────────────────

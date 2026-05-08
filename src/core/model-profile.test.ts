@@ -18,8 +18,8 @@ describe("detectModelSize", () => {
     expect(detectModelSize("mnemo:mark5-mid")).toBe("medium");
   });
 
-  test("mark5-80b is large", () => {
-    expect(detectModelSize("mnemo:mark5-80b")).toBe("large");
+  test("frontier cloud APIs are large", () => {
+    expect(detectModelSize("claude-opus-4-7")).toBe("large");
   });
 
   test("claude models are large", () => {
@@ -56,7 +56,7 @@ describe("getModelProfile", () => {
   });
 
   test("large profile has all tools", () => {
-    const p = getModelProfile("mnemo:mark5-80b");
+    const p = getModelProfile("claude-opus-4-7");
     expect(p.tools).toBe("all");
     expect(p.maxTokens).toBe(16384);
     expect(p.promptMode).toBe("full");
@@ -75,7 +75,7 @@ describe("isToolAllowedForProfile", () => {
   });
 
   test("everything is allowed for large", () => {
-    const p = getModelProfile("mnemo:mark5-80b");
+    const p = getModelProfile("claude-opus-4-7");
     expect(isToolAllowedForProfile("Plan", p)).toBe(true);
     expect(isToolAllowedForProfile("Agent", p)).toBe(true);
     expect(isToolAllowedForProfile("NotebookEdit", p)).toBe(true);
