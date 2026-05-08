@@ -3,8 +3,29 @@
  * Provides commands for remote mode operations.
  */
 
+import { createInterface } from "node:readline";
 import type { Command } from "commander";
+import {
+  buildAuthorizeSnippet,
+  ensurePubkey,
+  fetchHostFingerprint,
+  findRemote,
+  readRemotes,
+  removeRemote,
+  testConnectivity,
+  upsertRemote,
+} from "../../remote/remote-authorize";
 import { DEFAULT_REMOTE_CONFIG, DEFAULT_SYNC_EXCLUDES } from "../../remote/types";
+
+function prompt(question: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(question, (answer: string) => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+}
 
 /**
  * Parse a host:/path target string.
@@ -290,6 +311,140 @@ export function registerRemoteCommand(program: Command): void {
       } catch (err) {
         console.error(`\x1b[31m✗ ${err instanceof Error ? err.message : err}\x1b[0m`);
         process.exit(1);
+      }
+    });
+
+  // ─── authorize ────────────────────────────────────────────
+  remoteCmd
+    .command("authorize <name> <target>")
+    .description(
+      "Bootstrap SSH access to a host (e.g. authorize laptop user@192.168.1.58). " +
+        "Generates the snippet you must run on the target, then verifies and registers it.",
+    )
+    .option("--no-test", "Skip the post-auth connectivity test")
+    .action(async (name: string, target: string, opts: { test?: boolean }) => {
+      if (!/^[A-Za-z0-9_-]{1,32}$/.test(name)) {
+        console.error("\x1b[31m✗ name must be 1-32 chars [A-Za-z0-9_-]\x1b[0m");
+        process.exit(1);
+      }
+      if (findRemote(name)) {
+        console.log(`\x1b[33m⚠ remote '${name}' already exists. Use 'kcode remote rm ${name}' first to re-authorize.\x1b[0m`);
+        process.exit(1);
+      }
+
+      let pubkey: { path: string; content: string };
+      try {
+        pubkey = ensurePubkey();
+      } catch (err) {
+        console.error(`\x1b[31m✗ Failed to find/generate SSH pubkey: ${err instanceof Error ? err.message : err}\x1b[0m`);
+        process.exit(1);
+      }
+
+      const snippet = buildAuthorizeSnippet(pubkey.content);
+      console.log(`\nUsing pubkey: \x1b[2m${pubkey.path}\x1b[0m`);
+      console.log(`\nOn the target (\x1b[1m${target}\x1b[0m), run this snippet to authorize KCode:`);
+      console.log(`\n\x1b[36m${snippet}\x1b[0m\n`);
+      console.log(
+        "\x1b[2mIt is safe to share — the public key contains no secrets.\x1b[0m",
+      );
+
+      const ok = await prompt("\nPress ENTER once you've run it (or type 'skip' to register without testing): ");
+
+      if (opts.test === false || ok.toLowerCase() === "skip") {
+        const fingerprint = fetchHostFingerprint(target);
+        upsertRemote({
+          name,
+          target,
+          hostFingerprint: fingerprint,
+          addedAt: new Date().toISOString(),
+          authorizedWithPubkey: pubkey.content,
+        });
+        console.log(`\x1b[33m⚠ Registered '${name}' without connectivity test.\x1b[0m`);
+        return;
+      }
+
+      console.log("\nTesting SSH...");
+      if (!testConnectivity(target)) {
+        console.error(
+          "\x1b[31m✗ Connection failed. Common causes:\x1b[0m\n" +
+            "  - The snippet wasn't run on the target\n" +
+            "  - Remote Login (sshd) is disabled on the target\n" +
+            "  - Firewall blocks port 22\n" +
+            "  - The user/host is wrong\n\n" +
+            "Run again with the same arguments to retry.",
+        );
+        process.exit(2);
+      }
+
+      const fingerprint = fetchHostFingerprint(target);
+      upsertRemote({
+        name,
+        target,
+        hostFingerprint: fingerprint,
+        addedAt: new Date().toISOString(),
+        lastSeen: new Date().toISOString(),
+        authorizedWithPubkey: pubkey.content,
+      });
+      console.log(`\x1b[32m✓\x1b[0m Authorized and registered '${name}' → ${target}`);
+      if (fingerprint) console.log(`  fingerprint: \x1b[2m${fingerprint}\x1b[0m`);
+    });
+
+  // ─── list ─────────────────────────────────────────────────
+  remoteCmd
+    .command("list")
+    .alias("ls")
+    .description("List authorized remote hosts")
+    .action(() => {
+      const { remotes } = readRemotes();
+      if (remotes.length === 0) {
+        console.log(
+          "No authorized remotes.\n  Add one with: kcode remote authorize <name> <user>@<host>",
+        );
+        return;
+      }
+      console.log(`\nAuthorized remotes (${remotes.length}):\n`);
+      for (const r of remotes) {
+        const last = r.lastSeen ? ` last-seen ${r.lastSeen}` : "";
+        console.log(`  \x1b[1m${r.name}\x1b[0m → ${r.target}  \x1b[2m(added ${r.addedAt}${last})\x1b[0m`);
+      }
+    });
+
+  // ─── rm ───────────────────────────────────────────────────
+  remoteCmd
+    .command("rm <name>")
+    .alias("remove")
+    .description("Remove a registered remote (does NOT remove the pubkey from the target)")
+    .action((name: string) => {
+      if (removeRemote(name)) {
+        console.log(`\x1b[32m✓\x1b[0m Removed '${name}' from local registry.`);
+        console.log(
+          "\x1b[2mNote: the pubkey is still in the target's ~/.ssh/authorized_keys. " +
+            "To fully revoke, edit that file on the target.\x1b[0m",
+        );
+      } else {
+        console.log(`No remote named '${name}'.`);
+        process.exit(1);
+      }
+    });
+
+  // ─── test ─────────────────────────────────────────────────
+  remoteCmd
+    .command("test <name>")
+    .description("Test SSH connectivity to a registered remote")
+    .action((name: string) => {
+      const r = findRemote(name);
+      if (!r) {
+        console.error(`No remote named '${name}'. List with: kcode remote list`);
+        process.exit(1);
+      }
+      console.log(`Testing ${r.target}...`);
+      if (testConnectivity(r.target)) {
+        const updated = { ...r, lastSeen: new Date().toISOString() };
+        upsertRemote(updated);
+        console.log(`\x1b[32m✓\x1b[0m Connection OK.`);
+      } else {
+        console.error("\x1b[31m✗\x1b[0m Connection failed.");
+        process.exit(2);
       }
     });
 
