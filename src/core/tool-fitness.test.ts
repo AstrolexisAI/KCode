@@ -38,10 +38,9 @@ describe("assessToolFitness", () => {
     }
   });
 
-  test("Gemma family is flagged 'weak'", () => {
-    const result = assessToolFitness("mlx-community/gemma-4-26b-a4b-it-4bit");
-    expect(result.tier).toBe("weak");
-    expect(result.reason).toMatch(/Gemma family/);
+  test("Gemma family is 'good' (re-evaluated 2026-05-08 post OS-aware-prompt + cross-os-hint)", () => {
+    expect(assessToolFitness("mlx-community/gemma-4-26b-a4b-it-4bit").tier).toBe("good");
+    expect(assessToolFitness("Gemma-3-27B").tier).toBe("good");
   });
 
   test("Llama-2 small is flagged 'weak'", () => {
@@ -72,7 +71,7 @@ describe("assessToolFitness", () => {
 
   test("case-insensitive matching", () => {
     expect(assessToolFitness("CLAUDE-OPUS-4-7").tier).toBe("good");
-    expect(assessToolFitness("Gemma-3-27B").tier).toBe("weak");
+    expect(assessToolFitness("Llama-2-7B-Chat").tier).toBe("weak");
   });
 });
 

@@ -71,13 +71,14 @@ const RULES: FitnessRule[] = [
   { match: /llama-3\.3-70b/, tier: "good" },
   { match: /mistral-large/, tier: "good" },
 
+  // ── Gemma 2/3/4: needs the OS-aware prompt + cross-os-hint to
+  // perform well, but with those it now solves real agentic prompts
+  // reliably (verified 2026-05-08 on macOS 26: 'analiza la red' →
+  // 2 Bash calls → ARP table + gateway + 17 device hostnames in 1
+  // turn). Promoted from 'weak' to 'good'.
+  { match: /gemma-?[234]/, tier: "good" },
+
   // ── Known-weak with tools ──
-  {
-    match: /gemma-?[234]/,
-    tier: "weak",
-    reason:
-      "Gemma family historically refuses tools or hallucinates instead of calling Bash. Prefer Qwen3-Coder, Claude, or Grok for agentic work.",
-  },
   {
     match: /llama-2-/,
     tier: "weak",
