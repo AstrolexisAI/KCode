@@ -309,6 +309,23 @@ export class PermissionManager {
         return { allowed: true };
       }
 
+      case "BashOnRemote": {
+        // Same hard-block analysis as local Bash. The blast radius
+        // is on someone else's machine, but the user authorized it
+        // explicitly via `kcode remote authorize`, so the same risk
+        // model applies — block on injection / pipe-to-shell, let
+        // moderate patterns fall through to the ask/auto flow.
+        const command = String(tool.input.command ?? "");
+        const analysis = analyzeBashCommand(command);
+        if (!analysis.safe && analysis.riskLevel === "dangerous") {
+          return {
+            allowed: false,
+            reason: `BashOnRemote safety issue: ${analysis.issues.join("; ")}`,
+          };
+        }
+        return { allowed: true };
+      }
+
       case "Write": {
         const input = tool.input as unknown as FileWriteInput;
         return validateFileWritePath(input.file_path, this.workingDirectory, this.additionalDirs);
@@ -414,6 +431,15 @@ export class PermissionManager {
       case "Glob":
       case "Grep":
       case "LS":
+        return { allowed: true };
+
+      // ReadOnRemote — read-only `cat <path>` over SSH on a remote
+      // the user already authorized. The blast radius is exfil-of-
+      // sensitive-files-from-the-remote, but the user explicitly
+      // bootstrapped that remote, so we treat it like local Read
+      // and let path-level safety (no quotes in path) be enforced
+      // in the tool itself.
+      case "ReadOnRemote":
         return { allowed: true };
 
       // Agent/messaging — orchestration tools (safe, subagents have own permissions)
