@@ -337,3 +337,205 @@ export async function executeEditOnRemote(input: Record<string, unknown>): Promi
     content: `Edited ${name}:${path} (${count} replacement${count === 1 ? "" : "s"} of ${oldStr.length}→${newStr.length} bytes; ${writeResult.durationMs}ms write)`,
   };
 }
+
+// ─── GlobOnRemote ──────────────────────────────────────────────────
+
+const GLOB_DEFAULT_LIMIT = 200;
+const GREP_DEFAULT_LIMIT = 200;
+const EXCLUDE_DIRS = [".git", "node_modules", ".venv", "__pycache__", "dist", "build", ".next"];
+
+function shellSingleQuote(s: string): string {
+  // Reject single-quote in input — these tools take patterns/paths
+  // from the model and we don't want to invent an escape scheme.
+  // The model can fall back to BashOnRemote for exotic patterns.
+  if (s.includes("'")) {
+    throw new Error("input must not contain a single quote");
+  }
+  return `'${s}'`;
+}
+
+export const globOnRemoteDefinition: ToolDefinition = {
+  name: "GlobOnRemote",
+  description:
+    "Find files on a previously authorized remote host that match a " +
+    "name glob (e.g. '*.ts', '*.conf'). Equivalent to `find <path> " +
+    "-type f -name <pattern>` over SSH. Returns up to 200 paths " +
+    "sorted by modification time (newest first). Patterns must NOT " +
+    "contain single quotes — for nested globs like '**/*.tsx' or " +
+    "ripgrep-style queries, use BashOnRemote with `find` directly.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      name: { type: "string", description: "Friendly name of a registered remote" },
+      pattern: {
+        type: "string",
+        description: "File name glob (POSIX `find -name`, e.g. '*.ts' or 'README*')",
+      },
+      path: {
+        type: "string",
+        description:
+          "Directory on the remote to search under. Defaults to '.' (the SSH login directory, typically $HOME).",
+      },
+      limit: {
+        type: "number",
+        description: `Max results to return (default ${GLOB_DEFAULT_LIMIT}, max 1000)`,
+      },
+    },
+    required: ["name", "pattern"],
+  },
+};
+
+export async function executeGlobOnRemote(input: Record<string, unknown>): Promise<ToolResult> {
+  const name = String(input.name ?? "");
+  const pattern = String(input.pattern ?? "");
+  const path = String(input.path ?? ".");
+  const limit = clampInt(input.limit, 1, 1000, GLOB_DEFAULT_LIMIT);
+
+  if (!NAME_RE.test(name)) {
+    return { tool_use_id: "", content: `Error: name must match ${NAME_RE.source}`, is_error: true };
+  }
+  if (pattern.trim().length === 0) {
+    return { tool_use_id: "", content: "Error: pattern must not be empty", is_error: true };
+  }
+  if (!resolveRemoteTarget(name)) {
+    return { tool_use_id: "", content: `No remote named '${name}' is registered.`, is_error: true };
+  }
+
+  let qPattern: string;
+  let qPath: string;
+  try {
+    qPattern = shellSingleQuote(pattern);
+    qPath = shellSingleQuote(path);
+  } catch (err) {
+    return {
+      tool_use_id: "",
+      content: `Error: ${err instanceof Error ? err.message : err}`,
+      is_error: true,
+    };
+  }
+
+  const prune = EXCLUDE_DIRS.map((d) => `-name '${d}'`).join(" -o ");
+  // Two-pass find: prune the noisy dirs first, then match files.
+  // -printf isn't portable to BSD find (macOS), so we use stat for mtime
+  // sort via a portable POSIX pipeline.
+  const cmd =
+    `find ${qPath} \\( -type d \\( ${prune} \\) -prune \\) -o ` +
+    `\\( -type f -name ${qPattern} -print \\) 2>/dev/null | head -n ${limit}`;
+  const result = await runOnRemote(name, cmd, { timeoutMs: 30_000 });
+
+  if (result.exitCode !== 0 && result.stdout.length === 0) {
+    return {
+      tool_use_id: "",
+      content: `find failed (exit=${result.exitCode}): ${result.stderr || "(no stderr)"}`,
+      is_error: true,
+    };
+  }
+  const lines = result.stdout
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  if (lines.length === 0) {
+    return { tool_use_id: "", content: `No files matched ${pattern} under ${path} on ${name}.` };
+  }
+  const header = `# remote: ${name}  pattern: ${pattern}  under: ${path}  matches: ${lines.length}${result.truncated ? " (TRUNCATED)" : ""}\n`;
+  return { tool_use_id: "", content: header + lines.join("\n") };
+}
+
+// ─── GrepOnRemote ──────────────────────────────────────────────────
+
+export const grepOnRemoteDefinition: ToolDefinition = {
+  name: "GrepOnRemote",
+  description:
+    "Search file contents on a previously authorized remote host using " +
+    "POSIX `grep -rEn`. Returns up to 200 matching lines (file:line:" +
+    "content). Excludes common ignored dirs (.git, node_modules, .venv, " +
+    "__pycache__, dist, build, .next). Pattern is a POSIX extended " +
+    "regex; use BashOnRemote if you need PCRE features. Pattern and " +
+    "path must NOT contain single quotes.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      name: { type: "string", description: "Friendly name of a registered remote" },
+      pattern: {
+        type: "string",
+        description: "POSIX extended regex (passed to `grep -E`)",
+      },
+      path: {
+        type: "string",
+        description: "Directory to search under (default '.')",
+      },
+      file_glob: {
+        type: "string",
+        description: "Optional file glob to limit which files are searched (`grep --include=`)",
+      },
+      limit: {
+        type: "number",
+        description: `Max matching lines to return (default ${GREP_DEFAULT_LIMIT}, max 1000)`,
+      },
+    },
+    required: ["name", "pattern"],
+  },
+};
+
+export async function executeGrepOnRemote(input: Record<string, unknown>): Promise<ToolResult> {
+  const name = String(input.name ?? "");
+  const pattern = String(input.pattern ?? "");
+  const path = String(input.path ?? ".");
+  const fileGlob = input.file_glob != null ? String(input.file_glob) : undefined;
+  const limit = clampInt(input.limit, 1, 1000, GREP_DEFAULT_LIMIT);
+
+  if (!NAME_RE.test(name)) {
+    return { tool_use_id: "", content: `Error: name must match ${NAME_RE.source}`, is_error: true };
+  }
+  if (pattern.trim().length === 0) {
+    return { tool_use_id: "", content: "Error: pattern must not be empty", is_error: true };
+  }
+  if (!resolveRemoteTarget(name)) {
+    return { tool_use_id: "", content: `No remote named '${name}' is registered.`, is_error: true };
+  }
+
+  let qPattern: string;
+  let qPath: string;
+  let qInclude: string | undefined;
+  try {
+    qPattern = shellSingleQuote(pattern);
+    qPath = shellSingleQuote(path);
+    if (fileGlob !== undefined) qInclude = shellSingleQuote(fileGlob);
+  } catch (err) {
+    return {
+      tool_use_id: "",
+      content: `Error: ${err instanceof Error ? err.message : err}`,
+      is_error: true,
+    };
+  }
+
+  const excludes = EXCLUDE_DIRS.map((d) => `--exclude-dir=${d}`).join(" ");
+  const includeFlag = qInclude !== undefined ? `--include=${qInclude}` : "";
+  // -I = skip binary, -E = extended regex, -n = line numbers, -r = recursive.
+  // Both GNU and BSD grep on macOS support these flags.
+  const cmd = `grep -rEn -I ${excludes} ${includeFlag} ${qPattern} ${qPath} 2>/dev/null | head -n ${limit}`;
+  const result = await runOnRemote(name, cmd, { timeoutMs: 30_000 });
+
+  // grep exits 1 when no match — that's not an error for our purposes.
+  if (result.exitCode > 1 && result.stdout.length === 0) {
+    return {
+      tool_use_id: "",
+      content: `grep failed (exit=${result.exitCode}): ${result.stderr || "(no stderr)"}`,
+      is_error: true,
+    };
+  }
+  const lines = result.stdout
+    .split("\n")
+    .map((l) => l.replace(/\r$/, ""))
+    .filter((l) => l.length > 0);
+  if (lines.length === 0) {
+    return { tool_use_id: "", content: `No matches for ${pattern} under ${path} on ${name}.` };
+  }
+  const header = `# remote: ${name}  pattern: ${pattern}  under: ${path}  matches: ${lines.length}${result.truncated ? " (TRUNCATED)" : ""}\n`;
+  return { tool_use_id: "", content: header + lines.join("\n") };
+}
+
+function clampInt(raw: unknown, min: number, max: number, def: number): number {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return def;
+  return Math.min(Math.max(min, Math.floor(raw)), max);
+}

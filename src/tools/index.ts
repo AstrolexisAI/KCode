@@ -11,8 +11,12 @@ import {
   editOnRemoteDefinition,
   executeBashOnRemote,
   executeEditOnRemote,
+  executeGlobOnRemote,
+  executeGrepOnRemote,
   executeReadOnRemote,
   executeWriteOnRemote,
+  globOnRemoteDefinition,
+  grepOnRemoteDefinition,
   readOnRemoteDefinition,
   writeOnRemoteDefinition,
 } from "./remote-runner-tools";
@@ -192,6 +196,8 @@ export function registerBuiltinTools(mcpManager?: McpManager): ToolRegistry {
   registry.register("ReadOnRemote", readOnRemoteDefinition, executeReadOnRemote);
   registry.register("WriteOnRemote", writeOnRemoteDefinition, executeWriteOnRemote);
   registry.register("EditOnRemote", editOnRemoteDefinition, executeEditOnRemote);
+  registry.register("GlobOnRemote", globOnRemoteDefinition, executeGlobOnRemote);
+  registry.register("GrepOnRemote", grepOnRemoteDefinition, executeGrepOnRemote);
 
   // SendMessage — one-way status messages to the user
   registry.register("SendMessage", sendMessageDefinition, executeSendMessage);

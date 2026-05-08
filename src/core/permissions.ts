@@ -451,6 +451,13 @@ export class PermissionManager {
       case "EditOnRemote":
         return { allowed: true };
 
+      // GlobOnRemote / GrepOnRemote — read-only filesystem search via
+      // POSIX find/grep over SSH. Single-quoted inputs (no injection
+      // surface), output capped, common ignored dirs pruned.
+      case "GlobOnRemote":
+      case "GrepOnRemote":
+        return { allowed: true };
+
       // Agent/messaging — orchestration tools (safe, subagents have own permissions)
       case "Agent":
       case "SendMessage":

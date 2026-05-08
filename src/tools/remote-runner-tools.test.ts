@@ -12,9 +12,14 @@ import { upsertRemote } from "../remote/remote-authorize";
 import {
   executeBashOnRemote,
   executeEditOnRemote,
+  executeGlobOnRemote,
+  executeGrepOnRemote,
   executeReadOnRemote,
   executeWriteOnRemote,
 } from "./remote-runner-tools";
+
+const TEST_PUBKEY =
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGfdSDX/VI71nSatXLZS9++S8RBy8mCJOVgisI/1fRND test@host";
 
 let tmpHome: string;
 let prevKcodeHome: string | undefined;
@@ -151,6 +156,46 @@ describe("EditOnRemote — validation", () => {
   });
 });
 
+describe("GlobOnRemote / GrepOnRemote — validation", () => {
+  test("Glob rejects empty pattern", async () => {
+    const r = await executeGlobOnRemote({ name: "lap", pattern: " " });
+    expect(r.is_error).toBe(true);
+    expect(String(r.content)).toMatch(/pattern must not be empty/);
+  });
+  test("Glob rejects pattern with single quote", async () => {
+    upsertRemote({
+      name: "lap",
+      target: "u@h",
+      addedAt: new Date().toISOString(),
+      authorizedWithPubkey: TEST_PUBKEY,
+    });
+    const r = await executeGlobOnRemote({ name: "lap", pattern: "x'.txt" });
+    expect(r.is_error).toBe(true);
+    expect(String(r.content)).toMatch(/single quote/);
+  });
+  test("Glob errors when remote not registered", async () => {
+    const r = await executeGlobOnRemote({ name: "nope", pattern: "*.ts" });
+    expect(r.is_error).toBe(true);
+    expect(String(r.content)).toMatch(/No remote named 'nope'/);
+  });
+  test("Grep rejects empty pattern", async () => {
+    const r = await executeGrepOnRemote({ name: "lap", pattern: "" });
+    expect(r.is_error).toBe(true);
+    expect(String(r.content)).toMatch(/pattern must not be empty/);
+  });
+  test("Grep rejects pattern with single quote", async () => {
+    upsertRemote({
+      name: "lap",
+      target: "u@h",
+      addedAt: new Date().toISOString(),
+      authorizedWithPubkey: TEST_PUBKEY,
+    });
+    const r = await executeGrepOnRemote({ name: "lap", pattern: "foo'bar" });
+    expect(r.is_error).toBe(true);
+    expect(String(r.content)).toMatch(/single quote/);
+  });
+});
+
 describe("BashOnRemote — live SSH (skipped if loopback SSH unavailable)", () => {
   test("runs echo via SSH and returns stdout + exit=0", async () => {
     if (!(await loopbackSshWorks())) {
@@ -229,6 +274,54 @@ describe("WriteOnRemote / EditOnRemote — live SSH round-trip", () => {
 
     // Cleanup
     await executeBashOnRemote({ name: "self", command: `rm -f '${tmpPath}'` });
+  }, 30_000);
+
+  test("GlobOnRemote finds files by name pattern", async () => {
+    if (!(await loopbackSshWorks())) return;
+    const user = process.env.USER ?? "user";
+    upsertRemote({
+      name: "self",
+      target: `${user}@127.0.0.1`,
+      addedAt: new Date().toISOString(),
+      authorizedWithPubkey: "test",
+    });
+    // Stage 3 files in /tmp
+    const stamp = `${Date.now()}`;
+    const dir = `/tmp/kcode-glob-test-${stamp}`;
+    await executeBashOnRemote({
+      name: "self",
+      command: `mkdir -p '${dir}' && touch '${dir}/a.txt' '${dir}/b.txt' '${dir}/skip.md'`,
+    });
+    const r = await executeGlobOnRemote({ name: "self", pattern: "*.txt", path: dir });
+    expect(r.is_error).toBeFalsy();
+    const out = String(r.content);
+    expect(out).toContain("a.txt");
+    expect(out).toContain("b.txt");
+    expect(out).not.toContain("skip.md");
+    await executeBashOnRemote({ name: "self", command: `rm -rf '${dir}'` });
+  }, 30_000);
+
+  test("GrepOnRemote finds matching lines", async () => {
+    if (!(await loopbackSshWorks())) return;
+    const user = process.env.USER ?? "user";
+    upsertRemote({
+      name: "self",
+      target: `${user}@127.0.0.1`,
+      addedAt: new Date().toISOString(),
+      authorizedWithPubkey: "test",
+    });
+    const stamp = `${Date.now()}`;
+    const dir = `/tmp/kcode-grep-test-${stamp}`;
+    await executeBashOnRemote({
+      name: "self",
+      command: `mkdir -p '${dir}' && printf 'hello\\nNEEDLE here\\nnope\\n' > '${dir}/a.txt' && printf 'no match\\n' > '${dir}/b.txt'`,
+    });
+    const r = await executeGrepOnRemote({ name: "self", pattern: "NEEDLE", path: dir });
+    expect(r.is_error).toBeFalsy();
+    const out = String(r.content);
+    expect(out).toContain("a.txt:2:NEEDLE here");
+    expect(out).not.toContain("b.txt");
+    await executeBashOnRemote({ name: "self", command: `rm -rf '${dir}'` });
   }, 30_000);
 
   test("EditOnRemote refuses ambiguous match without replace_all", async () => {
