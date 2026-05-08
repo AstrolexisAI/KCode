@@ -22,15 +22,18 @@ describe("assessToolFitness", () => {
     }
   });
 
-  test("coder-tuned open models are 'good'", () => {
-    const cases = [
-      "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit-DWQ",
+  test("coder-tuned open models — Qwen3-Coder is 'weak' (verified 2026-05-08), others 'good'", () => {
+    expect(assessToolFitness("mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit-DWQ").tier).toBe(
+      "weak",
+    );
+    expect(assessToolFitness("Qwen3-Coder-30B").tier).toBe("weak");
+    const goodCases = [
       "qwen2.5-coder-32b-instruct",
       "deepseek-coder-v2",
       "deepseek-v3",
       "codestral-22b",
     ];
-    for (const name of cases) {
+    for (const name of goodCases) {
       expect({ name, tier: assessToolFitness(name).tier }).toEqual({ name, tier: "good" });
     }
   });

@@ -46,8 +46,21 @@ const RULES: FitnessRule[] = [
   { match: /^gemini-(1\.5|2)/, tier: "good" },
   { match: /^grok-(3|4)/, tier: "good" },
 
-  // ── Coder-tuned open models — generally strong ──
-  { match: /qwen3-coder/, tier: "good" },
+  // ── Coder-tuned open models ──
+  // Qwen3-Coder: very strong at code generation, but verified failing
+  // open-ended agentic tasks on macOS 26 (2026-05-08): ignored
+  // [cross-os-hint] tool-result trailers across multiple iterations,
+  // ignored OS-aware system-prompt sections, thrashed Glob/Grep/Read
+  // and gave up with "tools restricted" hallucinations on a simple
+  // 'analiza la red' prompt that Gemma-4-26b solved in 1 turn.
+  // Leave it as 'weak' because the model selector is shown for the
+  // primary use case (agentic coding sessions), not pure code-gen.
+  {
+    match: /qwen3-coder/,
+    tier: "weak",
+    reason:
+      "Qwen3-Coder is strong at code generation but ignores tool-result hints and OS-aware prompts in agentic sessions. Verified 2026-05-08 on macOS: thrashed and gave up where Gemma-4-26b succeeded in one turn. Use it for pure code-gen; prefer Gemma / Claude / Grok for agent tasks.",
+  },
   { match: /qwen2\.5-coder/, tier: "good" },
   { match: /deepseek-(coder|v[23])/, tier: "good" },
   { match: /codestral/, tier: "good" },
