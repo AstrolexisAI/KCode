@@ -3,6 +3,7 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { Command } from "commander";
 import { detectHardware, formatHardware } from "../../core/hardware";
+import { assessToolFitness } from "../../core/tool-fitness";
 import {
   type CatalogEntry,
   findCatalogEntry,
@@ -48,8 +49,14 @@ export function registerModelsCommand(program: Command): void {
         const gpu = m.gpu ? `, gpu: ${m.gpu}` : "";
         const caps = m.capabilities?.length ? `, caps: [${m.capabilities.join(", ")}]` : "";
         const desc = m.description ? `\n    ${m.description}` : "";
-        console.log(`  ${m.name}${isDefault}`);
+        const fitness = assessToolFitness(m.name);
+        const fitnessTag =
+          fitness.tier === "weak" ? " \x1b[33m[weak tools]\x1b[0m" : "";
+        console.log(`  ${m.name}${isDefault}${fitnessTag}`);
         console.log(`    ${m.baseUrl}${ctx}${gpu}${caps}${desc}`);
+        if (fitness.tier === "weak" && fitness.reason) {
+          console.log(`    \x1b[33m⚠ ${fitness.reason}\x1b[0m`);
+        }
       }
     });
 

@@ -3,6 +3,7 @@
 
 import { Box, Text, useInput } from "ink";
 import React, { useEffect, useMemo, useState } from "react";
+import { assessToolFitness } from "../../core/tool-fitness.js";
 import { useTheme } from "../ThemeContext.js";
 
 export interface ModelInfo {
@@ -279,6 +280,7 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
             m.tags && m.tags.length > 0 ? "  " + m.tags.map((t) => `[${t}]`).join(" ") : "";
 
           const benchState = benchmarkState[m.name];
+          const fitness = assessToolFitness(m.name);
 
           return (
             <Box key={m.name} flexDirection="column">
@@ -289,6 +291,9 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
                 {benchState === "passed" && <Text color={theme.success}>{" ✓"}</Text>}
                 {benchState === "failed" && <Text color={theme.error}>{" ✗"}</Text>}
                 {benchState === "new" && <Text color={theme.warning}>{" [NEW]"}</Text>}
+                {fitness.tier === "weak" && (
+                  <Text color={theme.warning}>{"  [weak tools]"}</Text>
+                )}
                 {isCurrent && <Text color={theme.success}>{" ●"}</Text>}
                 {tagLine && <Text dimColor>{tagLine}</Text>}
               </Box>
@@ -301,6 +306,12 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
               {isSelected && m.gpu && (
                 <Text dimColor>
                   {"    "}[{m.gpu}]
+                </Text>
+              )}
+              {isSelected && fitness.tier === "weak" && fitness.reason && (
+                <Text color={theme.warning}>
+                  {"    ⚠ "}
+                  {fitness.reason}
                 </Text>
               )}
             </Box>
