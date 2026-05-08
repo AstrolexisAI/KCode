@@ -40,8 +40,10 @@ jobs:
             os: ubuntu-latest
           - target: linux-arm64
             os: ubuntu-latest
-          - target: macos-x64
-            os: macos-13
+          # x64 macOS dropped 2026-05-08 — Apple Silicon is the modern
+          # target, and macos-13 runners on GHA queue for 30+ min. If
+          # Intel Mac support comes back as a real ask, restore the
+          # entry: { target: macos-x64, os: macos-13 }.
           - target: macos-arm64
             os: macos-14
     steps:
