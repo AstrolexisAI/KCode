@@ -11,7 +11,9 @@ import { join } from "node:path";
 import { upsertRemote } from "../remote/remote-authorize";
 import {
   executeBashOnRemote,
+  executeEditOnRemote,
   executeReadOnRemote,
+  executeWriteOnRemote,
 } from "./remote-runner-tools";
 
 let tmpHome: string;
@@ -94,6 +96,61 @@ async function loopbackSshWorks(): Promise<boolean> {
   }
 }
 
+describe("WriteOnRemote — validation", () => {
+  test("rejects empty path", async () => {
+    const r = await executeWriteOnRemote({ name: "lap", path: "", content: "x" });
+    expect(r.is_error).toBe(true);
+    expect(String(r.content)).toMatch(/path must not be empty/);
+  });
+
+  test("rejects path with single quote", async () => {
+    const r = await executeWriteOnRemote({ name: "lap", path: "/tmp/x's.txt", content: "x" });
+    expect(r.is_error).toBe(true);
+    expect(String(r.content)).toMatch(/single quote/);
+  });
+
+  test("returns helpful error when remote not registered", async () => {
+    const r = await executeWriteOnRemote({ name: "nope", path: "/tmp/x", content: "" });
+    expect(r.is_error).toBe(true);
+    expect(String(r.content)).toMatch(/No remote named 'nope'/);
+  });
+});
+
+describe("EditOnRemote — validation", () => {
+  test("rejects empty old_string", async () => {
+    const r = await executeEditOnRemote({
+      name: "lap",
+      path: "/tmp/x",
+      old_string: "",
+      new_string: "y",
+    });
+    expect(r.is_error).toBe(true);
+    expect(String(r.content)).toMatch(/old_string must not be empty/);
+  });
+
+  test("rejects identical old_string and new_string", async () => {
+    const r = await executeEditOnRemote({
+      name: "lap",
+      path: "/tmp/x",
+      old_string: "same",
+      new_string: "same",
+    });
+    expect(r.is_error).toBe(true);
+    expect(String(r.content)).toMatch(/identical/);
+  });
+
+  test("returns helpful error when remote not registered", async () => {
+    const r = await executeEditOnRemote({
+      name: "nope",
+      path: "/tmp/x",
+      old_string: "a",
+      new_string: "b",
+    });
+    expect(r.is_error).toBe(true);
+    expect(String(r.content)).toMatch(/No remote named 'nope'/);
+  });
+});
+
 describe("BashOnRemote — live SSH (skipped if loopback SSH unavailable)", () => {
   test("runs echo via SSH and returns stdout + exit=0", async () => {
     if (!(await loopbackSshWorks())) {
@@ -128,4 +185,71 @@ describe("BashOnRemote — live SSH (skipped if loopback SSH unavailable)", () =
     expect(r.is_error).toBe(true);
     expect(String(r.content)).toMatch(/exit=7/);
   }, 15_000);
+});
+
+describe("WriteOnRemote / EditOnRemote — live SSH round-trip", () => {
+  test("writes a file then reads it back, then edits it, then reads again", async () => {
+    if (!(await loopbackSshWorks())) return;
+    const user = process.env.USER ?? "user";
+    upsertRemote({
+      name: "self",
+      target: `${user}@127.0.0.1`,
+      addedAt: new Date().toISOString(),
+      authorizedWithPubkey: "test",
+    });
+
+    const tmpPath = `/tmp/kcode-rrt-roundtrip-${Date.now()}.txt`;
+    const initial = "alpha\nbeta\ngamma\n";
+
+    // Write
+    const w = await executeWriteOnRemote({ name: "self", path: tmpPath, content: initial });
+    expect(w.is_error).toBeFalsy();
+    expect(String(w.content)).toMatch(/Wrote \d+ bytes/);
+
+    // Read back
+    const r1 = await executeReadOnRemote({ name: "self", path: tmpPath });
+    expect(r1.is_error).toBeFalsy();
+    expect(String(r1.content)).toContain(initial);
+
+    // Edit
+    const e = await executeEditOnRemote({
+      name: "self",
+      path: tmpPath,
+      old_string: "beta",
+      new_string: "BETA",
+    });
+    expect(e.is_error).toBeFalsy();
+    expect(String(e.content)).toMatch(/1 replacement/);
+
+    // Read after edit
+    const r2 = await executeReadOnRemote({ name: "self", path: tmpPath });
+    expect(r2.is_error).toBeFalsy();
+    expect(String(r2.content)).toContain("BETA");
+    expect(String(r2.content)).not.toContain("\nbeta\n");
+
+    // Cleanup
+    await executeBashOnRemote({ name: "self", command: `rm -f '${tmpPath}'` });
+  }, 30_000);
+
+  test("EditOnRemote refuses ambiguous match without replace_all", async () => {
+    if (!(await loopbackSshWorks())) return;
+    const user = process.env.USER ?? "user";
+    upsertRemote({
+      name: "self",
+      target: `${user}@127.0.0.1`,
+      addedAt: new Date().toISOString(),
+      authorizedWithPubkey: "test",
+    });
+    const tmpPath = `/tmp/kcode-edit-ambig-${Date.now()}.txt`;
+    await executeWriteOnRemote({ name: "self", path: tmpPath, content: "x x x\n" });
+    const e = await executeEditOnRemote({
+      name: "self",
+      path: tmpPath,
+      old_string: "x",
+      new_string: "y",
+    });
+    expect(e.is_error).toBe(true);
+    expect(String(e.content)).toMatch(/matches 3 times/);
+    await executeBashOnRemote({ name: "self", command: `rm -f '${tmpPath}'` });
+  }, 30_000);
 });

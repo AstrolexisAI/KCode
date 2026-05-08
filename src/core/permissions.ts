@@ -442,6 +442,15 @@ export class PermissionManager {
       case "ReadOnRemote":
         return { allowed: true };
 
+      // WriteOnRemote / EditOnRemote — modify files on the remote.
+      // Same rationale as local Write/Edit: the user authorized the
+      // host, the tool refuses single-quoted paths, atomic-replace
+      // prevents partial writes. Path-scoped allowlists are not
+      // applied because the remote filesystem is a different volume.
+      case "WriteOnRemote":
+      case "EditOnRemote":
+        return { allowed: true };
+
       // Agent/messaging — orchestration tools (safe, subagents have own permissions)
       case "Agent":
       case "SendMessage":

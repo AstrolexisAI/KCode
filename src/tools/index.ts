@@ -8,9 +8,13 @@ import { askUserDefinition, executeAskUser } from "./ask-user";
 import { executeRemoteAuthorize, remoteAuthorizeDefinition } from "./remote-authorize-tool";
 import {
   bashOnRemoteDefinition,
+  editOnRemoteDefinition,
   executeBashOnRemote,
+  executeEditOnRemote,
   executeReadOnRemote,
+  executeWriteOnRemote,
   readOnRemoteDefinition,
+  writeOnRemoteDefinition,
 } from "./remote-runner-tools";
 import { bashDefinition, executeBash } from "./bash";
 import { browserDefinition, executeBrowser } from "./browser";
@@ -182,9 +186,12 @@ export function registerBuiltinTools(mcpManager?: McpManager): ToolRegistry {
   // RemoteAuthorize — bootstrap SSH access to a LAN host
   registry.register("RemoteAuthorize", remoteAuthorizeDefinition, executeRemoteAuthorize);
 
-  // BashOnRemote / ReadOnRemote — operate authorized remotes from prompts
+  // BashOnRemote / ReadOnRemote / WriteOnRemote / EditOnRemote — operate
+  // authorized remotes from prompts
   registry.register("BashOnRemote", bashOnRemoteDefinition, executeBashOnRemote);
   registry.register("ReadOnRemote", readOnRemoteDefinition, executeReadOnRemote);
+  registry.register("WriteOnRemote", writeOnRemoteDefinition, executeWriteOnRemote);
+  registry.register("EditOnRemote", editOnRemoteDefinition, executeEditOnRemote);
 
   // SendMessage — one-way status messages to the user
   registry.register("SendMessage", sendMessageDefinition, executeSendMessage);

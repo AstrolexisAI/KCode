@@ -8,7 +8,12 @@
 //      glance which turns reached out to a remote and which stayed
 //      local.
 
-import { readFromRemote, resolveRemoteTarget, runOnRemote } from "../remote/remote-runner";
+import {
+  readFromRemote,
+  resolveRemoteTarget,
+  runOnRemote,
+  writeToRemote,
+} from "../remote/remote-runner";
 import type { ToolDefinition, ToolResult } from "../core/types";
 
 const NAME_RE = /^[A-Za-z0-9_-]{1,32}$/;
@@ -156,4 +161,179 @@ export async function executeReadOnRemote(input: Record<string, unknown>): Promi
   // so the model knows where it came from.
   const header = `# remote: ${name}\n# path:   ${path}\n# bytes:  ${Buffer.byteLength(result.stdout, "utf-8")}${result.truncated ? " (TRUNCATED)" : ""}\n`;
   return { tool_use_id: "", content: `${header}${result.stdout}` };
+}
+
+// ─── WriteOnRemote ─────────────────────────────────────────────────
+
+export const writeOnRemoteDefinition: ToolDefinition = {
+  name: "WriteOnRemote",
+  description:
+    "Write content to a file on a previously authorized remote host. " +
+    "Atomic: writes to a temp file in the same directory, then renames " +
+    "over the target. Path must NOT contain a single quote (use " +
+    "BashOnRemote with a heredoc for unusual paths). Existing file " +
+    "permissions/ownership are NOT preserved by the rename — if you " +
+    "need to keep them, read/edit/write yourself or use BashOnRemote.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      name: {
+        type: "string",
+        description: "Friendly name of a registered remote",
+      },
+      path: {
+        type: "string",
+        description: "Absolute path to write on the remote",
+      },
+      content: {
+        type: "string",
+        description: "File contents to write (UTF-8)",
+      },
+    },
+    required: ["name", "path", "content"],
+  },
+};
+
+export async function executeWriteOnRemote(input: Record<string, unknown>): Promise<ToolResult> {
+  const name = String(input.name ?? "");
+  const path = String(input.path ?? "");
+  const content = String(input.content ?? "");
+
+  if (!NAME_RE.test(name)) {
+    return { tool_use_id: "", content: `Error: name must match ${NAME_RE.source}`, is_error: true };
+  }
+  if (path.trim().length === 0) {
+    return { tool_use_id: "", content: "Error: path must not be empty", is_error: true };
+  }
+  if (path.includes("'")) {
+    return { tool_use_id: "", content: "Error: path must not contain a single quote", is_error: true };
+  }
+  if (!resolveRemoteTarget(name)) {
+    return { tool_use_id: "", content: `No remote named '${name}' is registered.`, is_error: true };
+  }
+
+  const result = await writeToRemote(name, path, content);
+  if (result.exitCode !== 0) {
+    return {
+      tool_use_id: "",
+      content: `Failed to write ${path} on ${name} (exit=${result.exitCode}):\n${result.stderr || "(no stderr)"}`,
+      is_error: true,
+    };
+  }
+  return {
+    tool_use_id: "",
+    content: `Wrote ${Buffer.byteLength(content, "utf-8")} bytes to ${name}:${path} (${result.durationMs}ms)`,
+  };
+}
+
+// ─── EditOnRemote ──────────────────────────────────────────────────
+
+export const editOnRemoteDefinition: ToolDefinition = {
+  name: "EditOnRemote",
+  description:
+    "Apply a single string replacement to a file on a registered remote. " +
+    "Reads the file, replaces old_string with new_string (must occur " +
+    "exactly once unless replace_all=true), and writes back atomically. " +
+    "old_string must match the file content byte-for-byte including " +
+    "whitespace. If the replacement is ambiguous (multiple matches with " +
+    "replace_all=false), the tool errors and nothing is written.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      name: { type: "string", description: "Friendly name of a registered remote" },
+      path: { type: "string", description: "Absolute path of the file to edit" },
+      old_string: { type: "string", description: "Exact substring to replace" },
+      new_string: { type: "string", description: "Replacement substring" },
+      replace_all: {
+        type: "boolean",
+        description: "If true, replace every occurrence; default false",
+      },
+    },
+    required: ["name", "path", "old_string", "new_string"],
+  },
+};
+
+export async function executeEditOnRemote(input: Record<string, unknown>): Promise<ToolResult> {
+  const name = String(input.name ?? "");
+  const path = String(input.path ?? "");
+  const oldStr = String(input.old_string ?? "");
+  const newStr = String(input.new_string ?? "");
+  const replaceAll = input.replace_all === true;
+
+  if (!NAME_RE.test(name)) {
+    return { tool_use_id: "", content: `Error: name must match ${NAME_RE.source}`, is_error: true };
+  }
+  if (path.trim().length === 0) {
+    return { tool_use_id: "", content: "Error: path must not be empty", is_error: true };
+  }
+  if (path.includes("'")) {
+    return { tool_use_id: "", content: "Error: path must not contain a single quote", is_error: true };
+  }
+  if (oldStr.length === 0) {
+    return { tool_use_id: "", content: "Error: old_string must not be empty", is_error: true };
+  }
+  if (oldStr === newStr) {
+    return {
+      tool_use_id: "",
+      content: "Error: old_string and new_string are identical — no edit to apply",
+      is_error: true,
+    };
+  }
+  if (!resolveRemoteTarget(name)) {
+    return { tool_use_id: "", content: `No remote named '${name}' is registered.`, is_error: true };
+  }
+
+  const readResult = await readFromRemote(name, path);
+  if (readResult.exitCode !== 0) {
+    return {
+      tool_use_id: "",
+      content: `Read failed before edit (exit=${readResult.exitCode}): ${readResult.stderr || "(no stderr)"}`,
+      is_error: true,
+    };
+  }
+  if (readResult.truncated) {
+    return {
+      tool_use_id: "",
+      content: `File ${path} is larger than the read cap (256 KiB). Use BashOnRemote with sed or another stream tool for large files.`,
+      is_error: true,
+    };
+  }
+
+  const before = readResult.stdout;
+  // Count occurrences without regex (so the user's content can't be
+  // mis-interpreted as a pattern).
+  let count = 0;
+  let i = 0;
+  while ((i = before.indexOf(oldStr, i)) !== -1) {
+    count++;
+    i += oldStr.length;
+  }
+  if (count === 0) {
+    return {
+      tool_use_id: "",
+      content: `old_string not found in ${path}. Re-read the file and check whitespace/newlines.`,
+      is_error: true,
+    };
+  }
+  if (count > 1 && !replaceAll) {
+    return {
+      tool_use_id: "",
+      content: `old_string matches ${count} times in ${path}. Either pass replace_all=true or extend old_string to be unique.`,
+      is_error: true,
+    };
+  }
+
+  const after = replaceAll ? before.split(oldStr).join(newStr) : before.replace(oldStr, newStr);
+  const writeResult = await writeToRemote(name, path, after);
+  if (writeResult.exitCode !== 0) {
+    return {
+      tool_use_id: "",
+      content: `Edit prepared, but write back failed (exit=${writeResult.exitCode}): ${writeResult.stderr || "(no stderr)"}`,
+      is_error: true,
+    };
+  }
+  return {
+    tool_use_id: "",
+    content: `Edited ${name}:${path} (${count} replacement${count === 1 ? "" : "s"} of ${oldStr.length}→${newStr.length} bytes; ${writeResult.durationMs}ms write)`,
+  };
 }
