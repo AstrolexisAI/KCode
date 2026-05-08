@@ -62,8 +62,12 @@ export function generateVAPIDKeys(): VAPIDKeys {
 
   // Public key: uncompressed 65-byte point
   const publicKey = base64urlEncode(ecdh.getPublicKey());
-  // Private key: 32-byte scalar
-  const privateKey = base64urlEncode(ecdh.getPrivateKey());
+  // Private key: 32-byte scalar. Node strips leading zero bytes, so
+  // ~1/256 keys come back as 31 bytes (or 30, etc). VAPID + JWK x/y/d
+  // require fixed 32-byte big-endian, so left-pad with zeros to 32.
+  const rawPriv = ecdh.getPrivateKey();
+  const padded = rawPriv.length === 32 ? rawPriv : Buffer.concat([Buffer.alloc(32 - rawPriv.length), rawPriv]);
+  const privateKey = base64urlEncode(padded);
 
   return { publicKey, privateKey };
 }
