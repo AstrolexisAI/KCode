@@ -308,6 +308,65 @@ describe("System Prompt Golden: environment section", () => {
 
     expect(envSection).toContain("Git repo:");
   });
+
+  test("authorized SSH remotes section omitted when no remotes registered", async () => {
+    const { existsSync, mkdirSync, rmSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const tmpHome = join(
+      "/tmp",
+      `kcode-prompt-remotes-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    mkdirSync(tmpHome, { recursive: true });
+    const prev = process.env.KCODE_HOME;
+    process.env.KCODE_HOME = tmpHome;
+    try {
+      const cfg = minimalConfig();
+      const envSection = SystemPromptBuilder.buildEnvironment(cfg);
+      expect(envSection).not.toContain("Authorized SSH remotes");
+    } finally {
+      if (prev === undefined) delete process.env.KCODE_HOME;
+      else process.env.KCODE_HOME = prev;
+      if (existsSync(tmpHome)) rmSync(tmpHome, { recursive: true, force: true });
+    }
+  });
+
+  test("authorized SSH remotes section appears with each registered name+target", async () => {
+    const { existsSync, mkdirSync, rmSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { upsertRemote } = await import("../remote/remote-authorize");
+    const tmpHome = join(
+      "/tmp",
+      `kcode-prompt-remotes-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    mkdirSync(tmpHome, { recursive: true });
+    const prev = process.env.KCODE_HOME;
+    process.env.KCODE_HOME = tmpHome;
+    try {
+      upsertRemote({
+        name: "lap",
+        target: "curly@192.168.1.58",
+        addedAt: "2026-05-08T00:00:00Z",
+        authorizedWithPubkey: "ssh-ed25519 AAAA test",
+      });
+      upsertRemote({
+        name: "server",
+        target: "deploy@10.0.0.42",
+        addedAt: "2026-05-09T00:00:00Z",
+        lastSeen: "2026-05-09T12:00:00Z",
+        authorizedWithPubkey: "ssh-ed25519 AAAA test",
+      });
+      const cfg = minimalConfig();
+      const envSection = SystemPromptBuilder.buildEnvironment(cfg);
+      expect(envSection).toContain("Authorized SSH remotes");
+      expect(envSection).toContain("lap → curly@192.168.1.58");
+      expect(envSection).toContain("server → deploy@10.0.0.42");
+      expect(envSection).toContain("BashOnRemote");
+    } finally {
+      if (prev === undefined) delete process.env.KCODE_HOME;
+      else process.env.KCODE_HOME = prev;
+      if (existsSync(tmpHome)) rmSync(tmpHome, { recursive: true, force: true });
+    }
+  });
 });
 
 // ─── Golden Tests: Key Phrase Regression ────────────────────────

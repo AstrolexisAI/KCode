@@ -100,7 +100,31 @@ export function buildEnvironment(config: KCodeConfig): string {
   lines.push(`- Model: ${config.model}`);
   lines.push(`- Date: ${today}`);
 
+  // Authorized SSH remotes — let the model see what's available so
+  // it can route BashOnRemote/ReadOnRemote/etc without the user
+  // having to spell out the name in every prompt.
+  try {
+    const remotesLines = buildRemotesSection();
+    if (remotesLines.length > 0) {
+      lines.push(...remotesLines);
+    }
+  } catch {
+    // remotes.json missing or malformed — silently skip
+  }
+
   return lines.join("\n");
+}
+
+function buildRemotesSection(): string[] {
+  const { readRemotes } = require("../remote/remote-authorize") as typeof import("../remote/remote-authorize");
+  const { remotes } = readRemotes();
+  if (remotes.length === 0) return [];
+  const lines: string[] = ["- Authorized SSH remotes (use with BashOnRemote / ReadOnRemote / WriteOnRemote / EditOnRemote / GlobOnRemote / GrepOnRemote, passing the bold name as `name`):"];
+  for (const r of remotes) {
+    const last = r.lastSeen ? `, last-seen ${r.lastSeen.slice(0, 10)}` : "";
+    lines.push(`  - ${r.name} → ${r.target} (added ${r.addedAt.slice(0, 10)}${last})`);
+  }
+  return lines;
 }
 
 // ─── Section: Situational Awareness ────────────────────────────
