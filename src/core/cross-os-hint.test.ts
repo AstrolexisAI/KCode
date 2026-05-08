@@ -67,6 +67,24 @@ describe("deriveCrossOsHint — linux (model issued macOS command)", () => {
   });
 });
 
+describe("deriveCrossOsHint — missing-tool install suggestions (darwin)", () => {
+  test("nmap → brew install nmap", () => {
+    expect(deriveCrossOsHint("nmap -sn 192.168.1.0/24", NOT_FOUND, "darwin")).toMatch(/brew install nmap/);
+  });
+  test("arp-scan → brew install arp-scan", () => {
+    expect(deriveCrossOsHint("arp-scan --localnet", NOT_FOUND, "darwin")).toMatch(/brew install arp-scan/);
+  });
+  test("htop → brew install htop", () => {
+    expect(deriveCrossOsHint("htop", NOT_FOUND, "darwin")).toMatch(/brew install htop/);
+  });
+  test("jq → brew install jq", () => {
+    expect(deriveCrossOsHint("jq .", NOT_FOUND, "darwin")).toMatch(/brew install jq/);
+  });
+  test("install hints do NOT fire on linux", () => {
+    expect(deriveCrossOsHint("nmap localhost", NOT_FOUND, "linux")).toBeNull();
+  });
+});
+
 describe("deriveCrossOsHint — null cases", () => {
   test("returns null when stderr has no command-not-found signal", () => {
     expect(deriveCrossOsHint("ip addr show", "permission denied", "darwin")).toBeNull();

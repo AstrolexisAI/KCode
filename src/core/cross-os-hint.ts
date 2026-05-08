@@ -13,6 +13,38 @@
 // message the model sees, so the next turn's tool-call is informed
 // without us silently changing intent.
 
+// Tools that aren't OS-specific but are commonly missing on macOS without
+// brew. Suggest the install command — the user authorizes via the normal
+// permission flow; sudo isn't needed for `brew install`.
+const MISSING_TOOL_INSTALL: ReadonlyArray<readonly [RegExp, string]> = [
+  [
+    /^nmap\b/,
+    "`nmap` is not installed. Run `brew install nmap` first (no sudo needed; user approves via the permission prompt).",
+  ],
+  [/^arp-scan\b/, "`arp-scan` is not installed. Run `brew install arp-scan` first."],
+  [
+    /^netcat\b|^nc\s/,
+    "BSD `nc` ships with macOS. If you need GNU `ncat`, run `brew install nmap` (provides ncat).",
+  ],
+  [/^iperf\d?\b/, "`iperf` is not installed. Run `brew install iperf3` first."],
+  [
+    /^tcpdump\b/,
+    "`tcpdump` ships with macOS but needs sudo for packet capture. Try `sudo tcpdump …` (the permission system will prompt for the password).",
+  ],
+  [
+    /^wireshark\b/,
+    "Wireshark CLI is `tshark`. Run `brew install --cask wireshark` (full app) or `brew install wireshark` for tshark only.",
+  ],
+  [
+    /^htop\b/,
+    "`htop` is not installed. Run `brew install htop` first, or use built-in `top -o cpu`.",
+  ],
+  [/^tree\b/, "`tree` is not installed. Run `brew install tree` first."],
+  [/^jq\b/, "`jq` is not installed. Run `brew install jq` first."],
+  [/^yq\b/, "`yq` is not installed. Run `brew install yq` first."],
+  [/^http\b/, "`http` (HTTPie) is not installed. Run `brew install httpie` first, or use `curl`."],
+];
+
 const LINUX_TO_MACOS: ReadonlyArray<readonly [RegExp, string]> = [
   [/^ip\s+(addr|a|address)\b/, "On macOS use `ifconfig` (no `ip` binary)"],
   [/^ip\s+(route|r)\b/, "On macOS use `netstat -rn` (no `ip route` here)"],
@@ -76,15 +108,24 @@ export function deriveCrossOsHint(
   // The failed command may be the second token in a pipe / chain.
   // Inspect each segment until we find a known mismatch.
   const segments = command.split(/[;&|]+|\s&&\s|\s\|\|\s/);
-  const table = platform === "darwin" ? LINUX_TO_MACOS : platform === "linux" ? MACOS_TO_LINUX : [];
-  if (table.length === 0) return null;
+  const osTable =
+    platform === "darwin" ? LINUX_TO_MACOS : platform === "linux" ? MACOS_TO_LINUX : [];
+  // Install hints fire on macOS only (brew is the canonical path).
+  // On Linux distros, install commands diverge too much (apt vs dnf vs
+  // pacman) for a single hint to be useful — the user/install.sh handles it.
+  const installTable = platform === "darwin" ? MISSING_TOOL_INSTALL : [];
 
   for (const raw of segments) {
     const seg = raw
       .trim()
       .replace(/^sudo\s+/, "")
       .replace(/^[A-Z_]+=\S+\s+/, "");
-    for (const [re, hint] of table) {
+    // OS-specific commands first (more specific equivalents).
+    for (const [re, hint] of osTable) {
+      if (re.test(seg)) return hint;
+    }
+    // Then install-suggestion fallback for missing-but-installable tools.
+    for (const [re, hint] of installTable) {
       if (re.test(seg)) return hint;
     }
   }
