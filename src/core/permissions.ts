@@ -392,6 +392,15 @@ export class PermissionManager {
       case "AskUser":
         return { allowed: true };
 
+      // RemoteAuthorize — bootstraps SSH access. step='issue' is pure
+      // (renders a snippet from the user's own pubkey); step='verify'
+      // makes one outbound SSH probe and writes ~/.kcode/remotes.json
+      // only if the user already ran the snippet. The model only calls
+      // this in response to an explicit user request to authorize a
+      // host, so we treat it as safe-by-design.
+      case "RemoteAuthorize":
+        return { allowed: true };
+
       // LSP — read-only code intelligence queries (safe)
       case "LSP":
         return { allowed: true };

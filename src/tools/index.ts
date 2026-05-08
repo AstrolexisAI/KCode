@@ -5,6 +5,7 @@ import { getMcpManager, type McpManager } from "../core/mcp";
 import { ToolRegistry } from "../core/tool-registry";
 import { agentDefinition, executeAgent } from "./agent";
 import { askUserDefinition, executeAskUser } from "./ask-user";
+import { executeRemoteAuthorize, remoteAuthorizeDefinition } from "./remote-authorize-tool";
 import { bashDefinition, executeBash } from "./bash";
 import { browserDefinition, executeBrowser } from "./browser";
 import { clipboardDefinition, executeClipboard } from "./clipboard-tool";
@@ -171,6 +172,9 @@ export function registerBuiltinTools(mcpManager?: McpManager): ToolRegistry {
 
   // AskUser — structured user prompts
   registry.register("AskUser", askUserDefinition, executeAskUser);
+
+  // RemoteAuthorize — bootstrap SSH access to a LAN host
+  registry.register("RemoteAuthorize", remoteAuthorizeDefinition, executeRemoteAuthorize);
 
   // SendMessage — one-way status messages to the user
   registry.register("SendMessage", sendMessageDefinition, executeSendMessage);
