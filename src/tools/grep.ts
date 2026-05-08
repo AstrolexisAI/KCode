@@ -220,11 +220,21 @@ export async function executeGrep(input: Record<string, unknown>): Promise<ToolR
     });
 
     proc.on("error", (err) => {
-      resolveResult({
-        tool_use_id: "",
-        content: `Error: ${err.message}. Is ripgrep (rg) installed?`,
-        is_error: true,
-      });
+      // ENOENT means rg isn't on PATH. Surface a directive install hint
+      // (and a Bash fallback) so the model isn't stuck telling the user
+      // "tools restricted" — same anti-give-up framing as cross-os-hint.
+      const isMissing =
+        (err as NodeJS.ErrnoException).code === "ENOENT" || /not found|ENOENT/i.test(err.message);
+      const platformHint =
+        process.platform === "darwin"
+          ? "brew install ripgrep"
+          : process.platform === "linux"
+            ? "apt-get install ripgrep  # or  dnf install ripgrep / pacman -S ripgrep"
+            : "see https://github.com/BurntSushi/ripgrep#installation";
+      const content = isMissing
+        ? `Error: ripgrep (rg) is not installed.\n\n[install-hint] To install: ${platformHint}\n[fallback] You CAN run a Bash tool call with: grep -rEn -I --exclude-dir=.git --exclude-dir=node_modules ${JSON.stringify(opts.pattern)} ${JSON.stringify(searchCwd)}\nDo NOT report this as 'tools restricted'.`
+        : `Error: ${err.message}`;
+      resolveResult({ tool_use_id: "", content, is_error: true });
     });
   });
 }

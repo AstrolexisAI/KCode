@@ -94,8 +94,10 @@ export function deriveCrossOsHint(
 /**
  * Format a hint as an appended trailer for the tool result. Marker is
  * recognizable so reviewers can grep for cross-os assist events in the
- * audit log.
+ * audit log. Imperative phrasing — open-ended-prompt models (Qwen3-
+ * Coder, etc.) routinely read mild hints as commentary instead of
+ * an instruction to retry; "RETRY NOW with:" tested better.
  */
 export function formatHint(hint: string): string {
-  return `\n\n[cross-os-hint] ${hint}`;
+  return `\n\n[cross-os-hint] RETRY NOW: ${hint}\nDo NOT report this as 'tools restricted' or 'environment limited' — re-issue the command using the equivalent above.`;
 }

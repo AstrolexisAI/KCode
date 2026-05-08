@@ -87,6 +87,9 @@ describe("deriveCrossOsHint — null cases", () => {
 
 describe("formatHint", () => {
   test("prepends a recognizable marker for audit-log greps", () => {
-    expect(formatHint("Use foo")).toMatch(/^\n\n\[cross-os-hint\] Use foo$/);
+    expect(formatHint("Use foo")).toMatch(/\[cross-os-hint\] RETRY NOW: Use foo/);
+  });
+  test("includes anti-give-up directive", () => {
+    expect(formatHint("X")).toMatch(/Do NOT report this as 'tools restricted'/);
   });
 });
