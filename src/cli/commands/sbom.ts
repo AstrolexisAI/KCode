@@ -8,8 +8,8 @@
 // chain reviews). Compatible with CycloneDX validators (cdxgen,
 // dependency-track, OWASP).
 
-import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Command } from "commander";
 
@@ -90,10 +90,7 @@ function toPurl(name: string, version: string): string {
   return `pkg:npm/${name}@${version}`;
 }
 
-function buildComponents(
-  lock: BunLock,
-  options: { includeDev: boolean },
-): CycloneDXComponent[] {
+function buildComponents(lock: BunLock, options: { includeDev: boolean }): CycloneDXComponent[] {
   if (!lock.packages) return [];
 
   // Determine which packages are devDependency-only when filtering.
@@ -229,9 +226,7 @@ export function registerSbomCommand(program: Command): void {
       const json = JSON.stringify(bom, null, 2);
       if (opts.output) {
         await Bun.write(opts.output, json);
-        process.stderr.write(
-          `Wrote ${bom.components.length} components to ${opts.output}\n`,
-        );
+        process.stderr.write(`Wrote ${bom.components.length} components to ${opts.output}\n`);
       } else {
         process.stdout.write(json);
         process.stdout.write("\n");

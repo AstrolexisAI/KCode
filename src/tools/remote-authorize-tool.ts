@@ -14,6 +14,7 @@
 // the user's confirmation in their reply, (d) call again with "verify"
 // to finalize.
 
+import type { ToolDefinition, ToolResult } from "../core/types";
 import {
   buildAuthorizeSnippet,
   ensurePubkey,
@@ -22,7 +23,6 @@ import {
   testConnectivity,
   upsertRemote,
 } from "../remote/remote-authorize";
-import type { ToolDefinition, ToolResult } from "../core/types";
 
 const NAME_RE = /^[A-Za-z0-9_-]{1,32}$/;
 const TARGET_RE = /^[A-Za-z0-9._-]+@[A-Za-z0-9._-]+(?::\d{1,5})?$|^[A-Za-z0-9._-]+(?::\d{1,5})?$/;
@@ -49,7 +49,8 @@ export const remoteAuthorizeDefinition: ToolDefinition = {
       step: {
         type: "string",
         enum: ["issue", "verify"],
-        description: "'issue' to render the snippet, 'verify' to test+register after the user runs it",
+        description:
+          "'issue' to render the snippet, 'verify' to test+register after the user runs it",
       },
       name: {
         type: "string",
@@ -64,9 +65,7 @@ export const remoteAuthorizeDefinition: ToolDefinition = {
   },
 };
 
-export async function executeRemoteAuthorize(
-  input: Record<string, unknown>,
-): Promise<ToolResult> {
+export async function executeRemoteAuthorize(input: Record<string, unknown>): Promise<ToolResult> {
   const step = String(input.step ?? "");
   const name = String(input.name ?? "");
   const target = String(input.target ?? "");

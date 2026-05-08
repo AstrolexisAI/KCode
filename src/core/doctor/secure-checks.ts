@@ -288,14 +288,16 @@ function checkOutboundAttestation(): SecureCheckResult {
       id: "egress-attestation",
       name: "Egress block attestation",
       status: "info",
-      message: "src/core/offline/egress-block.test.ts proves the block surface; KCODE_OFFLINE=1 is active",
+      message:
+        "src/core/offline/egress-block.test.ts proves the block surface; KCODE_OFFLINE=1 is active",
     };
   }
   return {
     id: "egress-attestation",
     name: "Egress block attestation",
     status: "info",
-    message: "Run with KCODE_OFFLINE=1 + monitor sockets in tcpdump/ss to attest no-egress for an air-gap deployment",
+    message:
+      "Run with KCODE_OFFLINE=1 + monitor sockets in tcpdump/ss to attest no-egress for an air-gap deployment",
   };
 }
 
@@ -342,15 +344,15 @@ export function renderSecureReport(results: SecureCheckResult[]): string {
   const warns = results.filter((r) => r.status === "warn").length;
   const fails = results.filter((r) => r.status === "fail").length;
   const total = results.length;
-  lines.push(
-    `  ${passes}/${total} pass · ${warns} warn · ${fails} fail`,
-  );
+  lines.push(`  ${passes}/${total} pass · ${warns} warn · ${fails} fail`);
   if (fails === 0 && warns === 0) {
     lines.push("  \x1b[32mAll secure-mode checks passed.\x1b[0m");
   } else if (fails === 0) {
     lines.push("  \x1b[33mWarnings present — review against your deployment policy.\x1b[0m");
   } else {
-    lines.push("  \x1b[31mFailures present — fix before submitting for security evaluation.\x1b[0m");
+    lines.push(
+      "  \x1b[31mFailures present — fix before submitting for security evaluation.\x1b[0m",
+    );
   }
   lines.push("");
   return lines.join("\n");

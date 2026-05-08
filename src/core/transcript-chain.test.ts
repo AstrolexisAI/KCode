@@ -11,8 +11,8 @@ import { join } from "node:path";
 import {
   computeEntryHash,
   GENESIS_HASH,
-  TranscriptManager,
   type TranscriptEntry,
+  TranscriptManager,
   verifySessionChain,
 } from "./transcript";
 

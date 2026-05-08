@@ -73,7 +73,11 @@ export function resolveRemoteTarget(name: string): string | null {
  * The command runs through the target's login shell (whatever sshd
  * launches for that user — typically bash/zsh).
  */
-export function runOnRemote(name: string, command: string, opts: RunOptions = {}): Promise<RunResult> {
+export function runOnRemote(
+  name: string,
+  command: string,
+  opts: RunOptions = {},
+): Promise<RunResult> {
   const target = resolveRemoteTarget(name);
   if (!target) {
     return Promise.reject(new Error(`unknown remote '${name}'`));
@@ -86,7 +90,11 @@ export function runOnRemote(name: string, command: string, opts: RunOptions = {}
  * via SSH with a hard byte cap (no `head`/`tail` semantics — the model
  * should use BashOnRemote for those).
  */
-export async function readFromRemote(name: string, path: string, opts: RunOptions = {}): Promise<RunResult> {
+export async function readFromRemote(
+  name: string,
+  path: string,
+  opts: RunOptions = {},
+): Promise<RunResult> {
   // Quote the path with single quotes for the remote shell. Reject
   // single quotes in the path itself — they'd require a more elaborate
   // escape than makes sense here, and any real path won't contain them.
@@ -209,10 +217,12 @@ function runInternal(
 
     const finalize = (code: number | null, _signal: NodeJS.Signals | null) => {
       clearTimeout(timer);
-      const stdoutStr = Buffer.concat(stdoutChunks).toString("utf-8") + (stdoutTruncated ? TRUNCATION_MARKER : "");
-      const stderrStr = Buffer.concat(stderrChunks).toString("utf-8") + (stderrTruncated ? TRUNCATION_MARKER : "");
+      const stdoutStr =
+        Buffer.concat(stdoutChunks).toString("utf-8") + (stdoutTruncated ? TRUNCATION_MARKER : "");
+      const stderrStr =
+        Buffer.concat(stderrChunks).toString("utf-8") + (stderrTruncated ? TRUNCATION_MARKER : "");
       resolve({
-        exitCode: timedOut ? TIMEOUT_EXIT_CODE : code ?? 1,
+        exitCode: timedOut ? TIMEOUT_EXIT_CODE : (code ?? 1),
         stdout: stdoutStr,
         stderr: stderrStr,
         truncated: stdoutTruncated || stderrTruncated,

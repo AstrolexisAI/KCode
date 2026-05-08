@@ -3,7 +3,6 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { Command } from "commander";
 import { detectHardware, formatHardware } from "../../core/hardware";
-import { assessToolFitness } from "../../core/tool-fitness";
 import {
   type CatalogEntry,
   findCatalogEntry,
@@ -19,6 +18,7 @@ import {
   setDefaultModel,
 } from "../../core/models";
 import { kcodePath } from "../../core/paths";
+import { assessToolFitness } from "../../core/tool-fitness";
 
 const HF_REPO_RE = /^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/;
 
@@ -50,8 +50,7 @@ export function registerModelsCommand(program: Command): void {
         const caps = m.capabilities?.length ? `, caps: [${m.capabilities.join(", ")}]` : "";
         const desc = m.description ? `\n    ${m.description}` : "";
         const fitness = assessToolFitness(m.name);
-        const fitnessTag =
-          fitness.tier === "weak" ? " \x1b[33m[weak tools]\x1b[0m" : "";
+        const fitnessTag = fitness.tier === "weak" ? " \x1b[33m[weak tools]\x1b[0m" : "";
         console.log(`  ${m.name}${isDefault}${fitnessTag}`);
         console.log(`    ${m.baseUrl}${ctx}${gpu}${caps}${desc}`);
         if (fitness.tier === "weak" && fitness.reason) {

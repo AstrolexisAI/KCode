@@ -59,12 +59,37 @@ const RULES: FitnessRule[] = [
   { match: /mistral-large/, tier: "good" },
 
   // ── Known-weak with tools ──
-  { match: /gemma-?[234]/, tier: "weak", reason: "Gemma family historically refuses tools or hallucinates instead of calling Bash. Prefer Qwen3-Coder, Claude, or Grok for agentic work." },
-  { match: /llama-2-/, tier: "weak", reason: "Llama-2 predates the tool-use fine-tuning era; tool calls are unreliable." },
-  { match: /llama-3\.0-/, tier: "weak", reason: "Llama-3.0 small variants struggle with tool calls. Prefer Llama-3.1+ at 70B+." },
-  { match: /phi-(2|3)\b/, tier: "weak", reason: "Phi-2/3 are too small for reliable agentic tool use." },
-  { match: /qwen3\.5-4b/, tier: "weak", reason: "Qwen3.5-4B is below the threshold where tool-use fine-tuning is reliable." },
-  { match: /-(0\.5|1|1\.5|3)b\b/, tier: "weak", reason: "Models under ~7B parameters generally don't tool-call reliably regardless of family." },
+  {
+    match: /gemma-?[234]/,
+    tier: "weak",
+    reason:
+      "Gemma family historically refuses tools or hallucinates instead of calling Bash. Prefer Qwen3-Coder, Claude, or Grok for agentic work.",
+  },
+  {
+    match: /llama-2-/,
+    tier: "weak",
+    reason: "Llama-2 predates the tool-use fine-tuning era; tool calls are unreliable.",
+  },
+  {
+    match: /llama-3\.0-/,
+    tier: "weak",
+    reason: "Llama-3.0 small variants struggle with tool calls. Prefer Llama-3.1+ at 70B+.",
+  },
+  {
+    match: /phi-(2|3)\b/,
+    tier: "weak",
+    reason: "Phi-2/3 are too small for reliable agentic tool use.",
+  },
+  {
+    match: /qwen3\.5-4b/,
+    tier: "weak",
+    reason: "Qwen3.5-4B is below the threshold where tool-use fine-tuning is reliable.",
+  },
+  {
+    match: /-(0\.5|1|1\.5|3)b\b/,
+    tier: "weak",
+    reason: "Models under ~7B parameters generally don't tool-call reliably regardless of family.",
+  },
 ];
 
 /**

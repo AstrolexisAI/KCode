@@ -116,10 +116,13 @@ export function buildEnvironment(config: KCodeConfig): string {
 }
 
 function buildRemotesSection(): string[] {
-  const { readRemotes } = require("../remote/remote-authorize") as typeof import("../remote/remote-authorize");
+  const { readRemotes } =
+    require("../remote/remote-authorize") as typeof import("../remote/remote-authorize");
   const { remotes } = readRemotes();
   if (remotes.length === 0) return [];
-  const lines: string[] = ["- Authorized SSH remotes (use with BashOnRemote / ReadOnRemote / WriteOnRemote / EditOnRemote / GlobOnRemote / GrepOnRemote, passing the bold name as `name`):"];
+  const lines: string[] = [
+    "- Authorized SSH remotes (use with BashOnRemote / ReadOnRemote / WriteOnRemote / EditOnRemote / GlobOnRemote / GrepOnRemote, passing the bold name as `name`):",
+  ];
   for (const r of remotes) {
     const last = r.lastSeen ? `, last-seen ${r.lastSeen.slice(0, 10)}` : "";
     lines.push(`  - ${r.name} → ${r.target} (added ${r.addedAt.slice(0, 10)}${last})`);

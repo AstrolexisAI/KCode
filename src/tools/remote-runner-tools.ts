@@ -8,17 +8,23 @@
 //      glance which turns reached out to a remote and which stayed
 //      local.
 
+import type { ToolDefinition, ToolResult } from "../core/types";
 import {
   readFromRemote,
   resolveRemoteTarget,
   runOnRemote,
   writeToRemote,
 } from "../remote/remote-runner";
-import type { ToolDefinition, ToolResult } from "../core/types";
 
 const NAME_RE = /^[A-Za-z0-9_-]{1,32}$/;
 
-function formatResult(stdout: string, stderr: string, exitCode: number, durationMs: number, timedOut: boolean): string {
+function formatResult(
+  stdout: string,
+  stderr: string,
+  exitCode: number,
+  durationMs: number,
+  timedOut: boolean,
+): string {
   const parts: string[] = [];
   parts.push(`exit=${exitCode} duration=${durationMs}ms${timedOut ? " (TIMED OUT)" : ""}`);
   if (stdout.length > 0) {
@@ -94,7 +100,13 @@ export async function executeBashOnRemote(input: Record<string, unknown>): Promi
   }
 
   const result = await runOnRemote(name, command, { timeoutMs });
-  const formatted = formatResult(result.stdout, result.stderr, result.exitCode, result.durationMs, result.timedOut);
+  const formatted = formatResult(
+    result.stdout,
+    result.stderr,
+    result.exitCode,
+    result.durationMs,
+    result.timedOut,
+  );
   return {
     tool_use_id: "",
     content: formatted,
@@ -139,7 +151,11 @@ export async function executeReadOnRemote(input: Record<string, unknown>): Promi
     return { tool_use_id: "", content: "Error: path must not be empty", is_error: true };
   }
   if (path.includes("'")) {
-    return { tool_use_id: "", content: "Error: path must not contain a single quote", is_error: true };
+    return {
+      tool_use_id: "",
+      content: "Error: path must not contain a single quote",
+      is_error: true,
+    };
   }
   if (!resolveRemoteTarget(name)) {
     return {
@@ -206,7 +222,11 @@ export async function executeWriteOnRemote(input: Record<string, unknown>): Prom
     return { tool_use_id: "", content: "Error: path must not be empty", is_error: true };
   }
   if (path.includes("'")) {
-    return { tool_use_id: "", content: "Error: path must not contain a single quote", is_error: true };
+    return {
+      tool_use_id: "",
+      content: "Error: path must not contain a single quote",
+      is_error: true,
+    };
   }
   if (!resolveRemoteTarget(name)) {
     return { tool_use_id: "", content: `No remote named '${name}' is registered.`, is_error: true };
@@ -267,7 +287,11 @@ export async function executeEditOnRemote(input: Record<string, unknown>): Promi
     return { tool_use_id: "", content: "Error: path must not be empty", is_error: true };
   }
   if (path.includes("'")) {
-    return { tool_use_id: "", content: "Error: path must not contain a single quote", is_error: true };
+    return {
+      tool_use_id: "",
+      content: "Error: path must not contain a single quote",
+      is_error: true,
+    };
   }
   if (oldStr.length === 0) {
     return { tool_use_id: "", content: "Error: old_string must not be empty", is_error: true };

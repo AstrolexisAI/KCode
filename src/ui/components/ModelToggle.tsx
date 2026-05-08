@@ -291,9 +291,7 @@ export default function ModelToggle({ isActive, currentModel, onDone }: ModelTog
                 {benchState === "passed" && <Text color={theme.success}>{" ✓"}</Text>}
                 {benchState === "failed" && <Text color={theme.error}>{" ✗"}</Text>}
                 {benchState === "new" && <Text color={theme.warning}>{" [NEW]"}</Text>}
-                {fitness.tier === "weak" && (
-                  <Text color={theme.warning}>{"  [weak tools]"}</Text>
-                )}
+                {fitness.tier === "weak" && <Text color={theme.warning}>{"  [weak tools]"}</Text>}
                 {isCurrent && <Text color={theme.success}>{" ●"}</Text>}
                 {tagLine && <Text dimColor>{tagLine}</Text>}
               </Box>

@@ -328,7 +328,9 @@ export function registerRemoteCommand(program: Command): void {
         process.exit(1);
       }
       if (findRemote(name)) {
-        console.log(`\x1b[33m⚠ remote '${name}' already exists. Use 'kcode remote rm ${name}' first to re-authorize.\x1b[0m`);
+        console.log(
+          `\x1b[33m⚠ remote '${name}' already exists. Use 'kcode remote rm ${name}' first to re-authorize.\x1b[0m`,
+        );
         process.exit(1);
       }
 
@@ -336,19 +338,23 @@ export function registerRemoteCommand(program: Command): void {
       try {
         pubkey = ensurePubkey();
       } catch (err) {
-        console.error(`\x1b[31m✗ Failed to find/generate SSH pubkey: ${err instanceof Error ? err.message : err}\x1b[0m`);
+        console.error(
+          `\x1b[31m✗ Failed to find/generate SSH pubkey: ${err instanceof Error ? err.message : err}\x1b[0m`,
+        );
         process.exit(1);
       }
 
       const snippet = buildAuthorizeSnippet(pubkey.content);
       console.log(`\nUsing pubkey: \x1b[2m${pubkey.path}\x1b[0m`);
-      console.log(`\nOn the target (\x1b[1m${target}\x1b[0m), run this snippet to authorize KCode:`);
-      console.log(`\n\x1b[36m${snippet}\x1b[0m\n`);
       console.log(
-        "\x1b[2mIt is safe to share — the public key contains no secrets.\x1b[0m",
+        `\nOn the target (\x1b[1m${target}\x1b[0m), run this snippet to authorize KCode:`,
       );
+      console.log(`\n\x1b[36m${snippet}\x1b[0m\n`);
+      console.log("\x1b[2mIt is safe to share — the public key contains no secrets.\x1b[0m");
 
-      const ok = await prompt("\nPress ENTER once you've run it (or type 'skip' to register without testing): ");
+      const ok = await prompt(
+        "\nPress ENTER once you've run it (or type 'skip' to register without testing): ",
+      );
 
       if (opts.test === false || ok.toLowerCase() === "skip") {
         const fingerprint = fetchHostFingerprint(target);
@@ -405,7 +411,9 @@ export function registerRemoteCommand(program: Command): void {
       console.log(`\nAuthorized remotes (${remotes.length}):\n`);
       for (const r of remotes) {
         const last = r.lastSeen ? ` last-seen ${r.lastSeen}` : "";
-        console.log(`  \x1b[1m${r.name}\x1b[0m → ${r.target}  \x1b[2m(added ${r.addedAt}${last})\x1b[0m`);
+        console.log(
+          `  \x1b[1m${r.name}\x1b[0m → ${r.target}  \x1b[2m(added ${r.addedAt}${last})\x1b[0m`,
+        );
       }
     });
 

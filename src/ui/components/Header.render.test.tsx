@@ -101,13 +101,7 @@ describe("Header render", () => {
 
   test("shows OFFLINE badge when offlineMode=true", () => {
     instance = renderWithTheme(
-      <Header
-        model="m"
-        workingDirectory="/x"
-        tokenCount={0}
-        toolUseCount={0}
-        offlineMode={true}
-      />,
+      <Header model="m" workingDirectory="/x" tokenCount={0} toolUseCount={0} offlineMode={true} />,
     );
     expect(instance.lastFrame()).toContain("OFFLINE");
   });
@@ -121,13 +115,7 @@ describe("Header render", () => {
 
   test("shows SCAN badge when scanMode=true", () => {
     instance = renderWithTheme(
-      <Header
-        model="m"
-        workingDirectory="/x"
-        tokenCount={0}
-        toolUseCount={0}
-        scanMode={true}
-      />,
+      <Header model="m" workingDirectory="/x" tokenCount={0} toolUseCount={0} scanMode={true} />,
     );
     expect(instance.lastFrame()).toContain("SCAN");
   });

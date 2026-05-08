@@ -44,9 +44,7 @@ describe("buildAuthorizeSnippet", () => {
   });
 
   test("refuses to render snippet if pubkey contains a single quote (sanity check)", () => {
-    expect(() => buildAuthorizeSnippet("ssh-ed25519 evil'injection==")).toThrow(
-      /single quote/,
-    );
+    expect(() => buildAuthorizeSnippet("ssh-ed25519 evil'injection==")).toThrow(/single quote/);
   });
 });
 

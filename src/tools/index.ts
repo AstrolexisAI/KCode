@@ -5,21 +5,6 @@ import { getMcpManager, type McpManager } from "../core/mcp";
 import { ToolRegistry } from "../core/tool-registry";
 import { agentDefinition, executeAgent } from "./agent";
 import { askUserDefinition, executeAskUser } from "./ask-user";
-import { executeRemoteAuthorize, remoteAuthorizeDefinition } from "./remote-authorize-tool";
-import {
-  bashOnRemoteDefinition,
-  editOnRemoteDefinition,
-  executeBashOnRemote,
-  executeEditOnRemote,
-  executeGlobOnRemote,
-  executeGrepOnRemote,
-  executeReadOnRemote,
-  executeWriteOnRemote,
-  globOnRemoteDefinition,
-  grepOnRemoteDefinition,
-  readOnRemoteDefinition,
-  writeOnRemoteDefinition,
-} from "./remote-runner-tools";
 import { bashDefinition, executeBash } from "./bash";
 import { browserDefinition, executeBrowser } from "./browser";
 import { clipboardDefinition, executeClipboard } from "./clipboard-tool";
@@ -66,6 +51,21 @@ import {
   exitPlanModeDefinition,
 } from "./plan-mode";
 import { executeRead, readDefinition } from "./read";
+import { executeRemoteAuthorize, remoteAuthorizeDefinition } from "./remote-authorize-tool";
+import {
+  bashOnRemoteDefinition,
+  editOnRemoteDefinition,
+  executeBashOnRemote,
+  executeEditOnRemote,
+  executeGlobOnRemote,
+  executeGrepOnRemote,
+  executeReadOnRemote,
+  executeWriteOnRemote,
+  globOnRemoteDefinition,
+  grepOnRemoteDefinition,
+  readOnRemoteDefinition,
+  writeOnRemoteDefinition,
+} from "./remote-runner-tools";
 import { executeRename, renameDefinition } from "./rename";
 import { executeSendMessage, sendMessageDefinition } from "./send-message";
 import { executeSkill, skillDefinition } from "./skill";

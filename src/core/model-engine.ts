@@ -15,7 +15,6 @@ import {
 import { basename, dirname, join } from "node:path";
 import type { HardwareInfo } from "./hardware";
 import { log } from "./logger";
-import { offlineAwareFetch } from "./offline";
 import {
   createLibSymlinks,
   downloadFile,
@@ -24,6 +23,7 @@ import {
   findBinaryInDir,
   findLibraryFiles,
 } from "./model-file-utils";
+import { offlineAwareFetch } from "./offline";
 import { kcodePath } from "./paths";
 
 const ENGINE_DIR = kcodePath("engine");

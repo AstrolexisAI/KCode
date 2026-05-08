@@ -15,7 +15,10 @@ const TEST_PUBKEY =
 
 beforeEach(() => {
   // Isolate KCODE_HOME so tool writes go to a tmp dir.
-  tmpHome = join("/tmp", `kcode-remote-tool-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  tmpHome = join(
+    "/tmp",
+    `kcode-remote-tool-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
   mkdirSync(tmpHome, { recursive: true });
   prevKcodeHome = process.env.KCODE_HOME;
   process.env.KCODE_HOME = tmpHome;
@@ -23,10 +26,7 @@ beforeEach(() => {
   // Isolate HOME so ensurePubkey reads our pre-staged fake key.
   fakeHome = join(tmpHome, "fakehome");
   mkdirSync(join(fakeHome, ".ssh"), { recursive: true });
-  require("node:fs").writeFileSync(
-    join(fakeHome, ".ssh", "id_ed25519.pub"),
-    `${TEST_PUBKEY}\n`,
-  );
+  require("node:fs").writeFileSync(join(fakeHome, ".ssh", "id_ed25519.pub"), `${TEST_PUBKEY}\n`);
   prevHome = process.env.HOME;
   process.env.HOME = fakeHome;
 });
@@ -100,25 +100,21 @@ describe("RemoteAuthorize tool", () => {
     expect(String(result.content)).toMatch(/already exists/);
   });
 
-  test(
-    "step='verify' fails cleanly when SSH does not work (no remote registered)",
-    async () => {
-      // 192.0.2.1 is TEST-NET-1 RFC 5737 — guaranteed-unreachable.
-      // SSH ConnectTimeout=8s, our wrapper times out at 15s.
-      const result = await executeRemoteAuthorize({
-        step: "verify",
-        name: "deadhost",
-        target: "nobody@192.0.2.1",
-      });
-      expect(result.is_error).toBe(true);
-      expect(String(result.content)).toMatch(/SSH to .* still failed/);
+  test("step='verify' fails cleanly when SSH does not work (no remote registered)", async () => {
+    // 192.0.2.1 is TEST-NET-1 RFC 5737 — guaranteed-unreachable.
+    // SSH ConnectTimeout=8s, our wrapper times out at 15s.
+    const result = await executeRemoteAuthorize({
+      step: "verify",
+      name: "deadhost",
+      target: "nobody@192.0.2.1",
+    });
+    expect(result.is_error).toBe(true);
+    expect(String(result.content)).toMatch(/SSH to .* still failed/);
 
-      // Crucial: nothing should have been registered.
-      const remotes = require("../remote/remote-authorize").readRemotes();
-      expect(remotes.remotes).toHaveLength(0);
-    },
-    20_000,
-  );
+    // Crucial: nothing should have been registered.
+    const remotes = require("../remote/remote-authorize").readRemotes();
+    expect(remotes.remotes).toHaveLength(0);
+  }, 20_000);
 
   test("accepts valid name and target shapes (regex sanity)", async () => {
     const validShapes: Array<[string, string]> = [

@@ -92,7 +92,17 @@ async function loopbackSshWorks(): Promise<boolean> {
     const { spawnSync } = require("node:child_process");
     const result = spawnSync(
       "ssh",
-      ["-o", "BatchMode=yes", "-o", "ConnectTimeout=3", "-o", "StrictHostKeyChecking=accept-new", "127.0.0.1", "echo", "ok"],
+      [
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=3",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "127.0.0.1",
+        "echo",
+        "ok",
+      ],
       { encoding: "utf-8", timeout: 5_000 },
     );
     return result.status === 0 && result.stdout.includes("ok");

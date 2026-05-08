@@ -296,7 +296,9 @@ describe("isEndpointAlive", () => {
   });
 
   test("returns true when /v1/models responds 200", async () => {
-    globalThis.fetch = mock(async () => new Response("{}", { status: 200 })) as unknown as typeof fetch;
+    globalThis.fetch = mock(
+      async () => new Response("{}", { status: 200 }),
+    ) as unknown as typeof fetch;
     expect(await isEndpointAlive("http://localhost:11111")).toBe(true);
   });
 
@@ -308,7 +310,9 @@ describe("isEndpointAlive", () => {
   });
 
   test("returns false on non-2xx response", async () => {
-    globalThis.fetch = mock(async () => new Response("err", { status: 502 })) as unknown as typeof fetch;
+    globalThis.fetch = mock(
+      async () => new Response("err", { status: 502 }),
+    ) as unknown as typeof fetch;
     expect(await isEndpointAlive("http://localhost:33333")).toBe(false);
   });
 
