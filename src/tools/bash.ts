@@ -1077,9 +1077,24 @@ async function _executeBashInner(input: Record<string, unknown>): Promise<ToolRe
         }
       }
 
+      // Cross-OS reactive hint: if the command failed because it's
+      // Linux-only on macOS (or vice-versa), append a one-line pointer
+      // to the equivalent. Surgical scope — only for known mismatches.
+      let finalContent = output || `(exit code ${code})`;
+      if (code !== 0) {
+        try {
+          const { deriveCrossOsHint, formatHint } =
+            require("../core/cross-os-hint") as typeof import("../core/cross-os-hint");
+          const hint = deriveCrossOsHint(command, stderr);
+          if (hint) finalContent += formatHint(hint);
+        } catch {
+          /* hint module load failed — non-fatal */
+        }
+      }
+
       resolve({
         tool_use_id: "",
-        content: output || `(exit code ${code})`,
+        content: finalContent,
         is_error: code !== 0,
       });
     });
