@@ -48,6 +48,20 @@ export function buildEnvironment(config: KCodeConfig): string {
     lines.push(`- OS: ${osVersion}`);
   }
 
+  if (platform === "darwin") {
+    lines.push(
+      "- macOS userland (BSD): `sed -i ''` requires the empty backup-suffix arg; no `grep -P`; no GNU `readlink -f`, `date -d`, or `find -printf`. If `gsed`/`ggrep`/`gdate` are installed (Homebrew coreutils), prefer those for GNU semantics.",
+      "- macOS Wi-Fi/network: use `networksetup -listallhardwareports`, `networksetup -getairportnetwork <iface>`, `ipconfig getifaddr <iface>`, `system_profiler SPAirPortDataType`, `wdutil info`. The `airport` binary was removed in macOS 14+ — do NOT invoke `airport -s`.",
+      "- macOS shell utilities: `open <url|file>`, `pbcopy`/`pbpaste`, `say`, `osascript`. `lsof -nP -iTCP -sTCP:LISTEN` for listening sockets (no `ss` by default).",
+    );
+  } else if (platform === "linux") {
+    lines.push(
+      "- Linux userland (GNU): `sed -i 's/x/y/'` (no empty backup-suffix), `grep -P` available, `readlink -f`, `date -d '...'`, `find -printf` all work as expected.",
+      "- Linux Wi-Fi/network: prefer `nmcli` (`nmcli dev wifi list`, `nmcli -t -f active,ssid dev wifi`), `iw dev <iface> scan`, `ip addr`, `ip route`. `ifconfig` may not be installed; use `ip` instead. `ss -tlnp` for listening sockets.",
+      "- Linux shell utilities: `xdg-open <url|file>`, `xclip -selection clipboard` or `wl-copy` (Wayland). Process inspection: `pgrep`, `pstree`, `lsof`, `ss`.",
+    );
+  }
+
   lines.push(`- Git repo: ${gitInfo.isRepo ? "Yes" : "No"}`);
   if (gitInfo.isRepo && gitInfo.branch) {
     lines.push(`- Git branch: ${gitInfo.branch}`);
