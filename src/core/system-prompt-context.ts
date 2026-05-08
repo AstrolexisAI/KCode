@@ -50,15 +50,43 @@ export function buildEnvironment(config: KCodeConfig): string {
 
   if (platform === "darwin") {
     lines.push(
-      "- macOS userland (BSD): `sed -i ''` requires the empty backup-suffix arg; no `grep -P`; no GNU `readlink -f`, `date -d`, or `find -printf`. If `gsed`/`ggrep`/`gdate` are installed (Homebrew coreutils), prefer those for GNU semantics.",
-      "- macOS Wi-Fi/network: use `networksetup -listallhardwareports`, `networksetup -getairportnetwork <iface>`, `ipconfig getifaddr <iface>`, `system_profiler SPAirPortDataType`, `wdutil info`. The `airport` binary was removed in macOS 14+ — do NOT invoke `airport -s`.",
-      "- macOS shell utilities: `open <url|file>`, `pbcopy`/`pbpaste`, `say`, `osascript`. `lsof -nP -iTCP -sTCP:LISTEN` for listening sockets (no `ss` by default).",
+      "- ⚠ THIS IS macOS — DO NOT USE Linux-only commands. The following Linux commands DO NOT EXIST here; use the macOS equivalent instead:",
+      "    `ip addr` / `ip a`        → use `ifconfig`",
+      "    `ip route`                → use `netstat -rn`",
+      "    `ip link`                 → use `ifconfig` or `networksetup -listallhardwareports`",
+      "    `ss -tlnp`                → use `lsof -nP -iTCP -sTCP:LISTEN`",
+      "    `nmcli dev wifi list`     → use `networksetup -listpreferredwirelessnetworks en0` or `system_profiler SPAirPortDataType`",
+      "    `nmcli -t -f active,ssid` → use `networksetup -getairportnetwork en0`",
+      "    `iw dev wlan0 scan`       → use `system_profiler SPAirPortDataType`",
+      "    `apt-get install`         → use `brew install`",
+      "    `systemctl`               → use `launchctl`",
+      "    `journalctl`              → use `log show` or `console.app`",
+      "    `xdg-open`                → use `open`",
+      "    `xclip` / `wl-copy`       → use `pbcopy` / `pbpaste`",
+      "    `readlink -f`             → use `readlink` (or `realpath` from coreutils if installed)",
+      "    `sed -i 's/x/y/' f`       → use `sed -i '' 's/x/y/' f` (BSD requires the empty backup-suffix arg)",
+      "    `grep -P pattern`         → use `grep -E pattern` (no PCRE in BSD grep)",
+      "    `find . -printf …`        → use `find . -exec stat -f '%N %m' {} \\;`",
+      "    `date -d '2025-01-01'`    → use `date -j -f '%Y-%m-%d' '2025-01-01'`",
+      "  If `gsed`/`ggrep`/`gdate` are installed (Homebrew coreutils), prefer those when you need GNU semantics.",
+      "  When a command fails with `command not found`, RETRY with the macOS equivalent above before reporting failure.",
+      "- The `airport` binary was REMOVED in macOS 14+ — do NOT invoke `airport -s`. Use `system_profiler SPAirPortDataType` for Wi-Fi scanning.",
     );
   } else if (platform === "linux") {
     lines.push(
-      "- Linux userland (GNU): `sed -i 's/x/y/'` (no empty backup-suffix), `grep -P` available, `readlink -f`, `date -d '...'`, `find -printf` all work as expected.",
-      "- Linux Wi-Fi/network: prefer `nmcli` (`nmcli dev wifi list`, `nmcli -t -f active,ssid dev wifi`), `iw dev <iface> scan`, `ip addr`, `ip route`. `ifconfig` may not be installed; use `ip` instead. `ss -tlnp` for listening sockets.",
-      "- Linux shell utilities: `xdg-open <url|file>`, `xclip -selection clipboard` or `wl-copy` (Wayland). Process inspection: `pgrep`, `pstree`, `lsof`, `ss`.",
+      "- ⚠ THIS IS Linux — DO NOT USE macOS-only commands. The following macOS commands DO NOT EXIST here; use the Linux equivalent instead:",
+      "    `networksetup -getairportnetwork` → use `nmcli -t -f active,ssid dev wifi | head -1` or `iwgetid -r`",
+      "    `ipconfig getifaddr en0`          → use `ip -4 addr show <iface>` or `hostname -I`",
+      "    `system_profiler …`               → use `lshw`, `inxi`, or `/proc` / `/sys`",
+      "    `wdutil info`                     → use `iw dev <iface> link` or `nmcli`",
+      "    `pbcopy` / `pbpaste`              → use `xclip -selection clipboard` (X11) or `wl-copy`/`wl-paste` (Wayland)",
+      "    `open <url|file>`                 → use `xdg-open <url|file>`",
+      "    `launchctl`                       → use `systemctl`",
+      "    `say`, `osascript`                → no equivalent (skip or ask user)",
+      "    `sed -i ''`                       → use `sed -i` (no empty arg in GNU sed)",
+      "    `date -j -f`                      → use `date -d`",
+      "  When a command fails with `command not found`, RETRY with the Linux equivalent above before reporting failure.",
+      "- Linux userland is GNU: `grep -P`, `readlink -f`, `date -d '...'`, `find -printf` all work as expected. `ifconfig` may not be installed by default — prefer `ip addr` / `ip route` / `ip link`. Use `ss -tlnp` for listening sockets.",
     );
   }
 
