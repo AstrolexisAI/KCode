@@ -1771,6 +1771,7 @@ async function runNonInteractive(
       classifyBenchmarkTask,
       selectBenchmarkModel,
       checkModelTaskMismatch,
+      markMismatchSeen,
     } = await import("./core/router.js");
     const taskType = classifyBenchmarkTask(prompt);
     if (isMultimodelEnabled()) {
@@ -1783,12 +1784,13 @@ async function runNonInteractive(
         process.stderr.write(`\x1b[2m⇄ routing ${taskType} → ${route.model}\x1b[0m\n`);
       }
     } else {
-      // Multimodel OFF — check whether the default model is a known
-      // weak match for this task and surface a one-time recommendation
-      // to enable routing.
+      // Multimodel OFF — surface a one-time-per-session warning when
+      // the default model is a known-weak match for this task.
+      // Dedup via markMismatchSeen so chat sessions don't see the
+      // warning on every prompt (audit 2026-05-08).
       const cfg = conversationManager.getConfig();
       const mismatch = checkModelTaskMismatch(cfg.model, taskType);
-      if (mismatch) {
+      if (mismatch && markMismatchSeen(cfg.model, taskType)) {
         process.stderr.write(
           `\x1b[33m⚠ Default model ${cfg.model} is weak for '${taskType}': ${mismatch.reason}\x1b[0m\n`,
         );

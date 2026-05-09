@@ -1094,17 +1094,26 @@ async function _executeBashInner(input: Record<string, unknown>): Promise<ToolRe
             require("../core/cross-os-hint") as typeof import("../core/cross-os-hint");
           const autoSub = deriveAutoSubstitute(command, stderr);
           if (autoSub) {
-            // Re-run with the substituted command. Synchronous
-            // ish — uses spawnSync to avoid nested-Promise complexity
-            // and keep the audit log linear (one tool call → one
-            // result, with the substitution noted in the prefix).
+            // Re-run with the substituted command. Apply the SAME
+            // sandbox wrap as the original — audit 2026-05-08 caught
+            // that the auto-sub spawn was bypassing bwrap when
+            // --sandbox was active. Now uses the identical
+            // (useSandbox + wrapWithSandbox) pipeline.
+            let subFinal = autoSub.newCommand;
+            let subEnv: NodeJS.ProcessEnv = { ...process.env };
+            if (useSandbox) {
+              const sandboxConfig = getDefaultSandboxConfig(_sandboxMode, process.cwd());
+              const wrapped = wrapWithSandbox(autoSub.newCommand, sandboxConfig);
+              subFinal = wrapped.command;
+              if (wrapped.env) subEnv = { ...subEnv, ...wrapped.env };
+            }
             const { spawnSync: _spawnSync } =
               require("node:child_process") as typeof import("node:child_process");
-            const subResult = _spawnSync("bash", ["-c", autoSub.newCommand], {
+            const subResult = _spawnSync("bash", ["-c", subFinal], {
               cwd: process.cwd(),
               encoding: "utf-8",
-              timeout: timeoutMs,
-              env: process.env,
+              timeout: effectiveTimeoutMs,
+              env: subEnv,
             });
             const subOut =
               (subResult.stdout || "") + (subResult.stderr ? `\n${subResult.stderr}` : "");
@@ -1113,7 +1122,7 @@ async function _executeBashInner(input: Record<string, unknown>): Promise<ToolRe
             finalIsError = (subResult.status ?? 1) !== 0;
             log.info(
               "bash",
-              `[cross-os-auto-sub] ${autoSub.description} (substituted command exit=${subResult.status})`,
+              `[cross-os-auto-sub] ${autoSub.description} (substituted exit=${subResult.status}, sandbox=${useSandbox})`,
             );
           } else {
             const hint = deriveCrossOsHint(command, stderr);

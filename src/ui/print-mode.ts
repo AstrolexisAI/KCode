@@ -29,14 +29,15 @@ export async function runPrintMode(
       classifyBenchmarkTask,
       selectBenchmarkModel,
       checkModelTaskMismatch,
+      markMismatchSeen,
     } = await import("../core/router.js");
     if (!isMultimodelEnabled()) {
-      // Multimodel OFF — surface a recommendation if the default
-      // model is a known-weak match for the task at hand.
+      // Multimodel OFF — surface a one-time-per-session recommendation
+      // if the default model is a known-weak match for the task at hand.
       const taskType = classifyBenchmarkTask(prompt);
       const cfg = conversationManager.getConfig();
       const mismatch = checkModelTaskMismatch(cfg.model, taskType);
-      if (mismatch) {
+      if (mismatch && markMismatchSeen(cfg.model, taskType)) {
         process.stderr.write(
           `\x1b[33m⚠ Default model ${cfg.model} is weak for '${taskType}': ${mismatch.reason}\x1b[0m\n`,
         );

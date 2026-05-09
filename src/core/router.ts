@@ -415,6 +415,25 @@ export function checkModelTaskMismatch(
   return null;
 }
 
+// Session-scoped dedup for mismatch warnings — caller (TUI / print
+// mode) wraps checkModelTaskMismatch with markMismatchSeen() and
+// only emits the warning if the (model, task) pair hasn't been
+// shown yet. Audit 2026-05-08: without this the warning was firing
+// on every prompt of every chat-style session.
+const _mismatchSeen = new Set<string>();
+
+export function markMismatchSeen(modelName: string, task: BenchmarkTaskType): boolean {
+  const key = `${modelName}::${task}`;
+  if (_mismatchSeen.has(key)) return false;
+  _mismatchSeen.add(key);
+  return true;
+}
+
+/** For tests / session boundary. */
+export function _resetMismatchSeen(): void {
+  _mismatchSeen.clear();
+}
+
 /**
  * Check if multimodel routing is enabled in settings.
  */
@@ -531,18 +550,19 @@ export async function selectBenchmarkModel(
     });
 
     if (matched.length > 0) {
-      // Cost-aware preference: among models satisfying the tag group,
-      // pick the cheapest. Local always wins (cost 0); within cloud,
-      // sort by blended $/Mtok. The "different from default" rule is
-      // a tiebreak — prefer not switching just for the sake of it.
-      // (Smart-escalation budget gate is the natural extension here —
-      // skip a 3×-costlier escalation when session is past 75% of
-      // budget. Deferred to a follow-up because the PolicyEngine
-      // doesn't currently expose a singleton getter; would need a
-      // small refactor.)
+      // Cost-aware preference: pick the cheapest match outright.
+      // (Earlier draft tried to "prefer different from default" as a
+      // tiebreak, but that REGRESSED behavior: when the default was
+      // already the cheapest, it picked the second-cheapest, which
+      // is more expensive. Caught in audit 2026-05-08.)
+      // The downstream `chosen.name !== defaultModel` check makes
+      // staying-with-default a no-op (returns null route), so picking
+      // default-when-default-is-cheapest just means "no switch".
+      // Smart-escalation budget gate (skip 3×-costlier escalation
+      // when session ≥75% of cap) is deferred — would need a
+      // PolicyEngine singleton getter that doesn't exist yet.
       const sorted = [...matched].sort(compareModelCost);
-      const cheapestDifferent = sorted.find((m) => m.name !== defaultModel);
-      const chosen = cheapestDifferent ?? sorted[0]!;
+      const chosen = sorted[0]!;
       if (chosen.name !== defaultModel) {
         // Resolve API key for the new provider
         const { resolveApiKey } = await import("./request-builder.js");

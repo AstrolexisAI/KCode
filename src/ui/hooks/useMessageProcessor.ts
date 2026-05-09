@@ -1702,15 +1702,18 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
           classifyBenchmarkTask,
           selectBenchmarkModel,
           checkModelTaskMismatch,
+          markMismatchSeen,
         } = await import("../../core/router.js");
         if (!isMultimodelEnabled()) {
-          // Multimodel OFF — recommend enabling it when the default
-          // model is a known-weak match for this task.
+          // Multimodel OFF — surface a one-time-per-session
+          // recommendation when the default model is a known-weak
+          // match for this task. Dedup via markMismatchSeen so we
+          // don't spam the warning on every chat-style turn.
           try {
             const taskType = classifyBenchmarkTask(userInput);
             const cfg = conversationManager.getConfig();
             const mismatch = checkModelTaskMismatch(cfg.model, taskType);
-            if (mismatch) {
+            if (mismatch && markMismatchSeen(cfg.model, taskType)) {
               setCompleted((prev) => [
                 ...prev,
                 {

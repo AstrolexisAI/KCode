@@ -65,6 +65,27 @@ describe("checkModelTaskMismatch", () => {
   });
 });
 
+describe("markMismatchSeen — session dedup", () => {
+  test("first call returns true, subsequent same (model,task) returns false", async () => {
+    const { markMismatchSeen, _resetMismatchSeen } = await import("./router");
+    _resetMismatchSeen();
+    expect(markMismatchSeen("gemma-4-26b", "complex-edit")).toBe(true);
+    expect(markMismatchSeen("gemma-4-26b", "complex-edit")).toBe(false);
+    expect(markMismatchSeen("gemma-4-26b", "complex-edit")).toBe(false);
+  });
+
+  test("different (model,task) pairs are independent", async () => {
+    const { markMismatchSeen, _resetMismatchSeen } = await import("./router");
+    _resetMismatchSeen();
+    expect(markMismatchSeen("gemma-4", "complex-edit")).toBe(true);
+    expect(markMismatchSeen("gemma-4", "simple-edit")).toBe(true);
+    expect(markMismatchSeen("qwen3-coder", "analysis")).toBe(true);
+    // Re-querying any seen pair returns false
+    expect(markMismatchSeen("gemma-4", "complex-edit")).toBe(false);
+    expect(markMismatchSeen("qwen3-coder", "analysis")).toBe(false);
+  });
+});
+
 describe("classifyBenchmarkTask gaps fixed 2026-05-08", () => {
   test("'escribí tests para X' → coding (was misclassified as chat)", () => {
     expect(classifyTask("escribí tests para el módulo de auth")).toBe("code");
