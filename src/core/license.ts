@@ -29,6 +29,16 @@ export interface LicenseClaims {
   iss: string;
   sub: string;
   features: string[];
+  /**
+   * Paid add-ons that are NOT auto-granted by any tier (not even
+   * enterprise). Each addon corresponds to a separately-purchased
+   * plugin. Examples:
+   *   "ane-embedder"  — ANE-accelerated semantic RAG (macOS-arm64)
+   *   "voice-pro"     — extended voice/STT capabilities
+   * Keep this list explicit so a misconfigured enterprise license
+   * doesn't accidentally enable expensive plugins for free.
+   */
+  addons?: string[];
   seats: number;
   exp: number;
   iat: number;
@@ -63,13 +73,13 @@ export interface LicenseValidationResult {
 // scanner's UI and move on.
 
 const KULVEX_LICENSE_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0Z1qR3kJxRKMsz8LWaF1
-gNPkMSbH9SAql0FDxAQyvVpGwOZ8CfBDJHQnVTaM7RZVHkGJ2sSxPMalN8DNFOQ3
-kEpCQn9LPnkQ5GJcR1MhFjXRbfXmUvTsXpCrJCdBlYa2NzGKQFLmFROrhDqkV8sS
-YqnPMRWJfU3va4ZVJzMkMdXBMa4VKfrgst8KaHS7xO1xPIAe9gLP5U8kxGYlQ3qN
-rADBwS7vZ0dTbKaq3H2KaNr/3gq1bSLC7TKQAV5bJfAz3gRayehFEQPJsMzJV8vq
-n9PoFdcpnJUMGj5VjPM7X8UJMbKeaECUYeaB7MFJCe8MXVeYgF7q0NAu1/bN2+y5
-kwIDAQAB
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwYktUPsxTcXlYHpMXQoG
+6aDA19xuPMlgdmPl5tRrvxL3LikgnmW6eHw5XgRjeZfID8qbeR3c170VtIdgOPyM
+dvMimgpnmY27G+q/JwNpadhCBaJ2sF5GcsnzlrygOuLrP8QzXKROU461vk+9jMey
+5om0C3XFFzoIAzedaVON+xluH0ABDmxMfgxAxwATTQNPoO9BNdcNv1uZTD5a+djD
+Sk5Yl4UY+ISvb0wZWeg4Ps8nwFs6o+9c0nVRFvhYGpbOl8AeswjoZCSZBY4fd1O+
+p7TAVkgI2Ut9i/IlAzM2iV3Vfp2y9J7A22FLTX/ficbJ6tuZ713k94atf1ztuXu0
+hwIDAQAB
 -----END PUBLIC KEY-----`;
 
 // Allow overriding the public key for testing or self-hosted license servers.
@@ -155,6 +165,7 @@ export function verifyLicenseJwt(token: string): LicenseValidationResult {
       iss: payload.iss,
       sub: payload.sub,
       features: payload.features,
+      addons: Array.isArray(payload.addons) ? (payload.addons as string[]) : undefined,
       seats: typeof payload.seats === "number" ? payload.seats : 0,
       exp: payload.exp,
       iat: typeof payload.iat === "number" ? payload.iat : 0,
@@ -261,6 +272,20 @@ export function hasLicenseFeature(feature: string): boolean {
 }
 
 /**
+ * Check whether a paid ADD-ON is enabled for this license.
+ * Add-ons are NEVER auto-granted by any tier — not even enterprise.
+ * The addon must be explicitly listed in the license JWT's `addons`
+ * array. This is intentional: paid plugins should not leak into a
+ * base enterprise license that didn't pay for them.
+ */
+export function hasLicenseAddon(addon: string): boolean {
+  const result = checkOfflineLicense();
+  if (!result.valid || !result.claims) return false;
+  const addons = result.claims.addons ?? [];
+  return addons.includes(addon);
+}
+
+/**
  * Get the license tier, or null if no valid license.
  */
 export function getLicenseTier(): "pro" | "team" | "enterprise" | null {
@@ -307,6 +332,9 @@ export function formatLicenseStatus(): string {
     `  Expires: ${expDate} (${daysLeft} days remaining)`,
     `  Features: ${c.features.join(", ")}`,
   ];
+  if (c.addons && c.addons.length > 0) {
+    lines.push(`  Addons:   ${c.addons.join(", ")}`);
+  }
 
   if (daysLeft <= 30) {
     lines.push(`  ⚠ License expires in ${daysLeft} days — contact sales@kulvex.ai to renew`);

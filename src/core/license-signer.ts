@@ -25,6 +25,11 @@ export interface LicenseInput {
   sub: string;
   /** Features granted — e.g. ["pro", "enterprise", "swarm"]. */
   features: string[];
+  /**
+   * Paid add-ons (separately purchased plugins). NOT auto-granted
+   * by any tier. Examples: "ane-embedder", "voice-pro".
+   */
+  addons?: string[];
   /** Number of seats (1 for individual). */
   seats: number;
   /** Expiry as ISO string or Unix timestamp. */
@@ -138,7 +143,7 @@ export function signLicense(input: LicenseInput, privateKeyOverride?: string): s
   }
 
   const header = { alg: "RS256", typ: "JWT" };
-  const payload = {
+  const payload: Record<string, unknown> = {
     // Default matches the hardcoded verifier check in license.ts:113
     iss: input.iss ?? "kulvex.ai",
     sub: input.sub,
@@ -151,6 +156,12 @@ export function signLicense(input: LicenseInput, privateKeyOverride?: string): s
     orgName: input.orgName,
     tier: input.tier ?? "pro",
   };
+  // Only emit `addons` when explicitly provided. Avoids sticking
+  // an empty array on every license and keeps existing test fixtures
+  // byte-identical when the field isn't relevant.
+  if (input.addons && input.addons.length > 0) {
+    payload.addons = input.addons;
+  }
 
   const headerB64 = base64UrlEncode(Buffer.from(JSON.stringify(header)));
   const payloadB64 = base64UrlEncode(Buffer.from(JSON.stringify(payload)));
