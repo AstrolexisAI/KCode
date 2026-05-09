@@ -1,3 +1,4 @@
+export { registerAneCommand } from "./ane";
 export { registerAuditCommand } from "./audit";
 export { registerAuthCommand } from "./auth";
 export { registerBenchmarkCommands } from "./benchmark";

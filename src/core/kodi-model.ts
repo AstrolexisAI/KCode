@@ -263,8 +263,15 @@ export async function downloadKodiModel(
 /**
  * Resolve the llama-server binary. We reuse the path configured for
  * the main model's server — if `kcode setup` has been run, we have a
- * known-good binary. If not, fall back to `llama-server` on PATH so
- * a user who manually installed llama.cpp can still run Kodi.
+ * known-good binary. If not, probe common install locations on the
+ * current OS, then fall back to `llama-server` on PATH so a user who
+ * manually installed llama.cpp can still run Kodi.
+ *
+ * On macOS, kcode may be launched from a context (Spotlight, dock,
+ * or non-login shell) where PATH doesn't include /opt/homebrew/bin
+ * even though the user installed via brew. Probing absolute paths
+ * here makes the kodi spawn deterministic regardless of how kcode
+ * was started.
  */
 async function resolveLlamaServerBinary(): Promise<string> {
   try {
@@ -273,7 +280,24 @@ async function resolveLlamaServerBinary(): Promise<string> {
       return cfg.enginePath;
     }
   } catch {
-    // fall through to PATH
+    // fall through to common-paths probe
+  }
+  const probeOrder =
+    process.platform === "darwin"
+      ? [
+          "/opt/homebrew/bin/llama-server",
+          "/usr/local/bin/llama-server",
+          `${process.env.HOME ?? ""}/.local/bin/llama-server`,
+        ]
+      : process.platform === "linux"
+        ? [
+            "/usr/local/bin/llama-server",
+            "/usr/bin/llama-server",
+            `${process.env.HOME ?? ""}/.local/bin/llama-server`,
+          ]
+        : [];
+  for (const candidate of probeOrder) {
+    if (candidate && existsSync(candidate)) return candidate;
   }
   return "llama-server";
 }

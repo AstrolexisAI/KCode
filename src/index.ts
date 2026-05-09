@@ -73,6 +73,7 @@ async function lazyIsVoiceAvailable() {
 import pkg from "../package.json";
 // CLI subcommand registrations
 import {
+  registerAneCommand,
   registerAuditCommand,
   registerAuthCommand,
   registerBenchmarkCommands,
@@ -439,6 +440,7 @@ program
 // ─── Register subcommands ────────────────────────────────────────
 
 registerAuthCommand(program);
+registerAneCommand(program);
 registerModelsCommand(program);
 registerPluginCommand(program);
 registerMcpCommand(program);
