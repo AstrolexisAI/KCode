@@ -1,6 +1,11 @@
 // KCode - Tests for cross-os-hint
 import { describe, expect, test } from "bun:test";
-import { deriveCrossOsHint, formatHint } from "./cross-os-hint";
+import {
+  deriveAutoSubstitute,
+  deriveCrossOsHint,
+  formatAutoSubPrefix,
+  formatHint,
+} from "./cross-os-hint";
 
 const NOT_FOUND = "bash: ip: command not found";
 
@@ -104,6 +109,105 @@ describe("deriveCrossOsHint — null cases", () => {
     // is darwin→linux only, so these don't match the linux table at all.
     expect(deriveCrossOsHint("open .", NOT_FOUND, "darwin")).toBeNull();
     expect(deriveCrossOsHint("open /tmp/foo", NOT_FOUND, "darwin")).toBeNull();
+  });
+});
+
+describe("deriveAutoSubstitute — darwin (clean 1:1)", () => {
+  test("ip addr → ifconfig", () => {
+    const r = deriveAutoSubstitute("ip addr show", NOT_FOUND, "darwin");
+    expect(r?.newCommand).toBe("ifconfig");
+    expect(r?.description).toMatch(/ip addr → ifconfig/);
+    expect(r?.originalCommand).toBe("ip addr show");
+  });
+  test("ip route → netstat -rn", () => {
+    expect(deriveAutoSubstitute("ip route", NOT_FOUND, "darwin")?.newCommand).toBe("netstat -rn");
+  });
+  test("ss → lsof", () => {
+    expect(deriveAutoSubstitute("ss -tlnp", NOT_FOUND, "darwin")?.newCommand).toMatch(/lsof/);
+  });
+  test("nproc → sysctl -n hw.ncpu", () => {
+    expect(deriveAutoSubstitute("nproc", NOT_FOUND, "darwin")?.newCommand).toBe(
+      "sysctl -n hw.ncpu",
+    );
+  });
+  test("xdg-open <url> preserves the argument", () => {
+    expect(
+      deriveAutoSubstitute("xdg-open https://example.com", NOT_FOUND, "darwin")?.newCommand,
+    ).toBe("open https://example.com");
+  });
+});
+
+describe("deriveAutoSubstitute — null cases", () => {
+  test("returns null when stderr is not command-not-found", () => {
+    expect(deriveAutoSubstitute("ip addr", "permission denied", "darwin")).toBeNull();
+  });
+  test("returns null for sudo-prefixed commands (could differ semantically)", () => {
+    expect(deriveAutoSubstitute("sudo ip addr", NOT_FOUND, "darwin")).toBeNull();
+  });
+  test("returns null for semicolon-chained commands", () => {
+    expect(deriveAutoSubstitute("ifconfig; ip addr", NOT_FOUND, "darwin")).toBeNull();
+  });
+  test("returns null for install-required tools (model must run brew install)", () => {
+    expect(deriveAutoSubstitute("nmap localhost", NOT_FOUND, "darwin")).toBeNull();
+  });
+  test("returns null for unknown commands", () => {
+    expect(deriveAutoSubstitute("zfoobar --baz", NOT_FOUND, "darwin")).toBeNull();
+  });
+});
+
+describe("deriveAutoSubstitute — chain rewriting (the Gemma 'analiza la red' fail)", () => {
+  test("rewrites BOTH segments in 'ip addr && ip route'", () => {
+    const r = deriveAutoSubstitute("ip addr && ip route", NOT_FOUND, "darwin");
+    expect(r?.newCommand).toBe("ifconfig && netstat -rn");
+  });
+  test("rewrites only the matching segment in mixed chain", () => {
+    const r = deriveAutoSubstitute("ifconfig && ip route", NOT_FOUND, "darwin");
+    expect(r?.newCommand).toBe("ifconfig && netstat -rn");
+  });
+  test("rewrites all three matching segments in a long chain", () => {
+    const r = deriveAutoSubstitute("ip addr && ip route && ss -tln", NOT_FOUND, "darwin");
+    expect(r?.newCommand).toBe("ifconfig && netstat -rn && lsof -nP -iTCP -sTCP:LISTEN");
+  });
+  test("returns null when no chain segment matches a rule", () => {
+    expect(deriveAutoSubstitute("ifconfig && netstat -rn", NOT_FOUND, "darwin")).toBeNull();
+  });
+  test("preserves pipe tail when rewriting (the real Gemma case)", () => {
+    const r = deriveAutoSubstitute("ip addr show && ip route | grep default", NOT_FOUND, "darwin");
+    expect(r?.newCommand).toBe("ifconfig && netstat -rn | grep default");
+  });
+  test("rewrites command with pipe tail (e.g. `ip addr | head -5`)", () => {
+    const r = deriveAutoSubstitute("ip addr | head -5", NOT_FOUND, "darwin");
+    expect(r?.newCommand).toBe("ifconfig | head -5");
+  });
+  test("preserves multi-stage pipe (`ip route | awk '{print $1}' | head`)", () => {
+    const r = deriveAutoSubstitute("ip route | awk '{print $1}' | head", NOT_FOUND, "darwin");
+    expect(r?.newCommand).toBe("netstat -rn | awk '{print $1}' | head");
+  });
+});
+
+describe("deriveAutoSubstitute — linux", () => {
+  test("pbcopy → xclip", () => {
+    expect(deriveAutoSubstitute("pbcopy", "command not found", "linux")?.newCommand).toMatch(
+      /xclip/,
+    );
+  });
+  test("vm_stat → free -h", () => {
+    expect(deriveAutoSubstitute("vm_stat", "command not found", "linux")?.newCommand).toBe(
+      "free -h",
+    );
+  });
+});
+
+describe("formatAutoSubPrefix", () => {
+  test("emits a recognizable audit-log marker with original + substitute", () => {
+    const out = formatAutoSubPrefix({
+      newCommand: "ifconfig",
+      description: "ip addr → ifconfig",
+      originalCommand: "ip addr show",
+    });
+    expect(out).toMatch(/\[cross-os-auto-sub\] ip addr → ifconfig/);
+    expect(out).toMatch(/\[original\] ip addr show/);
+    expect(out).toMatch(/\[ran-instead\] ifconfig/);
   });
 });
 

@@ -1077,25 +1077,57 @@ async function _executeBashInner(input: Record<string, unknown>): Promise<ToolRe
         }
       }
 
-      // Cross-OS reactive hint: if the command failed because it's
-      // Linux-only on macOS (or vice-versa), append a one-line pointer
-      // to the equivalent. Surgical scope — only for known mismatches.
+      // Cross-OS handling on failure — two layers:
+      //   1. Auto-substitute: for clean 1:1 equivalences (ip addr →
+      //      ifconfig, ss → lsof, …) re-run the substituted command
+      //      and return its output. Tool-following-weak models
+      //      (Gemma, Qwen3-Coder) ignore the hint trailer; this is
+      //      the only thing that actually unsticks them.
+      //   2. Hint trailer: for cases without a clean substitute
+      //      (install-required, sudo-required, ambiguous), append
+      //      [cross-os-hint] RETRY NOW: <suggestion>.
       let finalContent = output || `(exit code ${code})`;
+      let finalIsError = code !== 0;
       if (code !== 0) {
         try {
-          const { deriveCrossOsHint, formatHint } =
+          const { deriveAutoSubstitute, formatAutoSubPrefix, deriveCrossOsHint, formatHint } =
             require("../core/cross-os-hint") as typeof import("../core/cross-os-hint");
-          const hint = deriveCrossOsHint(command, stderr);
-          if (hint) finalContent += formatHint(hint);
-        } catch {
-          /* hint module load failed — non-fatal */
+          const autoSub = deriveAutoSubstitute(command, stderr);
+          if (autoSub) {
+            // Re-run with the substituted command. Synchronous
+            // ish — uses spawnSync to avoid nested-Promise complexity
+            // and keep the audit log linear (one tool call → one
+            // result, with the substitution noted in the prefix).
+            const { spawnSync: _spawnSync } =
+              require("node:child_process") as typeof import("node:child_process");
+            const subResult = _spawnSync("bash", ["-c", autoSub.newCommand], {
+              cwd: process.cwd(),
+              encoding: "utf-8",
+              timeout: timeoutMs,
+              env: process.env,
+            });
+            const subOut =
+              (subResult.stdout || "") + (subResult.stderr ? `\n${subResult.stderr}` : "");
+            finalContent =
+              formatAutoSubPrefix(autoSub) + (subOut || `(exit code ${subResult.status ?? -1})`);
+            finalIsError = (subResult.status ?? 1) !== 0;
+            log.info(
+              "bash",
+              `[cross-os-auto-sub] ${autoSub.description} (substituted command exit=${subResult.status})`,
+            );
+          } else {
+            const hint = deriveCrossOsHint(command, stderr);
+            if (hint) finalContent += formatHint(hint);
+          }
+        } catch (err) {
+          log.debug("bash", `cross-os-hint module failed: ${err}`);
         }
       }
 
       resolve({
         tool_use_id: "",
         content: finalContent,
-        is_error: code !== 0,
+        is_error: finalIsError,
       });
     });
 
