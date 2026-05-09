@@ -32,9 +32,13 @@ export function registerAneCommand(program: Command): void {
 
       console.log("KCode — Apple Neural Engine status");
       console.log();
-      console.log(`  Platform        ${platformOK ? "✓" : "✗"} ${process.platform}/${process.arch}${platformOK ? "" : " (ANE requires darwin/arm64)"}`);
+      console.log(
+        `  Platform        ${platformOK ? "✓" : "✗"} ${process.platform}/${process.arch}${platformOK ? "" : " (ANE requires darwin/arm64)"}`,
+      );
       console.log(`  License tier    ${tier ?? "(none)"}`);
-      console.log(`  Addon licensed  ${addon ? "✓ ane-embedder" : "✗ ane-embedder NOT in license"}`);
+      console.log(
+        `  Addon licensed  ${addon ? "✓ ane-embedder" : "✗ ane-embedder NOT in license"}`,
+      );
       console.log(`  Helper binary   ${helperOK ? "✓" : "✗"} ${aneHelperPath()}`);
       console.log(`  Core ML model   ${modelOK ? "✓" : "✗"} ${aneModelPath()}`);
       console.log();
@@ -60,7 +64,12 @@ export function registerAneCommand(program: Command): void {
       "Text to embed (default: a Spanish + English mix)",
       "hola mundo, this is a test of the ane embedder",
     )
-    .option("--rounds <n>", "Number of warm-up rounds (default 3)", (v: string) => parseInt(v, 10), 3)
+    .option(
+      "--rounds <n>",
+      "Number of warm-up rounds (default 3)",
+      (v: string) => parseInt(v, 10),
+      3,
+    )
     .action(async (opts: { text: string; rounds: number }) => {
       const { ANEEmbedder, isANEAvailable } = await import("../../core/rag/ane-embedder");
       const { hasLicenseAddon } = await import("../../core/license");
@@ -92,8 +101,14 @@ export function registerAneCommand(program: Command): void {
         const min = Math.min(...timings);
         console.log(`  avg ${avg.toFixed(1)}ms  min ${min.toFixed(1)}ms`);
         console.log();
-        const head = lastVec.slice(0, 8).map((v) => v.toFixed(6)).join(", ");
-        const tail = lastVec.slice(-3).map((v) => v.toFixed(6)).join(", ");
+        const head = lastVec
+          .slice(0, 8)
+          .map((v) => v.toFixed(6))
+          .join(", ");
+        const tail = lastVec
+          .slice(-3)
+          .map((v) => v.toFixed(6))
+          .join(", ");
         const norm = Math.sqrt(lastVec.reduce((s, v) => s + v * v, 0));
         console.log(`  vector[0..8]:  [${head}]`);
         console.log(`  vector[-3..]:  [${tail}]`);
