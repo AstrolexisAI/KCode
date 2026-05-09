@@ -19,6 +19,7 @@ export { registerModelsCommand } from "./models";
 export { registerNewCommand } from "./new";
 export { registerPluginCommand } from "./plugin";
 export { registerProCommands } from "./pro";
+export { registerRagCommand } from "./rag";
 export { registerRemoteCommand } from "./remote";
 export { registerResumeCommand } from "./resume";
 export { registerSbomCommand } from "./sbom";

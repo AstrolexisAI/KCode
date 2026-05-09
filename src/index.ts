@@ -94,6 +94,7 @@ import {
   registerNewCommand,
   registerPluginCommand,
   registerProCommands,
+  registerRagCommand,
   registerRemoteCommand,
   registerResumeCommand,
   registerSbomCommand,
@@ -441,6 +442,7 @@ program
 
 registerAuthCommand(program);
 registerAneCommand(program);
+registerRagCommand(program);
 registerModelsCommand(program);
 registerPluginCommand(program);
 registerMcpCommand(program);
