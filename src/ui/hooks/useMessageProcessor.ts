@@ -1697,9 +1697,33 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
       setSpinnerPhase("thinking");
       setLoadingMessage("Routing...");
       try {
-        const { isMultimodelEnabled, classifyBenchmarkTask, selectBenchmarkModel } = await import(
-          "../../core/router.js"
-        );
+        const {
+          isMultimodelEnabled,
+          classifyBenchmarkTask,
+          selectBenchmarkModel,
+          checkModelTaskMismatch,
+        } = await import("../../core/router.js");
+        if (!isMultimodelEnabled()) {
+          // Multimodel OFF — recommend enabling it when the default
+          // model is a known-weak match for this task.
+          try {
+            const taskType = classifyBenchmarkTask(userInput);
+            const cfg = conversationManager.getConfig();
+            const mismatch = checkModelTaskMismatch(cfg.model, taskType);
+            if (mismatch) {
+              setCompleted((prev) => [
+                ...prev,
+                {
+                  kind: "text",
+                  role: "assistant",
+                  text: `  \x1b[33m⚠ Default model ${cfg.model} is weak for '${taskType}': ${mismatch.reason}\x1b[0m\n  \x1b[33m${mismatch.suggestion}\x1b[0m`,
+                },
+              ]);
+            }
+          } catch {
+            /* non-fatal */
+          }
+        }
         if (isMultimodelEnabled()) {
           if (userInput.length > 60) {
             try {

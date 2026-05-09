@@ -1766,11 +1766,14 @@ async function runNonInteractive(
 
   // Apply multi-model routing in non-interactive mode too
   try {
-    const { isMultimodelEnabled, classifyBenchmarkTask, selectBenchmarkModel } = await import(
-      "./core/router.js"
-    );
+    const {
+      isMultimodelEnabled,
+      classifyBenchmarkTask,
+      selectBenchmarkModel,
+      checkModelTaskMismatch,
+    } = await import("./core/router.js");
+    const taskType = classifyBenchmarkTask(prompt);
     if (isMultimodelEnabled()) {
-      const taskType = classifyBenchmarkTask(prompt);
       const cfg = conversationManager.getConfig();
       const route = await selectBenchmarkModel(taskType, cfg.model);
       if (route) {
@@ -1778,6 +1781,18 @@ async function runNonInteractive(
         cfg.apiBase = route.baseUrl;
         if (route.apiKey) cfg.apiKey = route.apiKey;
         process.stderr.write(`\x1b[2m⇄ routing ${taskType} → ${route.model}\x1b[0m\n`);
+      }
+    } else {
+      // Multimodel OFF — check whether the default model is a known
+      // weak match for this task and surface a one-time recommendation
+      // to enable routing.
+      const cfg = conversationManager.getConfig();
+      const mismatch = checkModelTaskMismatch(cfg.model, taskType);
+      if (mismatch) {
+        process.stderr.write(
+          `\x1b[33m⚠ Default model ${cfg.model} is weak for '${taskType}': ${mismatch.reason}\x1b[0m\n`,
+        );
+        process.stderr.write(`\x1b[33m  ${mismatch.suggestion}\x1b[0m\n`);
       }
     }
   } catch (routeErr) {

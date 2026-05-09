@@ -24,9 +24,25 @@ export async function runPrintMode(
   //      Saves tokens (each sub-task gets only its portion of the prompt).
   //   2) Single intent: classify by regex, switch model, let sendMessage run.
   try {
-    const { isMultimodelEnabled, classifyBenchmarkTask, selectBenchmarkModel } = await import(
-      "../core/router.js"
-    );
+    const {
+      isMultimodelEnabled,
+      classifyBenchmarkTask,
+      selectBenchmarkModel,
+      checkModelTaskMismatch,
+    } = await import("../core/router.js");
+    if (!isMultimodelEnabled()) {
+      // Multimodel OFF — surface a recommendation if the default
+      // model is a known-weak match for the task at hand.
+      const taskType = classifyBenchmarkTask(prompt);
+      const cfg = conversationManager.getConfig();
+      const mismatch = checkModelTaskMismatch(cfg.model, taskType);
+      if (mismatch) {
+        process.stderr.write(
+          `\x1b[33m⚠ Default model ${cfg.model} is weak for '${taskType}': ${mismatch.reason}\x1b[0m\n`,
+        );
+        process.stderr.write(`\x1b[33m  ${mismatch.suggestion}\x1b[0m\n`);
+      }
+    }
     if (isMultimodelEnabled()) {
       // Conductor path — only for prompts > 60 chars (avoids overhead on short chats)
       if (prompt.length > 60) {

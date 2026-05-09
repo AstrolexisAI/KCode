@@ -1,0 +1,85 @@
+// KCode - Tests for checkModelTaskMismatch
+import { describe, expect, test } from "bun:test";
+import { checkModelTaskMismatch, classifyBenchmarkTask, classifyTask } from "./router";
+
+describe("checkModelTaskMismatch", () => {
+  test("Qwen3-Coder + analysis task → mismatch", () => {
+    const m = checkModelTaskMismatch(
+      "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit-DWQ",
+      "analysis",
+    );
+    expect(m).not.toBeNull();
+    expect(m?.reason).toMatch(/Qwen3-Coder is excellent at code-gen/);
+    expect(m?.suggestion).toMatch(/multimodel on/);
+  });
+
+  test("Qwen3-Coder + chat task → mismatch", () => {
+    expect(checkModelTaskMismatch("Qwen3-Coder-30B", "chat")?.reason).toMatch(/Qwen3-Coder/);
+  });
+
+  test("Qwen3-Coder + complex-edit task → no mismatch (its strength)", () => {
+    expect(checkModelTaskMismatch("Qwen3-Coder-30B", "complex-edit")).toBeNull();
+  });
+
+  test("Gemma + complex-edit task → mismatch", () => {
+    const m = checkModelTaskMismatch("mlx-community/gemma-4-26b-a4b-it-4bit", "complex-edit");
+    expect(m?.reason).toMatch(/Gemma family is chat\/translation-tuned/);
+  });
+
+  test("Gemma + chat → no mismatch (its strength)", () => {
+    expect(checkModelTaskMismatch("Gemma-4-31B", "chat")).toBeNull();
+  });
+
+  test("Gemma + analysis → no mismatch (broadly OK)", () => {
+    expect(checkModelTaskMismatch("Gemma-4-26B", "analysis")).toBeNull();
+  });
+
+  test("Llama-2 + any agentic task → mismatch", () => {
+    expect(checkModelTaskMismatch("Llama-2-7B", "complex-edit")?.reason).toMatch(/Llama/);
+    expect(checkModelTaskMismatch("Llama-2-7B", "analysis")?.reason).toMatch(/Llama/);
+  });
+
+  test("Phi-3 + agentic task → mismatch", () => {
+    expect(checkModelTaskMismatch("microsoft/phi-3-mini", "complex-edit")?.reason).toMatch(
+      /Phi-2\/3/,
+    );
+  });
+
+  test("Claude Haiku → no mismatch (broadly capable)", () => {
+    expect(checkModelTaskMismatch("claude-haiku-4-5-20251001", "complex-edit")).toBeNull();
+    expect(checkModelTaskMismatch("claude-haiku-4-5-20251001", "analysis")).toBeNull();
+  });
+
+  test("Grok-4 → no mismatch", () => {
+    expect(checkModelTaskMismatch("grok-4", "complex-edit")).toBeNull();
+  });
+
+  test("GLM-4.7 → no mismatch (verified 2026-05-08 strong agentic)", () => {
+    expect(checkModelTaskMismatch("mlx-community/GLM-4.7-Flash-4bit", "analysis")).toBeNull();
+    expect(checkModelTaskMismatch("mlx-community/GLM-4.7-Flash-4bit", "complex-edit")).toBeNull();
+  });
+
+  test("Empty/unknown model → no mismatch", () => {
+    expect(checkModelTaskMismatch("", "complex-edit")).toBeNull();
+    expect(checkModelTaskMismatch("custom-internal-model", "complex-edit")).toBeNull();
+  });
+});
+
+describe("classifyBenchmarkTask gaps fixed 2026-05-08", () => {
+  test("'escribí tests para X' → coding (was misclassified as chat)", () => {
+    expect(classifyTask("escribí tests para el módulo de auth")).toBe("code");
+  });
+
+  test("'fix the bug in the parser' → code", () => {
+    expect(classifyTask("fix the bug in the parser")).toBe("code");
+  });
+
+  test("'creá un proyecto Next.js' → code (creation)", () => {
+    expect(classifyTask("creá un proyecto Next.js nuevo")).toBe("code");
+  });
+
+  test("language-only mention triggers code classification", () => {
+    expect(classifyTask("ayudame con typescript")).toBe("code");
+    expect(classifyTask("dale rust support")).toBe("code");
+  });
+});

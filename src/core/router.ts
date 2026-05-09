@@ -43,9 +43,15 @@ function detectSimpleTask(text: string): boolean {
 
 // Patterns that indicate code-heavy tasks
 const CODE_INDICATORS = [
-  /\b(refactor|debug|fix bug|implement|write code|create function|unit test|test for)\b/i,
+  /\b(refactor|debug|fix bug|fix the bug|implement|write code|create function|unit test|test for)\b/i,
   /\b(compile|build|deploy|migration|schema|endpoint|API)\b/i,
   /```[a-z]+\n/, // code blocks with language
+  // Spanish: refactor, fix, write tests, create function/project, etc.
+  // Allow optional article ("un", "una", "el", "la") between verb and target noun.
+  /\b(refactor[aá]?|implement[aá]?|escrib[ií]?|escribir|crea[rd]?|cre[aá]|cre[aá]me|gener[ae]r?|gener[aá])\s+(?:un[ao]?|el|la|los|las|este|esta)?\s*(?:tests?|funci[oó]n|m[oó]dulo|clase|script|c[oó]digo|tipo|interface|api|endpoint|proyecto|app|aplicaci[oó]n|biblioteca|libreria|librer[ií]a|servicio|servidor|repo|repositorio|microservicio)/i,
+  /\b(fix(ear)?|arregl[ae]r?|arregl[aá]|corregir?|corrig[ie]|debugg?[ae]?r?)\s+(?:el|la|los|este|esta|un|una|esto)?\s*(?:bug|error|issue|funci[oó]n|c[oó]digo|m[oó]dulo|tests?)/i,
+  /\b(test[ae]?r?|testin?g)\b/i, // testing in any form
+  /\b(typescript|javascript|python|rust|golang|ruby|kotlin|swift)\b/i,
 ];
 
 // Patterns that indicate deep reasoning tasks
@@ -264,6 +270,74 @@ const BENCHMARK_TAG_MAP: Record<BenchmarkTaskType, string[][]> = {
   vision: [["vision"]],
   general: [["coding"], ["fast"]],
 };
+
+// ─── Default-model task mismatch detection ─────────────────────
+//
+// When multimodel routing is OFF, the user is using a single default
+// model for everything. Some defaults are great for one kind of task
+// and bad for another (Qwen3-Coder is excellent code-gen but ignores
+// hints in agentic flows; Gemma is good at chat/translation but does
+// not follow tool guidance for code edits). Detect that mismatch and
+// suggest enabling multimodel routing so KCode picks per-task.
+//
+// Returns null when there's no mismatch (model is broadly OK for the
+// task or we have no opinion on the combination).
+
+export interface ModelTaskMismatch {
+  /** One-sentence why this default model is weak for the current task. */
+  reason: string;
+  /** Concrete next step the user can take. */
+  suggestion: string;
+}
+
+interface MismatchRule {
+  modelMatch: RegExp;
+  badTasks: ReadonlySet<BenchmarkTaskType>;
+  reason: string;
+}
+
+const MISMATCH_RULES: ReadonlyArray<MismatchRule> = [
+  {
+    modelMatch: /qwen3-coder/i,
+    badTasks: new Set<BenchmarkTaskType>(["analysis", "chat"]),
+    reason:
+      "Qwen3-Coder is excellent at code-gen but ignores tool-result hints in agentic / analysis prompts (verified 2026-05-08).",
+  },
+  {
+    modelMatch: /gemma-?[234]/i,
+    badTasks: new Set<BenchmarkTaskType>(["complex-edit", "simple-edit", "multi-step"]),
+    reason:
+      "Gemma family is chat/translation-tuned and falls into 'explain mode' on coding prompts instead of issuing tool calls.",
+  },
+  {
+    modelMatch: /llama-?[23]\b|llama-3\.0-/i,
+    badTasks: new Set<BenchmarkTaskType>(["complex-edit", "simple-edit", "multi-step", "analysis"]),
+    reason:
+      "Llama 2 / Llama 3.0 predate strong tool-use fine-tuning and are unreliable for agentic work.",
+  },
+  {
+    modelMatch: /phi-(2|3)\b/i,
+    badTasks: new Set<BenchmarkTaskType>(["complex-edit", "simple-edit", "multi-step", "analysis"]),
+    reason: "Phi-2/3 are too small for reliable agentic tool use.",
+  },
+];
+
+export function checkModelTaskMismatch(
+  modelName: string,
+  task: BenchmarkTaskType,
+): ModelTaskMismatch | null {
+  if (!modelName) return null;
+  for (const rule of MISMATCH_RULES) {
+    if (rule.modelMatch.test(modelName) && rule.badTasks.has(task)) {
+      return {
+        reason: rule.reason,
+        suggestion:
+          "Enable multi-model routing so KCode auto-picks a stronger model for this task: run `/multimodel on` (or set `multimodel: true` in ~/.kcode/settings.json).",
+      };
+    }
+  }
+  return null;
+}
 
 /**
  * Check if multimodel routing is enabled in settings.
