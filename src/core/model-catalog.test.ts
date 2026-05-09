@@ -105,19 +105,36 @@ describe("model-catalog", () => {
 
   // ── Original mark5 series still intact ─────────────────────────────
 
-  test("mark5 series models are present (mark5-80b dropped 2026-05-08 with Qwen3-Coder removal)", () => {
+  test("mark5 series models are present (post 2026-05-08 catalog refresh)", () => {
     const mark5Names = [
       "mnemo:mark5-pico",
       "mnemo:mark5-nano",
       "mnemo:mark5-mini",
+      "mnemo:mark5-coder",
       "mnemo:mark5-mid",
       "mnemo:mark5-max",
     ];
     for (const name of mark5Names) {
       expect(findCatalogEntry(name)).toBeDefined();
     }
-    // mark5-80b should NOT be present anymore
     expect(findCatalogEntry("mnemo:mark5-80b")).toBeUndefined();
+  });
+
+  test("mark5-mini is GLM-4.7-Flash (agentic default), not Gemma any more", () => {
+    const e = findCatalogEntry("mnemo:mark5-mini");
+    expect(e?.mlxRepo).toMatch(/GLM-4\.7-Flash/);
+    expect(e?.description).toMatch(/agentic|recommended default/i);
+  });
+
+  test("mark5-coder is Qwen3-Coder", () => {
+    const e = findCatalogEntry("mnemo:mark5-coder");
+    expect(e?.mlxRepo).toMatch(/Qwen3-Coder/);
+    expect(e?.description).toMatch(/code-gen|refactor/i);
+  });
+
+  test("mark5-mid / mark5-max are still Gemma 31B (chat tier)", () => {
+    expect(findCatalogEntry("mnemo:mark5-mid")?.mlxRepo).toMatch(/gemma-4-31b/);
+    expect(findCatalogEntry("mnemo:mark5-max")?.mlxRepo).toMatch(/gemma-4-31b/);
   });
 
   // ── getAvailableModels ─────────────────────────────────────────────

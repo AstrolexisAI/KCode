@@ -41,15 +41,35 @@ export interface CatalogEntry {
 }
 
 // ── Model Catalog ────────────────────────────────────────────────────────
-// mark5-pico: Qwen3-4B dense — tiny, fits 4GB GPUs or CPU-only
-// mark5-nano: Qwen3-8B dense — fast, fits 12GB GPUs
-// mark5-mini to mark5-max: Gemma-4-{26B,31B} — strong agentic tool use
-//   verified 2026-05-08 on macOS (gateway/IP/ARP analysis from minimal
-//   prompt). Replaced previous Qwen3-Coder-A3B entries which were
-//   marked tool-fitness=weak after they ignored cross-os-hint trailers
-//   and gave up on macOS network prompts.
-// (Previous mark5-80b — Qwen3-Coder-Next 80B — removed; no Gemma at
-//  80B and the 30B variants cover the same use cases.)
+// 2026-05-08 catalog refresh after multi-model verification on macOS:
+//
+// AGENTIC tier (general tool use, network/system, mixed work):
+//   mark5-mini  → GLM-4.7-Flash 4bit  (16GB VRAM)  ← recommended default
+//   GLM-4.7 verified to issue macOS-correct commands directly (ifconfig,
+//   arp, lsof), use nmap when present, multi-stage exploration, no
+//   "tools restricted" hallucinations.
+//
+// CODING tier (pure code generation, refactor, fix bug):
+//   mark5-coder → Qwen3-Coder 30B-A3B 4bit DWQ  (16GB VRAM)
+//   Best-in-class local coder. Tool-fitness=weak for agentic mixed
+//   work (verified 2026-05-08), so it's deliberately a separate
+//   tier and not a default — pick it when the task is pure code-gen.
+//
+// CHAT / TRANSLATION tier (Spanish↔English, explanations, doc-writing):
+//   mark5-mid  → Gemma 4 31B 4bit  (24GB VRAM)
+//   mark5-max  → Gemma 4 31B 8bit  (36GB VRAM)
+//   Gemma is chat/translation-tuned. Falls into explain mode on
+//   coding prompts (verified). Excellent for Spanish/English chat.
+//
+// SMALL tier (entry-level, CPU-only or 4-12GB GPUs):
+//   mark5-pico → Qwen3.5 4B  (3GB)
+//   mark5-nano → Qwen3 8B    (10GB)
+//
+// REMOVED:
+//   mark5-80b (Qwen3-Coder-Next 80B) — flagship at 53GB, dropped
+//     when Qwen3-Coder marked weak agentic 2026-05-08
+//   Qwen3.6-35B — never made it into the catalog after E2E showed
+//     it hallucinates fake hostnames/IPs in network output
 export const MODEL_CATALOG: CatalogEntry[] = [
   {
     codename: "mnemo:mark5-pico",
@@ -77,14 +97,26 @@ export const MODEL_CATALOG: CatalogEntry[] = [
   },
   {
     codename: "mnemo:mark5-mini",
-    paramBillions: 26,
+    paramBillions: 32,
     quant: "Q4_K_M",
-    sizeGB: 13.5,
+    sizeGB: 15.7,
+    minVramMB: 16384,
+    contextSize: 32768,
+    localFile: "mark5-mini.gguf",
+    description: "GLM-4.7-Flash — fits 16GB GPUs, strong agentic tool use (recommended default)",
+    mlxRepo: "mlx-community/GLM-4.7-Flash-4bit",
+    mlxQuant: "4bit",
+  },
+  {
+    codename: "mnemo:mark5-coder",
+    paramBillions: 30,
+    quant: "Q4_K_M",
+    sizeGB: 16,
     minVramMB: 16384,
     contextSize: 131072,
-    localFile: "mark5-mini.gguf",
-    description: "Gemma 4 26B — fits 16GB GPUs, strong tool use",
-    mlxRepo: "mlx-community/gemma-4-26b-a4b-it-4bit",
+    localFile: "mark5-coder.gguf",
+    description: "Qwen3-Coder 30B-A3B — pure code-gen, refactor, fix bug; weak agentic",
+    mlxRepo: "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit-DWQ",
     mlxQuant: "4bit",
   },
   {
@@ -95,7 +127,7 @@ export const MODEL_CATALOG: CatalogEntry[] = [
     minVramMB: 24576,
     contextSize: 131072,
     localFile: "mark5-mid.gguf",
-    description: "Gemma 4 31B — fits 24GB GPUs, strong tool use",
+    description: "Gemma 4 31B — chat / translation / Spanish↔English (24GB GPUs)",
     mlxRepo: "mlx-community/gemma-4-31b-it-4bit",
     mlxQuant: "4bit",
   },
@@ -107,7 +139,7 @@ export const MODEL_CATALOG: CatalogEntry[] = [
     minVramMB: 36864,
     contextSize: 131072,
     localFile: "mark5-max.gguf",
-    description: "Gemma 4 31B at 8-bit — best quality, fits 36GB+ GPUs",
+    description: "Gemma 4 31B at 8-bit — chat best-quality, 36GB+ GPUs",
     mlxRepo: "mlx-community/gemma-4-31b-it-8bit",
     mlxQuant: "8bit",
   },
