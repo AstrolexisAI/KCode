@@ -885,6 +885,23 @@ export class ConversationManager {
       // Phase 32 — phantom-typo detector (delegated to conversation-phantom-typo.ts)
       await detectPhantomTypoForTurn(guardState, fullText);
 
+      // Give-up detection — flag this turn if the model wrote a refusal
+      // / "tools restricted" hallucination AND issued zero tool calls.
+      // After 2 give-up turns, the reliability layer blacklists the
+      // model so the router escalates to the next priority tier on the
+      // next routing decision. Wired to multi-model setups; for
+      // single-model sessions this just logs.
+      try {
+        const { detectGiveUp } = await import("./give-up-detector.js");
+        const detection = detectGiveUp(fullText, toolCalls.length);
+        if (detection) {
+          const { recordGiveUp } = await import("./model-reliability.js");
+          recordGiveUp(detection.signature);
+        }
+      } catch (err) {
+        log.debug("give-up", `detector failed: ${err}`);
+      }
+
       // Store assistant message in conversation history
       // Guard: if content is empty (e.g. repetition_aborted with no text generated),
       // inject a placeholder so subsequent API calls don't fail with

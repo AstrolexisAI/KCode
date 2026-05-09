@@ -28,6 +28,14 @@ export interface ModelEntry {
   gpu?: string; // e.g. "RTX 5090", informational only
   description?: string;
   provider?: ModelProvider; // "openai" (default) or "anthropic" — auto-detected from name if not set
+  // Optional pricing metadata (USD per 1M tokens). When set, the
+  // multi-model router prefers the cheapest model that satisfies the
+  // required tags for a task. Local models default to 0/0; cloud
+  // models without explicit pricing fall back to a conservative
+  // "moderate" estimate so they're not preferred over verified cheap
+  // ones.
+  pricePerMtokInput?: number;
+  pricePerMtokOutput?: number;
 }
 
 export interface ModelsConfig {

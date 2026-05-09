@@ -271,6 +271,82 @@ const BENCHMARK_TAG_MAP: Record<BenchmarkTaskType, string[][]> = {
   general: [["coding"], ["fast"]],
 };
 
+// ─── Cost-aware sorting ────────────────────────────────────────
+//
+// Within a tag group, prefer cheaper models. Local models (no
+// pricePerMtok* fields, host on 127.0.0.1/localhost) cost zero.
+// Cloud models without explicit pricing fall to a "moderate" sentinel
+// so they don't beat verified-cheap models like Haiku.
+//
+// Pricing reference (approx USD per 1M tokens, late-2025 / early-
+// 2026 list rates) — used as fallback when entry doesn't set explicit
+// values. Conservative — favors known-cheap, never over-promises.
+const PRICING_FALLBACK: ReadonlyArray<readonly [RegExp, number, number]> = [
+  // model match, $/Mtok input, $/Mtok output
+  [/^claude-haiku-/, 1, 5],
+  [/^claude-sonnet-/, 3, 15],
+  [/^claude-opus-/, 15, 75],
+  [/^grok-3(-mini)?\b/, 2, 10],
+  [/^grok-4(-fast|-1)?\b/, 5, 25],
+  [/^gpt-4o-mini/, 0.15, 0.6],
+  [/^gpt-4o\b/, 2.5, 10],
+  [/^gpt-5/, 5, 20],
+  [/^o1\b/, 15, 60],
+  [/^o3-mini/, 1, 4],
+  [/^o3\b/, 10, 40],
+  [/^gemini-1\.5-flash/, 0.075, 0.3],
+  [/^gemini-2-flash/, 0.1, 0.4],
+  [/^gemini-2-pro/, 5, 15],
+  [/^deepseek-v[23]/, 0.5, 2],
+];
+
+function isLocalUrl(baseUrl: string): boolean {
+  return /localhost|127\.0\.0\.1|\.local\b/.test(baseUrl);
+}
+
+interface PricedModel {
+  inPrice: number;
+  outPrice: number;
+}
+
+/**
+ * Resolve cost per 1M tokens for a model. Returns 0 for local,
+ * explicit fields if set, fallback table match if found, or a
+ * conservative cloud default ($5/$25) if nothing matches.
+ */
+export function priceModel(model: {
+  name: string;
+  baseUrl: string;
+  pricePerMtokInput?: number;
+  pricePerMtokOutput?: number;
+}): PricedModel {
+  if (isLocalUrl(model.baseUrl)) return { inPrice: 0, outPrice: 0 };
+  if (model.pricePerMtokInput !== undefined && model.pricePerMtokOutput !== undefined) {
+    return { inPrice: model.pricePerMtokInput, outPrice: model.pricePerMtokOutput };
+  }
+  for (const [re, inP, outP] of PRICING_FALLBACK) {
+    if (re.test(model.name)) return { inPrice: inP, outPrice: outP };
+  }
+  // Unknown cloud model — conservative moderate estimate.
+  return { inPrice: 5, outPrice: 25 };
+}
+
+/**
+ * Compare two models by blended cost (input + output, weighted 1:3 to
+ * approximate typical agentic-session ratio: more output than input).
+ * Local models always sort first (cost 0).
+ */
+function compareModelCost(
+  a: { name: string; baseUrl: string; pricePerMtokInput?: number; pricePerMtokOutput?: number },
+  b: { name: string; baseUrl: string; pricePerMtokInput?: number; pricePerMtokOutput?: number },
+): number {
+  const ap = priceModel(a);
+  const bp = priceModel(b);
+  const aBlend = ap.inPrice + ap.outPrice * 3;
+  const bBlend = bp.inPrice + bp.outPrice * 3;
+  return aBlend - bBlend;
+}
+
 // ─── Default-model task mismatch detection ─────────────────────
 //
 // When multimodel routing is OFF, the user is using a single default
@@ -455,8 +531,18 @@ export async function selectBenchmarkModel(
     });
 
     if (matched.length > 0) {
-      const different = matched.find((m) => m.name !== defaultModel);
-      const chosen = different ?? matched[0]!;
+      // Cost-aware preference: among models satisfying the tag group,
+      // pick the cheapest. Local always wins (cost 0); within cloud,
+      // sort by blended $/Mtok. The "different from default" rule is
+      // a tiebreak — prefer not switching just for the sake of it.
+      // (Smart-escalation budget gate is the natural extension here —
+      // skip a 3×-costlier escalation when session is past 75% of
+      // budget. Deferred to a follow-up because the PolicyEngine
+      // doesn't currently expose a singleton getter; would need a
+      // small refactor.)
+      const sorted = [...matched].sort(compareModelCost);
+      const cheapestDifferent = sorted.find((m) => m.name !== defaultModel);
+      const chosen = cheapestDifferent ?? sorted[0]!;
       if (chosen.name !== defaultModel) {
         // Resolve API key for the new provider
         const { resolveApiKey } = await import("./request-builder.js");

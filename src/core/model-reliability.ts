@@ -19,8 +19,14 @@ const HALLUCINATION_BLACKLIST_THRESHOLD = 2;
 // Keyed by model name. Counters reset on session boundary (via resetReliability).
 const hallucinationCounts = new Map<string, number>();
 const reasoningLoopCounts = new Map<string, number>();
+const giveUpCounts = new Map<string, number>();
 const blacklisted = new Set<string>();
 let currentModel: string | null = null;
+
+// Two give-up turns (model wrote "tools restricted" without issuing
+// a single Bash) → the model isn't getting unstuck. Blacklist for the
+// session so the router escalates to the next priority tier.
+const GIVE_UP_BLACKLIST_THRESHOLD = 2;
 
 /** Set the model being used for the next turn (called from router/orchestrator). */
 export function setActiveModel(model: string): void {
@@ -59,6 +65,28 @@ export function recordReasoningLoop(): void {
   }
 }
 
+/**
+ * Called when give-up-detector flags this turn (model wrote
+ * "tools restricted" / "no puedo" / "please paste" without issuing
+ * any tool calls). Two flags within a session → blacklist.
+ */
+export function recordGiveUp(signature: string): void {
+  if (!currentModel) return;
+  const next = (giveUpCounts.get(currentModel) ?? 0) + 1;
+  giveUpCounts.set(currentModel, next);
+  log.warn(
+    "model-reliability",
+    `${currentModel} gave up on agentic task (#${next}, signature=${signature})`,
+  );
+  if (next >= GIVE_UP_BLACKLIST_THRESHOLD && !blacklisted.has(currentModel)) {
+    blacklisted.add(currentModel);
+    log.warn(
+      "model-reliability",
+      `${currentModel} hit ${GIVE_UP_BLACKLIST_THRESHOLD} give-up turns — blacklisted for this session, router will escalate`,
+    );
+  }
+}
+
 /** Is this model blacklisted in the current session? */
 export function isBlacklisted(model: string): boolean {
   return blacklisted.has(model);
@@ -69,13 +97,19 @@ export function getReliabilityReport(): Array<{
   model: string;
   hallucinations: number;
   reasoningLoops: number;
+  giveUps: number;
   blacklisted: boolean;
 }> {
-  const models = new Set([...hallucinationCounts.keys(), ...reasoningLoopCounts.keys()]);
+  const models = new Set([
+    ...hallucinationCounts.keys(),
+    ...reasoningLoopCounts.keys(),
+    ...giveUpCounts.keys(),
+  ]);
   return [...models].map((m) => ({
     model: m,
     hallucinations: hallucinationCounts.get(m) ?? 0,
     reasoningLoops: reasoningLoopCounts.get(m) ?? 0,
+    giveUps: giveUpCounts.get(m) ?? 0,
     blacklisted: blacklisted.has(m),
   }));
 }
@@ -84,6 +118,7 @@ export function getReliabilityReport(): Array<{
 export function resetReliability(): void {
   hallucinationCounts.clear();
   reasoningLoopCounts.clear();
+  giveUpCounts.clear();
   blacklisted.clear();
   currentModel = null;
 }
