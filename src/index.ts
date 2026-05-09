@@ -1317,6 +1317,22 @@ async function runMain(
     setTmuxMode(true);
   }
 
+  // In --print mode there's no UI to prompt the user, so an "ask" permission
+  // mode (the default) silently denies every tool call with "No permission
+  // prompt function configured" and the run looks like a baffling no-op.
+  // Auto-upgrade to "auto" so print mode just works in CI/scripts. Honor
+  // explicit user intent (--permission=ask) and managed policy locks.
+  if (opts.print && config.permissionMode === "ask" && opts.permission !== "ask") {
+    const { loadManagedPolicy } = await import("./core/config");
+    const policy = await loadManagedPolicy();
+    if (!policy.permissionMode) {
+      process.stderr.write(
+        '\x1b[2m[print mode] permission mode auto-upgraded to "auto" (no UI to prompt). Pass --permission=ask to override.\x1b[0m\n',
+      );
+      config.permissionMode = "auto";
+    }
+  }
+
   // Create conversation manager (lazy-loaded to reduce cold start)
   profileCheckpoint("conversation_init");
   const ConversationManager = await lazyGetConversationManager();
@@ -1671,6 +1687,38 @@ async function runMain(
     try {
       const { getRagAutoIndexer } = await import("./core/rag/auto-index");
       ragAutoIndexer = getRagAutoIndexer(cwd);
+      // Kick off initial index of the cwd in the background. This
+      // makes `kcode rag search` (and the inline RAG context-injector)
+      // useful from the first turn instead of requiring a manual
+      // `kcode rag index .`. Fire-and-forget; never blocks the UI.
+      // Opt-out: KCODE_RAG_AUTOINDEX=0 (or skip non-project dirs).
+      const autoindexEnv = process.env.KCODE_RAG_AUTOINDEX;
+      const isOptOut = autoindexEnv === "0" || autoindexEnv === "false";
+      if (!isOptOut) {
+        const { existsSync } = await import("node:fs");
+        const { join } = await import("node:path");
+        // Only auto-index dirs that look like a project — avoids
+        // dragging the user's $HOME into the index when they run
+        // kcode from somewhere generic.
+        const projectMarkers = [
+          ".git",
+          "package.json",
+          "pyproject.toml",
+          "Cargo.toml",
+          "go.mod",
+          "pom.xml",
+          "build.gradle",
+        ];
+        const looksLikeProject = projectMarkers.some((m) => existsSync(join(cwd, m)));
+        if (looksLikeProject) {
+          // setImmediate so we don't block the boot path
+          setImmediate(() => {
+            ragAutoIndexer?.kickoffInitialIndex().catch((err) => {
+              log.debug("rag", `Initial autoindex skipped: ${err}`);
+            });
+          });
+        }
+      }
     } catch (err) {
       log.debug("index", `RAG auto-indexer init skipped: ${err}`);
     }

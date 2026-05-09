@@ -24,6 +24,11 @@ const RECON_NUDGE_THRESHOLD = 5;
 const READ_ONLY_TOOLS = new Set(["Read", "Grep", "Glob", "LS", "WebFetch", "WebSearch"]);
 const WRITE_TOOLS = new Set(["Edit", "MultiEdit", "Write", "Bash"]);
 
+function truncateError(s: string, max = 240): string {
+  const oneLine = s.replace(/\s+/g, " ").trim();
+  return oneLine.length <= max ? oneLine : `${oneLine.slice(0, max)}…`;
+}
+
 function intentDirective(intent: string): string | null {
   switch (intent) {
     case "complex-edit":
@@ -148,12 +153,23 @@ async function executeSubTask(
   const start = Date.now();
 
   let prompt = task.prompt;
+  let allDepsFailedSummary: string | null = null;
   if (task.depends_on.length > 0) {
     const contextParts: string[] = [];
     const failedEditDeps: string[] = [];
+    const failedDeps: { id: string; error: string }[] = [];
     for (const depId of task.depends_on) {
       const depResult = completedResults.get(depId);
       if (!depResult) continue;
+      // If a dep hard-failed (e.g. HTTP 401, network error), do NOT inject its
+      // output as if it were a real result — `output` is just `[task failed: ...]`,
+      // and downstream models will earnestly "analyze" the error string as
+      // content (e.g. summarizing a 401 body as if it were the failing test
+      // output). Surface the failure explicitly instead.
+      if (depResult.error) {
+        failedDeps.push({ id: depId, error: truncateError(depResult.error) });
+        continue;
+      }
       if (depResult.output) {
         contextParts.push(
           `=== Output of task ${depId} (${depResult.intent}) ===\n${depResult.output}`,
@@ -169,12 +185,45 @@ async function executeSubTask(
         failedEditDeps.push(depId);
       }
     }
+    // Hard short-circuit: every present dep failed and there is no usable
+    // context. Skip the model entirely — even with strong warnings, "chat"
+    // intent models still hallucinate analysis from upstream error strings.
+    // Returning the failure directly is cheaper, faster, and impossible to
+    // confabulate around.
+    if (contextParts.length === 0 && failedDeps.length > 0) {
+      allDepsFailedSummary = failedDeps.map((d) => `${d.id}: ${d.error}`).join("; ");
+    }
     if (contextParts.length > 0) {
       prompt = `${contextParts.join("\n\n")}\n\n=== Your task (${task.id}) ===\n${task.prompt}`;
+    }
+    if (failedDeps.length > 0) {
+      const list = failedDeps.map((d) => `  - ${d.id}: ${d.error}`).join("\n");
+      prompt += `\n\n---\nIMPORTANT: Upstream sub-task(s) FAILED with infrastructure errors and produced NO usable output:\n${list}\n\nDo NOT analyze or summarize these failure messages as if they were real results. If your task strictly depended on their output, state plainly that the upstream task failed and the work could not be completed. If you can fulfill the user's original request directly using local tools (Bash, Read, Grep, Edit) without those upstream results, do so.`;
     }
     if (failedEditDeps.length > 0) {
       prompt += `\n\n---\nIMPORTANT: Task(s) ${failedEditDeps.join(", ")} did NOT perform any successful edits. If your task asks you to describe or explain "what was fixed", say explicitly that NO FIX WAS MADE and describe what was attempted instead. Do not invent a fix that didn't happen.`;
     }
+  }
+
+  if (allDepsFailedSummary) {
+    log.warn(
+      "router/orchestrator",
+      `Sub-task ${task.id} skipped: all upstream dependencies failed (${allDepsFailedSummary})`,
+    );
+    onProgress?.({
+      type: "task-error",
+      id: task.id,
+      model: "(skipped)",
+      error: `all upstream dependencies failed: ${allDepsFailedSummary}`,
+    });
+    return {
+      id: task.id,
+      intent: task.intent,
+      model: "(skipped)",
+      output: `[task skipped: all upstream dependencies failed — ${allDepsFailedSummary}]`,
+      error: `all upstream dependencies failed: ${allDepsFailedSummary}`,
+      elapsedMs: Date.now() - start,
+    };
   }
 
   // Intent-specific directive: anchor the model on its actual job so it
