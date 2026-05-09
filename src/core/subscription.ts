@@ -226,10 +226,7 @@ export async function getSubscription(opts?: { forceRefresh?: boolean }): Promis
       // Map license tier → subscription tier; addons feed into features.
       const sub: Subscription = {
         tier: (claims.tier as Subscription["tier"]) ?? "pro",
-        features: [
-          ...(claims.features ?? []),
-          ...((claims.addons ?? []).map((a) => `addon:${a}`)),
-        ],
+        features: [...(claims.features ?? []), ...(claims.addons ?? []).map((a) => `addon:${a}`)],
         seats: claims.seats ?? 1,
         status: "active" as Subscription["status"],
         expiresAt: claims.exp ?? 0,
