@@ -115,27 +115,36 @@ struct ANEEmbedder {
     }
 
     // ── Tokenization stub ──────────────────────────────────────
-    // Placeholder — the production version reads tokenizer.json
-    // beside the model. For the PoC, return a fixed-length array so
-    // the model load + Core ML pipeline can be smoke-tested. A
-    // real BGE-M3 needs xlm-roberta tokenizer; using the shipped
-    // tokenizer.json is the next iteration.
+    // Placeholder — pads to 512 to match the fixed input shape
+    // baked into the Core ML trace (max_length=512 in conversion
+    // script). Real xlm-roberta tokenization is the next iteration;
+    // for now this lets us smoke-test the ANE pipeline end-to-end
+    // even though embeddings won't be semantically meaningful.
+    static let MAX_SEQ_LEN = 512
+
     static func tokenize(_ text: String) throws -> [Int32] {
-        // Stub: 32-char prefix → byte values clamped to vocab. Will
-        // be replaced by a real tokenizer in the build script.
-        let bytes = Array(text.utf8.prefix(32)).map { Int32($0) }
-        // Pad to 32 with zeros so the input shape is fixed.
+        // Stub: byte values as token IDs, clamped to xlm-roberta vocab
+        // size (≈250k). Pad to MAX_SEQ_LEN with 0.
+        let bytes = Array(text.utf8.prefix(MAX_SEQ_LEN)).map { Int32($0) }
         var padded = bytes
-        while padded.count < 32 { padded.append(0) }
+        while padded.count < MAX_SEQ_LEN { padded.append(0) }
         return padded
     }
 
     static func buildProvider(inputIds: [Int32], model: MLModel) throws -> MLDictionaryFeatureProvider {
-        let array = try MLMultiArray(shape: [1, NSNumber(value: inputIds.count)], dataType: .int32)
+        let count = inputIds.count
+        let inputArray = try MLMultiArray(shape: [1, NSNumber(value: count)], dataType: .int32)
+        let maskArray = try MLMultiArray(shape: [1, NSNumber(value: count)], dataType: .int32)
         for (i, v) in inputIds.enumerated() {
-            array[i] = NSNumber(value: v)
+            inputArray[i] = NSNumber(value: v)
+            // Tokens with id=0 are padding (BGE-M3 / xlm-roberta convention).
+            // Mask them as 0 so attention skips them; real tokens get 1.
+            maskArray[i] = NSNumber(value: v == 0 ? 0 : 1)
         }
-        return try MLDictionaryFeatureProvider(dictionary: ["input_ids": array])
+        return try MLDictionaryFeatureProvider(dictionary: [
+            "input_ids": inputArray,
+            "attention_mask": maskArray,
+        ])
     }
 
     static func extractEmbedding(from result: MLFeatureProvider, model: MLModel) throws -> [Float] {
