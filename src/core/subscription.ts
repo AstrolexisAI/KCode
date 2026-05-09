@@ -213,6 +213,36 @@ async function fetchFromServer(): Promise<Subscription> {
 export async function getSubscription(opts?: { forceRefresh?: boolean }): Promise<Subscription> {
   const now = Date.now();
 
+  // Offline-license fast-path: if a valid signed JWT license is
+  // installed (Enterprise air-gap, Pro lifetime, etc.) it always
+  // takes precedence over the cloud subscription cache. The user
+  // explicitly opted into offline activation; we honor that without
+  // making any network calls.
+  try {
+    const { checkOfflineLicense } = await import("./license");
+    const offline = checkOfflineLicense();
+    if (offline.valid && offline.claims) {
+      const claims = offline.claims;
+      // Map license tier → subscription tier; addons feed into features.
+      const sub: Subscription = {
+        tier: (claims.tier as Subscription["tier"]) ?? "pro",
+        features: [
+          ...(claims.features ?? []),
+          ...((claims.addons ?? []).map((a) => `addon:${a}`)),
+        ],
+        seats: claims.seats ?? 1,
+        status: "active" as Subscription["status"],
+        expiresAt: claims.exp ?? 0,
+        customer: claims.orgName ? { orgName: claims.orgName, email: claims.sub } : undefined,
+        fetchedAt: now,
+      };
+      _memCache = sub;
+      return sub;
+    }
+  } catch {
+    // license module unavailable — fall through to cloud subscription path
+  }
+
   // Memory cache
   if (!opts?.forceRefresh && _memCache && now - _memCache.fetchedAt < CACHE_TTL_MS) {
     return _memCache;
