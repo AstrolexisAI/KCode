@@ -16,10 +16,14 @@ const PID_FILE = kcodePath("server.pid");
 const PORT_FILE = kcodePath("server.port");
 const LOG_FILE = kcodePath("server.log");
 
-/** Check if the inference server is running (by PID or port) */
-export async function isServerRunning(): Promise<boolean> {
+/** Detailed health check result so callers can distinguish loading vs dead. */
+export type ServerStatus = "ready" | "loading" | "dead";
+
+/** Probe the server: ready if endpoint responds, loading if PID is alive but
+ *  endpoint times out, dead if PID is gone (or no PID file). */
+export async function probeServerStatus(): Promise<ServerStatus> {
   const port = getServerPort();
-  if (!port) return false;
+  if (!port) return "dead";
 
   // Try llama.cpp /health first, then MLX /v1/models
   for (const endpoint of ["/health", "/v1/models"]) {
@@ -27,15 +31,42 @@ export async function isServerRunning(): Promise<boolean> {
       const resp = await fetch(`http://localhost:${port}${endpoint}`, {
         signal: AbortSignal.timeout(2000),
       });
-      if (resp.ok) return true;
+      if (resp.ok) return "ready";
     } catch (err) {
       log.debug("llama-server", `Health check ${endpoint} failed: ${err}`);
     }
   }
 
-  // Server not responding — clean up stale PID file
+  // Endpoint not responding. Distinguish "still loading" from "process dead":
+  // if the PID is alive (process.kill(pid, 0) succeeds), MLX is mid-cold-load
+  // for a big model and we should NOT spawn a competitor. Big quantized models
+  // (Q6 25GB, Q8 33GB) take 30-90s to first respond on /v1/models — with the
+  // old logic, every kcode invocation during that window would mark the
+  // server "dead", clean up the PID file, and spawn a fresh server that
+  // killed the previous one mid-load. Verified 2026-05-09 on Mac: 5 PIDs
+  // spawned in 3 minutes, model never finished loading once.
+  const pid = getServerPid();
+  if (pid) {
+    try {
+      process.kill(pid, 0);
+      // Process exists, endpoint just isn't ready yet.
+      return "loading";
+    } catch {
+      // ESRCH — process gone. PID file is stale.
+    }
+  }
+
+  // No PID, or PID not alive. Clean up stale PID file.
   cleanupPidFile();
-  return false;
+  return "dead";
+}
+
+/** Check if the inference server is running (by PID or port).
+ *  Returns true ONLY when the endpoint is ready to serve traffic.
+ *  See probeServerStatus() for the loading-vs-dead distinction needed
+ *  by spawn-orchestration code. */
+export async function isServerRunning(): Promise<boolean> {
+  return (await probeServerStatus()) === "ready";
 }
 
 /** Get the port of the running server */
@@ -74,12 +105,128 @@ export async function startServer(options?: {
    */
   mlxRepoOverride?: string;
 }): Promise<{ port: number; pid: number }> {
-  // Check if already running
-  if (await isServerRunning()) {
+  // Check if already running OR loading
+  const status = await probeServerStatus();
+  if (status === "ready") {
     const port = getServerPort();
     const pid = getServerPid();
     if (port) {
       log.info("server", `Server already running on port ${port}`);
+      return { port, pid: pid ?? 0 };
+    }
+  }
+  if (status === "loading") {
+    // Existing MLX is mid-cold-load. Wait for it to finish instead of
+    // spawning a competitor. Allow up to KCODE_SERVER_READY_TIMEOUT_MS
+    // for the existing server to come ready (default 2min, can extend
+    // for big quantized models).
+    const port = getServerPort();
+    const pid = getServerPid();
+    log.info("server", `Server is loading (pid=${pid}), waiting instead of respawning`);
+    const startWait = Date.now();
+    const envOverride = Number(process.env.KCODE_SERVER_READY_TIMEOUT_MS);
+    const maxWait = Number.isFinite(envOverride) && envOverride > 0 ? envOverride : 120_000;
+    while (Date.now() - startWait < maxWait) {
+      const s = await probeServerStatus();
+      if (s === "ready") {
+        log.info(
+          "server",
+          `Existing server became ready in ${Math.round((Date.now() - startWait) / 1000)}s`,
+        );
+        return { port: port ?? 0, pid: pid ?? 0 };
+      }
+      if (s === "dead") {
+        log.warn("server", "Server died while waiting — falling through to fresh spawn");
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    if (Date.now() - startWait >= maxWait) {
+      log.warn(
+        "server",
+        `Existing server never became ready within ${maxWait / 1000}s — killing and respawning`,
+      );
+      if (pid) {
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+          /* already gone */
+        }
+      }
+      cleanupPidFile();
+    }
+  }
+
+  // File-lock so concurrent kcode invocations don't both spawn fresh
+  // MLX servers. The lock is just a sentinel file with the spawning
+  // PID; if the holder is alive and recent, wait. Otherwise reclaim.
+  const LOCK_FILE = `${PID_FILE}.lock`;
+  const acquireLock = async (): Promise<boolean> => {
+    const fs = await import("node:fs");
+    const start = Date.now();
+    while (Date.now() - start < 60_000) {
+      try {
+        const fd = fs.openSync(LOCK_FILE, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
+        fs.writeSync(fd, `${process.pid}\n${Date.now()}\n`);
+        fs.closeSync(fd);
+        return true;
+      } catch {
+        // Lock exists. Check if holder is alive + recent.
+        try {
+          const lines = fs.readFileSync(LOCK_FILE, "utf-8").split("\n");
+          const holderPid = parseInt(lines[0] ?? "0", 10);
+          const heldSince = parseInt(lines[1] ?? "0", 10);
+          const ageMs = Date.now() - heldSince;
+          let holderAlive = false;
+          try {
+            process.kill(holderPid, 0);
+            holderAlive = true;
+          } catch {
+            /* dead */
+          }
+          if (!holderAlive || ageMs > 5 * 60_000) {
+            // Stale lock — holder dead OR held > 5min (max realistic spawn).
+            try {
+              fs.unlinkSync(LOCK_FILE);
+            } catch {
+              /* race; loop again */
+            }
+            continue;
+          }
+        } catch {
+          // Lock file unreadable. Try unlink to recover.
+          try {
+            fs.unlinkSync(LOCK_FILE);
+          } catch {
+            /* ignore */
+          }
+        }
+        // Wait + retry
+        await new Promise((r) => setTimeout(r, 500));
+        // After waiting, check if some other holder finished spawning a server.
+        const s = await probeServerStatus();
+        if (s === "ready") return false;
+      }
+    }
+    log.warn("server", `Lock acquisition timed out — proceeding anyway (may race)`);
+    return true;
+  };
+  const releaseLock = async (): Promise<void> => {
+    try {
+      const fs = await import("node:fs");
+      if (fs.existsSync(LOCK_FILE)) fs.unlinkSync(LOCK_FILE);
+    } catch {
+      /* best effort */
+    }
+  };
+
+  const acquired = await acquireLock();
+  if (!acquired) {
+    // Another holder finished spawning a server — return its handle.
+    const port = getServerPort();
+    const pid = getServerPid();
+    if (port) {
+      log.info("server", `Another spawn finished while waiting (port=${port})`);
       return { port, pid: pid ?? 0 };
     }
   }
@@ -205,7 +352,7 @@ main()`;
     log.info("server", `Starting llama-server on port ${port}: ${cmd} ${args.join(" ")}`);
   }
 
-  return new Promise((resolve, reject) => {
+  const spawnPromise = new Promise<{ port: number; pid: number }>((resolve, reject) => {
     // Open log file for server output
     const logFile = Bun.file(LOG_FILE).writer();
 
@@ -331,6 +478,12 @@ main()`;
     };
 
     poll();
+  });
+
+  // Always release the spawn lock — success or failure — so the next
+  // kcode invocation isn't blocked.
+  return spawnPromise.finally(() => {
+    void releaseLock();
   });
 }
 
