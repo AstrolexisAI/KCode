@@ -145,7 +145,21 @@ export function registerAneCommand(program: Command): void {
         console.log(`  A: "${textA}"`);
         console.log(`  B: "${textB}"`);
         console.log(`  cosine similarity: ${cos.toFixed(4)}`);
-        console.log(`  ${cos > 0.85 ? "→ very similar" : cos > 0.6 ? "→ related" : "→ unrelated"}`);
+        // BGE-M3 baseline cosine for unrelated text is ~0.7, so the
+        // thresholds here are tuned for its distribution rather than
+        // a generic 0.0-1.0 split. Calibrated against probe runs:
+        //   auth/login:        0.7493
+        //   auth/banana split: 0.7270
+        //   auth ES/auth EN:   0.7756
+        const verdict =
+          cos > 0.85
+            ? "→ very similar"
+            : cos > 0.78
+              ? "→ related"
+              : cos > 0.72
+                ? "→ loosely related"
+                : "→ unrelated";
+        console.log(`  ${verdict}`);
       } finally {
         embedder.shutdown();
       }

@@ -21,6 +21,11 @@ import CoreML
 
 @main
 struct ANEEmbedder {
+    // Singleton tokenizer sidecar — initialized once on startup, reused
+    // for every embed call. Holds a long-lived Python process so we
+    // don't pay tokenizer load (~500ms) per request.
+    static var tokenizer: PythonTokenizer?
+
     static func main() {
         // First arg is the .mlmodelc path. Reject if missing.
         let args = CommandLine.arguments
@@ -44,6 +49,26 @@ struct ANEEmbedder {
         } catch {
             fputs("ANEEmbedder: failed to load model from \(modelPath): \(error)\n", stderr)
             exit(3)
+        }
+
+        // Spawn the Python tokenizer sidecar. The tokenizer dir lives
+        // beside the model file (~/.kcode/ane/tokenizer). If the
+        // sidecar can't start (Python missing, transformers not
+        // installed, tokenizer dir missing), we fall back to the
+        // byte-as-token stub with a stderr warning — the helper still
+        // works end-to-end, just with degraded similarity scores.
+        let modelDir = (modelPath as NSString).deletingLastPathComponent
+        let tokenizerDir = (modelDir as NSString).appendingPathComponent("tokenizer")
+        if FileManager.default.fileExists(atPath: tokenizerDir) {
+            do {
+                tokenizer = try PythonTokenizer.spawn(tokenizerDir: tokenizerDir)
+                fputs("ANEEmbedder: real xlm-roberta tokenizer ready\n", stderr)
+            } catch {
+                fputs("ANEEmbedder: tokenizer sidecar unavailable (\(error)) — falling back to byte stub\n", stderr)
+                tokenizer = nil
+            }
+        } else {
+            fputs("ANEEmbedder: no tokenizer dir at \(tokenizerDir) — using byte stub (degraded scores)\n", stderr)
         }
 
         // Read JSON-Lines from stdin until EOF.
@@ -123,8 +148,17 @@ struct ANEEmbedder {
     static let MAX_SEQ_LEN = 512
 
     static func tokenize(_ text: String) throws -> [Int32] {
-        // Stub: byte values as token IDs, clamped to xlm-roberta vocab
-        // size (≈250k). Pad to MAX_SEQ_LEN with 0.
+        // Real path: delegate to the Python tokenizer sidecar that
+        // ran AutoTokenizer.from_pretrained on startup. Sidecar already
+        // pads to MAX_SEQ_LEN so we just convert the result.
+        if let tok = tokenizer {
+            let ids = try tok.tokenize(text: text, maxLen: MAX_SEQ_LEN)
+            return ids.map { Int32($0) }
+        }
+        // Fallback when the sidecar didn't start (no Python venv, no
+        // tokenizer dir): use byte values clamped to vocab size. Lets
+        // the ANE pipeline keep working end-to-end with degraded but
+        // non-zero similarity scores. Stderr warns the user at boot.
         let bytes = Array(text.utf8.prefix(MAX_SEQ_LEN)).map { Int32($0) }
         var padded = bytes
         while padded.count < MAX_SEQ_LEN { padded.append(0) }
@@ -211,5 +245,174 @@ struct ANEEmbedder {
         } catch {
             fputs("ANEEmbedder: failed to write JSON: \(error)\n", stderr)
         }
+    }
+}
+
+// ── Python tokenizer sidecar ────────────────────────────────────
+//
+// Spawns scripts/tokenize-server.py and pipes JSON-Lines requests over
+// stdin/stdout. The sidecar loads AutoTokenizer once (BAAI/bge-m3 is
+// xlm-roberta SentencePiece Unigram) and stays warm for the lifetime
+// of the helper. We pick the Python interpreter in this order:
+//   1. ANE_PYTHON env var (explicit override)
+//   2. ~/.kcode/ane/venv/bin/python3 (if the user created a venv)
+//   3. /opt/homebrew/bin/python3.11 / .12 / .13 (Homebrew on Apple Si)
+//   4. /usr/bin/python3 (system)
+// If none have `transformers` installed, the sidecar fails fast and
+// the helper falls back to the byte-stub tokenizer (warning logged).
+
+final class PythonTokenizer {
+    private let process: Process
+    private let stdin: Pipe
+    private let stdout: Pipe
+    private var buffer = Data()
+    private var nextId: Int = 1
+    private let lock = NSLock()
+
+    static func spawn(tokenizerDir: String) throws -> PythonTokenizer {
+        let scriptPath = findScriptPath()
+        guard let scriptPath else {
+            throw NSError(domain: "ANEEmbedder", code: 10, userInfo: [
+                NSLocalizedDescriptionKey: "tokenize-server.py not found"
+            ])
+        }
+        let pythonPath = try findPython()
+
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: pythonPath)
+        proc.arguments = [scriptPath, tokenizerDir]
+        let inPipe = Pipe()
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        proc.standardInput = inPipe
+        proc.standardOutput = outPipe
+        proc.standardError = errPipe
+
+        try proc.run()
+
+        let tok = PythonTokenizer(process: proc, stdin: inPipe, stdout: outPipe)
+        // Wait for the "ready" handshake (single line on stdout).
+        let ready = try tok.readLine(timeout: 30.0)
+        if let dict = try? JSONSerialization.jsonObject(with: ready, options: []) as? [String: Any],
+           dict["ready"] as? Bool == true {
+            return tok
+        }
+        // If the sidecar wrote an error instead of ready, surface it.
+        if let dict = try? JSONSerialization.jsonObject(with: ready, options: []) as? [String: Any],
+           let err = dict["error"] as? String {
+            throw NSError(domain: "ANEEmbedder", code: 11, userInfo: [
+                NSLocalizedDescriptionKey: "tokenizer sidecar: \(err)"
+            ])
+        }
+        throw NSError(domain: "ANEEmbedder", code: 12, userInfo: [
+            NSLocalizedDescriptionKey: "tokenizer sidecar did not handshake"
+        ])
+    }
+
+    private init(process: Process, stdin: Pipe, stdout: Pipe) {
+        self.process = process
+        self.stdin = stdin
+        self.stdout = stdout
+    }
+
+    func tokenize(text: String, maxLen: Int) throws -> [Int] {
+        lock.lock()
+        defer { lock.unlock() }
+        let id = nextId; nextId += 1
+        let payload: [String: Any] = ["id": id, "text": text, "max_len": maxLen]
+        let data = try JSONSerialization.data(withJSONObject: payload, options: [])
+        stdin.fileHandleForWriting.write(data)
+        stdin.fileHandleForWriting.write("\n".data(using: .utf8)!)
+        let line = try readLine(timeout: 10.0)
+        guard let dict = try JSONSerialization.jsonObject(with: line, options: []) as? [String: Any] else {
+            throw NSError(domain: "ANEEmbedder", code: 13, userInfo: [
+                NSLocalizedDescriptionKey: "sidecar response not a JSON object"
+            ])
+        }
+        if let err = dict["error"] as? String {
+            throw NSError(domain: "ANEEmbedder", code: 14, userInfo: [
+                NSLocalizedDescriptionKey: "sidecar error: \(err)"
+            ])
+        }
+        guard let ids = dict["ids"] as? [Any] else {
+            throw NSError(domain: "ANEEmbedder", code: 15, userInfo: [
+                NSLocalizedDescriptionKey: "sidecar response missing 'ids' field"
+            ])
+        }
+        return ids.compactMap { ($0 as? NSNumber)?.intValue }
+    }
+
+    /// Read one newline-delimited line of JSON from the sidecar's
+    /// stdout, blocking up to `timeout` seconds.
+    private func readLine(timeout: TimeInterval) throws -> Data {
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            if let nl = buffer.firstIndex(of: 0x0A) {
+                let line = buffer.subdata(in: 0..<nl)
+                buffer.removeSubrange(0...nl)
+                return line
+            }
+            if Date() > deadline {
+                throw NSError(domain: "ANEEmbedder", code: 16, userInfo: [
+                    NSLocalizedDescriptionKey: "tokenizer sidecar read timeout"
+                ])
+            }
+            // availableData blocks until data arrives or the pipe closes.
+            let chunk = stdout.fileHandleForReading.availableData
+            if chunk.isEmpty {
+                throw NSError(domain: "ANEEmbedder", code: 17, userInfo: [
+                    NSLocalizedDescriptionKey: "tokenizer sidecar EOF"
+                ])
+            }
+            buffer.append(chunk)
+        }
+    }
+
+    private static func findScriptPath() -> String? {
+        // The Swift binary lives at ~/.kcode/ane/ane-embedder. The
+        // tokenize script may be installed alongside the binary or
+        // (during dev) in vendor/ane-embedder/scripts. Probe both.
+        let env = ProcessInfo.processInfo.environment
+        if let explicit = env["ANE_TOKENIZER_SCRIPT"],
+           FileManager.default.fileExists(atPath: explicit) {
+            return explicit
+        }
+        let candidates = [
+            (env["HOME"] ?? "/tmp") + "/.kcode/ane/tokenize-server.py",
+            // Repo-relative when running uninstalled
+            FileManager.default.currentDirectoryPath + "/vendor/ane-embedder/scripts/tokenize-server.py",
+        ]
+        for c in candidates where FileManager.default.fileExists(atPath: c) {
+            return c
+        }
+        return nil
+    }
+
+    private static func findPython() throws -> String {
+        let env = ProcessInfo.processInfo.environment
+        if let explicit = env["ANE_PYTHON"], FileManager.default.isExecutableFile(atPath: explicit) {
+            return explicit
+        }
+        let home = env["HOME"] ?? "/tmp"
+        let candidates = [
+            // KCode venvs (with or without dot — convert-bge-m3.py docs
+            // suggest both layouts depending on the Python tool used)
+            home + "/.kcode/ane/venv/bin/python3",
+            home + "/.kcode/ane/.venv/bin/python3",
+            home + "/.kcode/ane/venv/bin/python",
+            home + "/.kcode/ane/.venv/bin/python",
+            "/opt/homebrew/bin/python3.13",
+            "/opt/homebrew/bin/python3.12",
+            "/opt/homebrew/bin/python3.11",
+            "/opt/homebrew/bin/python3",
+            "/usr/local/bin/python3",
+            "/usr/bin/python3",
+        ]
+        for c in candidates where FileManager.default.isExecutableFile(atPath: c) {
+            return c
+        }
+        throw NSError(domain: "ANEEmbedder", code: 18, userInfo: [
+            NSLocalizedDescriptionKey: "no usable python3 found (tried \(candidates))"
+        ])
     }
 }

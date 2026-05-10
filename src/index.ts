@@ -1826,7 +1826,13 @@ async function runNonInteractive(
       markMismatchSeen,
     } = await import("./core/router.js");
     const taskType = classifyBenchmarkTask(prompt);
-    if (isMultimodelEnabled()) {
+    const cfgPre = conversationManager.getConfig();
+    // Honor explicit --model: if the user pinned a model, the auto-
+    // router must not override it. Without this guard, benchmark
+    // harnesses that pass --model "X" would still get rerouted to
+    // whatever the multi-model logic prefers (verified 2026-05-09:
+    // a Gemma Q6 bench got silently rerouted to GLM-4.7-Flash).
+    if (isMultimodelEnabled() && !cfgPre.modelExplicitlySet) {
       const cfg = conversationManager.getConfig();
       const route = await selectBenchmarkModel(taskType, cfg.model);
       if (route) {

@@ -65,4 +65,18 @@ describe("RagAutoIndexer", () => {
     const b = getRagAutoIndexer("/tmp/test");
     expect(a).not.toBe(b);
   });
+
+  test("kickoffInitialIndex respects disabled flag", async () => {
+    const indexer = new RagAutoIndexer("/tmp/test-noop", { enabled: false });
+    const result = await indexer.kickoffInitialIndex();
+    expect(result).toBe(0);
+  });
+
+  test("kickoffInitialIndex returns 0 when already indexing", async () => {
+    const indexer = new RagAutoIndexer("/tmp/test-busy", { enabled: true });
+    // Manually flip the indexing flag to simulate a concurrent run
+    (indexer as unknown as { indexing: boolean }).indexing = true;
+    const result = await indexer.kickoffInitialIndex();
+    expect(result).toBe(0);
+  });
 });

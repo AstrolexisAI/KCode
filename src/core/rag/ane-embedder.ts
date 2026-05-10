@@ -95,6 +95,14 @@ export class ANEEmbedder implements EmbedderInterface {
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env },
     });
+    // Detach from the event loop so node can exit when our work is
+    // done. Without this, one-shot CLI commands like `kcode rag
+    // search` hang for ~5 minutes after printing results because the
+    // long-lived helper subprocess keeps node alive (seen 2026-05-09
+    // on Mac after introducing the Python tokenizer sidecar; the
+    // Python child of the helper compounded the problem). Explicit
+    // disposeANEEmbedder() in the finally block still cleans up.
+    this.proc.unref();
 
     this.proc.stdout?.on("data", (chunk: Buffer) => this.handleStdout(chunk.toString("utf-8")));
     this.proc.stderr?.on("data", (chunk: Buffer) => {

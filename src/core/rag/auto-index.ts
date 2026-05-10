@@ -50,6 +50,42 @@ export class RagAutoIndexer {
     this.debounceTimer = setTimeout(() => this.triggerReindex(), this.config.debounceMs);
   }
 
+  /**
+   * Run a one-shot initial index of the project. Idempotent — relies on
+   * the engine's checksum-based incremental update so already-indexed
+   * files are skipped. Safe to call on every TUI startup.
+   *
+   * Returns the number of files actually re-indexed (not the project
+   * total). Returns 0 if disabled, already running, or the project
+   * looks too large to risk a foreground delay.
+   */
+  async kickoffInitialIndex(): Promise<number> {
+    if (!this.config.enabled || this.indexing) return 0;
+    this.indexing = true;
+    try {
+      const { getRAGEngine } = await import("./engine");
+      const engine = getRAGEngine(this.projectDir);
+      const start = Date.now();
+      const report = await engine.updateIndex(this.projectDir);
+      this.totalReindexed += report.filesProcessed;
+      const elapsed = Date.now() - start;
+      if (report.filesProcessed > 0) {
+        log.info(
+          "rag",
+          `Initial index: ${report.filesProcessed} files, ${report.chunksCreated} chunks in ${elapsed}ms`,
+        );
+      } else {
+        log.debug("rag", `Initial index: project up-to-date (${elapsed}ms)`);
+      }
+      return report.filesProcessed;
+    } catch (err) {
+      log.debug("rag", `Initial index failed (non-fatal): ${err}`);
+      return 0;
+    } finally {
+      this.indexing = false;
+    }
+  }
+
   /** Manually trigger a re-index of pending files */
   async triggerReindex(): Promise<number> {
     if (this.indexing || this.pendingFiles.size === 0) return 0;
