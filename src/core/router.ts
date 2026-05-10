@@ -536,9 +536,25 @@ export async function selectBenchmarkModel(
     // the current model. Routing may have previously switched to a cloud model
     // mid-session; chat tasks should always snap back to local.
     if (requiredTags.includes("local")) {
+      // 2026-05-10 fix: prefer the user's CURRENTLY CONFIGURED local model
+      // (defaultModel) over the first local entry in models.json. Otherwise
+      // a stale GLM entry registered earlier wins over the actively-loaded
+      // Gemma server and the router triggers a respawn cascade
+      // (verified Curly's session: gemma-4-31b-it-6bit was loaded but
+      // routing returned mlx-community/GLM-4.7-Flash-4bit, killing Gemma).
+      const localCandidates = models.filter((m) => LOCAL_PATTERNS.test(m.baseUrl));
+      const isDefaultLocal = LOCAL_PATTERNS.test(
+        models.find((m) => m.name === defaultModel)?.baseUrl ?? "",
+      );
+      if (isDefaultLocal) {
+        const defaultEntry = models.find((m) => m.name === defaultModel);
+        if (defaultEntry && (await isEndpointAlive(defaultEntry.baseUrl))) {
+          // Already on a live local default — no-op (return null = no switch).
+          return null;
+        }
+      }
       // Walk all local candidates and probe each — a dead entry should
       // fall through to the next, not be returned as if it were live.
-      const localCandidates = models.filter((m) => LOCAL_PATTERNS.test(m.baseUrl));
       for (const candidate of localCandidates) {
         if (await isEndpointAlive(candidate.baseUrl)) {
           if (candidate.name !== defaultModel) {
