@@ -452,7 +452,7 @@ const DOC_ALLOWANCE_KEYWORDS = [
   /\b(?:create|build|make|start|init(?:ialize)?|setup)\s+(?:a\s+)?(?:new\s+)?project\b/i,
   /\b(?:nuevo|new)\s+repo\b/i,
   /\bnext\.?js\b/i, // Next.js explicitly named — its starter ships a README
-  /\bvite\b/i,     // same — vite create generates README
+  /\bvite\b/i, // same — vite create generates README
 ];
 
 /**

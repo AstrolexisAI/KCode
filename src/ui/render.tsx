@@ -51,10 +51,7 @@ export function startUI({ config, conversationManager, tools }: StartUIOptions) 
       // /quit was leaving 30+ GB Gemma resident.
       try {
         const { stopServer } = await import("../core/llama-server.js");
-        await Promise.race([
-          stopServer(),
-          new Promise<void>((r) => setTimeout(r, 5000)),
-        ]);
+        await Promise.race([stopServer(), new Promise<void>((r) => setTimeout(r, 5000))]);
       } catch {
         /* non-fatal — process.on("exit") sync killer is the backstop */
       }

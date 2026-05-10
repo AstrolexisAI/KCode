@@ -382,9 +382,7 @@ describe("userAllowedDocs", () => {
   // proyecto llamado Koding" got README blocked. New-project intent
   // is a strong enough signal to allow standard scaffold docs.
   test("grants permission on Spanish 'crear un nuevo proyecto'", () => {
-    expect(userAllowedDocs(["vamos a crear un nuevo proyecto llamado Koding"]).allowed).toBe(
-      true,
-    );
+    expect(userAllowedDocs(["vamos a crear un nuevo proyecto llamado Koding"]).allowed).toBe(true);
     expect(userAllowedDocs(["crea un proyecto react"]).allowed).toBe(true);
     expect(userAllowedDocs(["arma un proyecto"]).allowed).toBe(true);
     expect(userAllowedDocs(["construir un nuevo proyecto"]).allowed).toBe(true);

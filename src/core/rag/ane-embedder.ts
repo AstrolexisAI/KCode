@@ -290,9 +290,7 @@ export class ANEEmbedderPool implements EmbedderInterface {
     const promises = chunks.map((chunk, i) => {
       const idx = i % this.instances.length;
       this.inFlight[idx]!++;
-      return this.instances[idx]!
-        .embedBatch(chunk)
-        .finally(() => this.inFlight[idx]!--);
+      return this.instances[idx]!.embedBatch(chunk).finally(() => this.inFlight[idx]!--);
     });
     const results = await Promise.all(promises);
     // Re-assemble in original order.

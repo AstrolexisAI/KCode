@@ -159,10 +159,7 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
           const { stopServer } = await import("../../core/llama-server.js");
           // Brief best-effort stop. Don't await indefinitely — TUI
           // exit must remain responsive even if the server is hung.
-          await Promise.race([
-            stopServer(),
-            new Promise<void>((r) => setTimeout(r, 3000)),
-          ]);
+          await Promise.race([stopServer(), new Promise<void>((r) => setTimeout(r, 3000))]);
         } catch {
           /* non-fatal — let process.on(exit) hook take over */
         }

@@ -29,15 +29,11 @@ describe("checkModelTaskMismatch", () => {
   });
 
   test("Gemma 4 31B Q6 + complex-edit → no mismatch (verified agentic 2026-05-09)", () => {
-    expect(
-      checkModelTaskMismatch("mlx-community/gemma-4-31b-it-6bit", "complex-edit"),
-    ).toBeNull();
+    expect(checkModelTaskMismatch("mlx-community/gemma-4-31b-it-6bit", "complex-edit")).toBeNull();
   });
 
   test("Gemma 4 31B Q8 + complex-edit → no mismatch (single-shot tier)", () => {
-    expect(
-      checkModelTaskMismatch("mlx-community/gemma-4-31b-it-8bit", "complex-edit"),
-    ).toBeNull();
+    expect(checkModelTaskMismatch("mlx-community/gemma-4-31b-it-8bit", "complex-edit")).toBeNull();
   });
 
   test("Gemma + chat → no mismatch (its strength)", () => {

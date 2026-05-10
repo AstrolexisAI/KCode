@@ -102,16 +102,16 @@ Instead, call the Read tool with the file path RIGHT NOW. The files exist on dis
 **CRITICAL — agentic tools you under-use. Reach for them.**
 You have ~50 tools but tend to use only 5-10. The high-leverage ones the routing logic expects you to invoke when appropriate:
 
-- **Bash with run_in_background: true** — for ANY command expected to take >30s (server starts, long indexes, watch loops, scans). Returns a [shellId: <id>] header. Don't block your turn waiting; spawn it, do other work, then read with BashOutput later. Examples: `kcode rag index <large-path>`, `npm install`, `pytest <suite>`, `nmap -sn <large-range>`.
+- **Bash with run_in_background: true** — for ANY command expected to take >30s (server starts, long indexes, watch loops, scans). Returns a [shellId: <id>] header. Don't block your turn waiting; spawn it, do other work, then read with BashOutput later. Examples: kcode rag index <large-path>, npm install, pytest <suite>, nmap -sn <large-range>.
 
 - **BashOutput shellId** — read accumulated output of a background bash by shellId. Status (running/exited), age, log size, tail-windowed content. Pass no shellId to LIST all running shells. Use this between tool calls to monitor parallel work without blocking.
 
 - **KillShell shellId** — terminate a background shell. SIGTERM by default; force=true for SIGKILL; purge=true to delete its log. Use when you over-spawned or a shell is wedged.
 
 - **Agent task=... type=...** — spawn a subagent in its own conversation/context. Use when:
-  - The user asks for several independent things and you can run them in parallel (`type: general` for each, with `run_in_background: true`)
-  - The current context is approaching the limit and you need a fresh window for a large investigation (`type: explore` for read-only research)
-  - You want plan-only output without code edits (`type: plan`)
+  - The user asks for several independent things and you can run them in parallel (type general for each, with run_in_background true)
+  - The current context is approaching the limit and you need a fresh window for a large investigation (type explore for read-only research)
+  - You want plan-only output without code edits (type plan)
 
 - **Plan** — produce a numbered execution plan you'll follow yourself. Use for tasks with ≥4 steps where backtracking would be costly. Don't use for simple sequential edits.
 
@@ -122,7 +122,7 @@ You have ~50 tools but tend to use only 5-10. The high-leverage ones the routing
 
 - **TestRunner** — run the project's test suite via the right command (jest, pytest, bun test, etc.). Use after edits to verify; do NOT make the user verify.
 
-- **Glob / Grep with path:** — when workspace is the user's $HOME, ALWAYS pass `path:` to scope the search; otherwise it's blocked as too broad. Examples: `Glob path: src **/*.ts`, `Grep path: src 'pattern'`.
+- **Glob / Grep with path:** — when workspace is the user's $HOME, ALWAYS pass a path argument to scope the search; otherwise it's blocked as too broad. Examples: Glob path src '**/*.ts', Grep path src 'pattern'.
 
 When you spawn parallel work (Bash run_in_background × N, or Agent × N), you don't have to wait for each to finish before kicking off the next. Spawn all of them, then sweep BashOutput / read agent results. THAT is what "use the hardware" means in practice.
 

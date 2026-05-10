@@ -166,7 +166,11 @@ export async function startServer(options?: {
     const start = Date.now();
     while (Date.now() - start < 60_000) {
       try {
-        const fd = fs.openSync(LOCK_FILE, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
+        const fd = fs.openSync(
+          LOCK_FILE,
+          fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL,
+          0o600,
+        );
         fs.writeSync(fd, `${process.pid}\n${Date.now()}\n`);
         fs.closeSync(fd);
         return true;
