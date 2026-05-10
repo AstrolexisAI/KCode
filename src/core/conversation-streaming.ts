@@ -454,19 +454,27 @@ export async function* processSSEStream(
   const textChunks: string[] = [];
   let streamedOutputChars = 0;
   let charsSinceRepCheck = 0;
-  // Failsafe: if the model emits a wall of text without calling any
-  // tool, that's almost always a degenerate "stuck explaining" loop.
-  // Verified 2026-05-09 on Mac across two sessions:
-  //   • "No se pudo… Déjame intentar…" × 30 (258K tokens in 80s)
-  //   • "Voy a intentar un enfoque más simple…" × 15 (~3K chars
-  //     before the model exceeded the MLX context window entirely)
+  // Failsafe: if the model emits a wall of text WITHOUT issuing a new
+  // tool call since its last one (or since stream start), that's
+  // almost always a degenerate "stuck explaining" loop. Verified
+  // 2026-05-09 on Mac across three sessions:
+  //   • "No se pudo… Déjame intentar…" × 30 (258K tokens in 80s, 0 tools)
+  //   • "Voy a intentar un enfoque más simple…" × 15 (~3K chars, 0 tools)
+  //   • "Let me use a completely different approach…" × 25 (392K tokens,
+  //     17 tools EARLIER then locked into text loop)
   //
-  // 6K chars (~1.5K tokens) catches both within 2-3 reps. A
+  // Track "chars since last tool call" instead of "total chars without
+  // tools": the third case had tools=17 BEFORE the loop, so the old
+  // condition `activeToolCalls.size === 0` was permanently false and
+  // the failsafe never fired. Now we reset the counter on every tool
+  // call delta — if the model emits NO_TOOL_TEXT_LIMIT chars between
+  // tools (or after the last one), abort.
+  //
+  // 6K chars (~1.5K tokens) catches all three within 2-3 reps. A
   // legitimate text-only answer rarely exceeds 6K; the few that do
-  // (long explanations) usually call at least one tool first. Lower
-  // is safer here than higher — surfacing a "retrying" signal at 5s
-  // beats letting the user wait 60s for the hard cap to kick in.
+  // (long explanations) usually call at least one tool first.
   const NO_TOOL_TEXT_LIMIT = 6_000;
+  let charsSinceLastToolCall = 0;
   // Phase 33: independent counter for the thinking channel so phase 15
   // on content doesn't compete with the reasoning-loop detector.
   let thinkingCharsSinceRepCheck = 0;
@@ -566,6 +574,7 @@ export async function* processSSEStream(
           textChunks.push(chunk.content);
           streamedOutputChars += chunk.content.length;
           charsSinceRepCheck += chunk.content.length;
+          charsSinceLastToolCall += chunk.content.length;
           yield { type: "text_delta", text: chunk.content };
           const estimatedTokens = Math.round(streamedOutputChars / CHARS_PER_TOKEN);
           yield { type: "token_count", tokens: estimatedTokens };
@@ -584,19 +593,18 @@ export async function* processSSEStream(
               break;
             }
 
-            // Failsafe: large text emission with zero tool calls in
-            // flight = stuck-explaining loop. Lighter than the cap
-            // above and catches Curly's 2026-05-09 case where
-            // detectRepetitionLoop missed because of mid-token
-            // boundaries from the streaming chunk timing.
-            if (
-              streamedOutputChars >= NO_TOOL_TEXT_LIMIT &&
-              activeToolCalls.size === 0 &&
-              textChunks.length > 1
-            ) {
+            // Failsafe: large text emission since the last tool call
+            // = stuck-explaining loop. Was a buggy "zero tool calls
+            // ever" check before — broke on streams where the model
+            // called tools first then locked into a text loop (Curly
+            // 2026-05-09: tools=17 then "Let me use a completely
+            // different approach…" × 25 → 392K tokens). Now resets
+            // on every new tool_call_delta so post-tool loops also
+            // get caught.
+            if (charsSinceLastToolCall >= NO_TOOL_TEXT_LIMIT && textChunks.length > 1) {
               log.warn(
                 "llm",
-                `No-tool text limit (${NO_TOOL_TEXT_LIMIT} chars) hit with zero tool calls — aborting`,
+                `No-tool text limit (${NO_TOOL_TEXT_LIMIT} chars since last tool) hit — aborting`,
               );
               repetitionAborted = true;
               stopReason = "repetition_aborted";
@@ -653,6 +661,9 @@ export async function* processSSEStream(
         if (chunk.toolCallId && chunk.functionName) {
           active = { id: chunk.toolCallId, name: chunk.functionName, argChunks: [] };
           activeToolCalls.set(idx, active);
+          // Reset the post-tool text-loop counter — the model is
+          // taking a real action, not stuck explaining.
+          charsSinceLastToolCall = 0;
           yield {
             type: "tool_use_start",
             toolUseId: chunk.toolCallId,
