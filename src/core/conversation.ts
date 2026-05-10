@@ -239,7 +239,7 @@ export class ConversationManager {
       if (!config.maxTokens || config.maxTokens === 16384) {
         config.maxTokens = profile.maxTokens;
       }
-      if (profile.compactThreshold < (config.compactThreshold ?? 0.75)) {
+      if (profile.compactThreshold < (config.compactThreshold ?? 0.6)) {
         config.compactThreshold = profile.compactThreshold;
       }
     } catch {
@@ -250,7 +250,13 @@ export class ConversationManager {
     this.systemPromptHash = "";
     this._systemPromptReady = this.initSystemPrompt();
     this.contextWindowSize = config.contextWindowSize ?? DEFAULT_CONTEXT_WINDOW;
-    this.compactThreshold = config.compactThreshold ?? 0.75;
+    // 2026-05-10: lowered default 0.75 → 0.6 after Curly's Mac session
+    // overflowed Gemma's 131k window with "estimated 80k" context.
+    // chars/3.5 estimator over-predicts capacity for Spanish + code; the
+    // 0.6 default gives ~20% safety margin against that drift.
+    // Calibration via observed inputTokens (see conversation-context-
+    // maintenance.ts) provides a tighter bound when wired.
+    this.compactThreshold = config.compactThreshold ?? 0.6;
     this.maxRetries = config.maxRetries ?? MAX_RETRIES;
     this.permissions = new PermissionManager(
       config.permissionMode,

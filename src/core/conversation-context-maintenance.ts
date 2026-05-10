@@ -15,7 +15,7 @@ import {
 } from "./context-manager";
 import type { DebugTracer } from "./debug-tracer";
 import { log } from "./logger";
-import type { ConversationState, KCodeConfig, StreamEvent } from "./types";
+import type { ConversationState, KCodeConfig, StreamEvent, TokenUsage } from "./types";
 
 export interface ContextMaintenanceArgs {
   state: ConversationState;
@@ -24,6 +24,19 @@ export interface ContextMaintenanceArgs {
   compactThreshold: number;
   config: KCodeConfig;
   debugTracer: DebugTracer | null;
+  /**
+   * Last observed input tokens from the LLM's actual response. Used to
+   * calibrate the chars-per-token estimate, which defaults to 3.5
+   * (English) but Gemma + Spanish + code typically tokenizes at ~2.4
+   * chars/token. Without this calibration, KCode would think context
+   * was at 60% while actually being at 90%+ → no auto-compact fires →
+   * MLX gets a request over its context window and either truncates
+   * or crashes (verified 2026-05-10 with Gemma 4 31B Q6, 141k input
+   * vs 131k window).
+   */
+  lastObservedInputTokens?: number;
+  /** Total chars sent in the last LLM request — used with above to calibrate. */
+  lastObservedInputChars?: number;
 }
 
 /**
@@ -69,15 +82,42 @@ export async function* runContextMaintenance(
   //
   // Opt-out: KCODE_DISABLE_AUTO_COMPACT=1.
   if (process.env.KCODE_DISABLE_AUTO_COMPACT !== "1") {
-    const postPruneTokens = estimateContextTokens(args.systemPrompt, args.state.messages);
-    const usage = postPruneTokens / args.contextWindowSize;
+    const postPruneEstimate = estimateContextTokens(args.systemPrompt, args.state.messages);
+
+    // Calibrate the estimate with the last observed input tokens. If the
+    // model reported (e.g.) 141K input from a request whose chars
+    // implied 80K via the 3.5 ratio, the true chars-per-token is closer
+    // to 2.0 — apply that ratio to subsequent estimates so we trigger
+    // compaction before MLX rejects an overflowing request.
+    let calibratedTokens = postPruneEstimate;
+    if (
+      args.lastObservedInputTokens &&
+      args.lastObservedInputChars &&
+      args.lastObservedInputChars > 1000
+    ) {
+      const observedRatio = args.lastObservedInputChars / args.lastObservedInputTokens;
+      // Default ratio is 3.5; only correct when observed is materially
+      // smaller (model is more verbose than estimate). Don't pump UP
+      // estimates if observed is higher — that would trigger spurious
+      // compaction on cloud models that pack tighter than 3.5.
+      if (observedRatio < 3.0) {
+        const correction = 3.5 / observedRatio;
+        calibratedTokens = Math.ceil(postPruneEstimate * correction);
+        log.debug(
+          "session",
+          `token-calibration: observed ${observedRatio.toFixed(2)} chars/tok, correcting estimate ${postPruneEstimate} → ${calibratedTokens}`,
+        );
+      }
+    }
+
+    const usage = calibratedTokens / args.contextWindowSize;
     // Trigger multi-strategy at 75% — same as full-compact phase
     // inside the orchestrator. Below that, plain microcompact is
     // enough.
     if (usage >= 0.75) {
       log.info(
         "session",
-        `auto-compact: triggering multi-strategy at ${Math.round(usage * 100)}% (~${postPruneTokens} tokens)`,
+        `auto-compact: triggering multi-strategy at ${Math.round(usage * 100)}% (~${calibratedTokens} tokens, raw estimate ${postPruneEstimate})`,
       );
       try {
         yield* compactMultiStrategy(
