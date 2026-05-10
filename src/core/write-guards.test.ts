@@ -377,6 +377,29 @@ describe("userAllowedDocs", () => {
     const texts = ["crea una app", "ok ahora añádele un README", "también"];
     expect(userAllowedDocs(texts).allowed).toBe(true);
   });
+
+  // Calibrated 2026-05-10 after Curly's "vamos a crear un nuevo
+  // proyecto llamado Koding" got README blocked. New-project intent
+  // is a strong enough signal to allow standard scaffold docs.
+  test("grants permission on Spanish 'crear un nuevo proyecto'", () => {
+    expect(userAllowedDocs(["vamos a crear un nuevo proyecto llamado Koding"]).allowed).toBe(
+      true,
+    );
+    expect(userAllowedDocs(["crea un proyecto react"]).allowed).toBe(true);
+    expect(userAllowedDocs(["arma un proyecto"]).allowed).toBe(true);
+    expect(userAllowedDocs(["construir un nuevo proyecto"]).allowed).toBe(true);
+  });
+
+  test("grants permission on English 'create a new project'", () => {
+    expect(userAllowedDocs(["let's create a new project"]).allowed).toBe(true);
+    expect(userAllowedDocs(["build a project for monitoring"]).allowed).toBe(true);
+    expect(userAllowedDocs(["init a new project with vite"]).allowed).toBe(true);
+  });
+
+  test("grants permission when Next.js / Vite is named (their starters ship a README)", () => {
+    expect(userAllowedDocs(["arma un Next.js para promptear texto"]).allowed).toBe(true);
+    expect(userAllowedDocs(["use vite to scaffold the frontend"]).allowed).toBe(true);
+  });
 });
 
 describe("detectUnsolicitedDoc", () => {

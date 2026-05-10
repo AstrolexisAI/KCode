@@ -444,6 +444,15 @@ const DOC_ALLOWANCE_KEYWORDS = [
   /\bvarios\s+archivos\b/i,
   /\bm[uú]ltiples?\s+archivos\b/i,
   /\bmultiple\s+files\b/i,
+  // Adding 2026-05-10: "create a new project" implies project setup,
+  // which standardly includes a README. Curly's "vamos a crear un
+  // nuevo proyecto llamado Koding" was wrongly blocked from creating
+  // README.md — every Next.js / package-managed project ships one.
+  /\b(?:nuevo|crear?|crea[rs]?|cre[aá]me|armar?|arm[aá]me|construir?|construye)\s+(?:un\s+)?(?:nuevo\s+)?proyecto\b/i,
+  /\b(?:create|build|make|start|init(?:ialize)?|setup)\s+(?:a\s+)?(?:new\s+)?project\b/i,
+  /\b(?:nuevo|new)\s+repo\b/i,
+  /\bnext\.?js\b/i, // Next.js explicitly named — its starter ships a README
+  /\bvite\b/i,     // same — vite create generates README
 ];
 
 /**
