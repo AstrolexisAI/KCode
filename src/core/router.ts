@@ -391,10 +391,15 @@ const MISMATCH_RULES: ReadonlyArray<MismatchRule> = [
       "GLM-4.7-Flash 4-bit is tuned for explicit tool execution but struggles with ambiguous intent in short prompts (e.g. 'analiza la red' → reads source files).",
   },
   {
-    modelMatch: /gemma-?[234]/i,
+    // Gemma 4 Q6+ proved agentic-competent in 2026-05-09 bench
+    // (9 tools / 5 tasks, zero hallucinations). The "explain mode"
+    // pattern still applies to lower-quant Gemma (Q4 31B is in
+    // mark5-mid history, smaller 9B/14B variants too) — flag only
+    // those, let Q6/Q8 pass without warning.
+    modelMatch: /gemma-?[234].*-(?:4bit|q4)|gemma-?[23](?!-?(?:31|27)b)/i,
     badTasks: new Set<BenchmarkTaskType>(["complex-edit", "simple-edit", "multi-step"]),
     reason:
-      "Gemma family is chat/translation-tuned and falls into 'explain mode' on coding prompts instead of issuing tool calls.",
+      "Gemma at 4-bit / under 26B is chat/translation-tuned and falls into 'explain mode' on coding prompts. Use Gemma Q6+ 31B (mark5-mid) for agentic local work.",
   },
   {
     modelMatch: /llama-?[23]\b|llama-3\.0-/i,

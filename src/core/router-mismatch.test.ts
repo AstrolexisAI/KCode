@@ -22,9 +22,22 @@ describe("checkModelTaskMismatch", () => {
     expect(checkModelTaskMismatch("Qwen3-Coder-30B", "complex-edit")).toBeNull();
   });
 
-  test("Gemma + complex-edit task → mismatch", () => {
+  test("Gemma 4 26B Q4 + complex-edit → mismatch (still chat-tuned at low quant)", () => {
     const m = checkModelTaskMismatch("mlx-community/gemma-4-26b-a4b-it-4bit", "complex-edit");
-    expect(m?.reason).toMatch(/Gemma family is chat\/translation-tuned/);
+    expect(m?.reason).toMatch(/Gemma at 4-bit/);
+    expect(m?.suggestion).toMatch(/mark5-mid/);
+  });
+
+  test("Gemma 4 31B Q6 + complex-edit → no mismatch (verified agentic 2026-05-09)", () => {
+    expect(
+      checkModelTaskMismatch("mlx-community/gemma-4-31b-it-6bit", "complex-edit"),
+    ).toBeNull();
+  });
+
+  test("Gemma 4 31B Q8 + complex-edit → no mismatch (single-shot tier)", () => {
+    expect(
+      checkModelTaskMismatch("mlx-community/gemma-4-31b-it-8bit", "complex-edit"),
+    ).toBeNull();
   });
 
   test("Gemma + chat → no mismatch (its strength)", () => {
