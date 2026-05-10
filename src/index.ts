@@ -254,6 +254,22 @@ process.on("unhandledRejection", (reason) => {
 // or set KCODE_PERSIST_SERVER=1 to opt out.
 async function stopLocalServerIfRunning(): Promise<void> {
   if (process.env.KCODE_PERSIST_SERVER === "1") return;
+  // Wired-pinning intent: if the user has configured mlxWiredLimitMB
+  // in server.json, they explicitly want the model to STAY in RAM
+  // across kcode invocations. Killing the server on every CLI exit
+  // defeats the purpose — verified 2026-05-10 with Curly's setup
+  // (38GB wired Gemma being killed every `kcode` quit, then reloaded
+  // on next invocation = ~30s wasted per turn).
+  try {
+    const { getServerConfig } = await import("./core/model-manager");
+    const cfg = await getServerConfig();
+    if (cfg?.mlxWiredLimitMB && cfg.mlxWiredLimitMB > 0) {
+      log.debug("shutdown", "Skipping server stop — mlxWiredLimitMB set (persistent intent)");
+      return;
+    }
+  } catch (e) {
+    log.debug("shutdown", `getServerConfig probe failed (non-fatal): ${e}`);
+  }
   try {
     const { isServerRunning, stopServer } = await import("./core/llama-server");
     if (await isServerRunning()) {
@@ -271,6 +287,21 @@ async function stopLocalServerIfRunning(): Promise<void> {
 // raw exit path still frees the memory.
 function killLocalServerSync(): void {
   if (process.env.KCODE_PERSIST_SERVER === "1") return;
+  // Mirror the async path: respect mlxWiredLimitMB as persistent intent.
+  // Same comment applies — wired pinning + auto-kill = wasted reload work.
+  try {
+    const { existsSync: _exists, readFileSync: _read } =
+      require("node:fs") as typeof import("node:fs");
+    const _path = require("node:path") as typeof import("node:path");
+    const _os = require("node:os") as typeof import("node:os");
+    const serverJson = _path.join(_os.homedir(), ".kcode", "server.json");
+    if (_exists(serverJson)) {
+      const cfg = JSON.parse(_read(serverJson, "utf-8")) as { mlxWiredLimitMB?: unknown };
+      if (typeof cfg.mlxWiredLimitMB === "number" && cfg.mlxWiredLimitMB > 0) return;
+    }
+  } catch {
+    /* fall through to kill */
+  }
   try {
     const { existsSync, readFileSync } = require("node:fs") as typeof import("node:fs");
     const path = require("node:path") as typeof import("node:path");
