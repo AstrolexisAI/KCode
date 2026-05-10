@@ -148,6 +148,24 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
         lower === "quit" ||
         lower === "bye"
       ) {
+        // Explicit user-initiated exit. Tear down the local model
+        // server immediately, even when wired pinning is configured —
+        // wired-pin persistence is for invisible CLI exits between
+        // `kcode --print` calls, NOT for explicit /quit (the user
+        // chose to leave). Verified 2026-05-10 with Curly: /quit
+        // was leaving 30+ GB of Gemma weights resident in RAM
+        // because killLocalServerSync skipped on mlxWiredLimitMB.
+        try {
+          const { stopServer } = await import("../../core/llama-server.js");
+          // Brief best-effort stop. Don't await indefinitely — TUI
+          // exit must remain responsive even if the server is hung.
+          await Promise.race([
+            stopServer(),
+            new Promise<void>((r) => setTimeout(r, 3000)),
+          ]);
+        } catch {
+          /* non-fatal — let process.on(exit) hook take over */
+        }
         exit();
         return;
       }
