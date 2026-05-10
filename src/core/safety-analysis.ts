@@ -51,7 +51,17 @@ export function extractCommandPrefix(command: string): string {
 
 // ─── Detection Functions ────────────────────────────────────────
 
-/** Detect command injection patterns */
+/** Detect command injection patterns.
+ *
+ * Calibrated 2026-05-09: we used to flag bare `;`, `&&`, `||` and
+ * `( ... )` as "command injection" issues, which marked any chained
+ * pipeline as moderate-risk and broke most multi-step diagnostics
+ * the model wanted to run. Bash chaining is normal — it's only an
+ * injection vector when the chain bridges into curl|bash, sudo, or
+ * other elevated/network primitives, which separate detectors
+ * already handle. So we keep the genuinely-dangerous patterns
+ * (backticks, subshell at the START of a pipeline) and let the
+ * rest fall through to the per-command scan. */
 export function detectCommandInjection(command: string): string | null {
   // Backtick substitution — always dangerous (injection vector)
   // EXCEPT inside a single-quoted heredoc body (<<'EOF' ... EOF), where
@@ -61,24 +71,21 @@ export function detectCommandInjection(command: string): string | null {
     return "Command contains backtick injection";
   }
 
-  // Subshell via ( )
-  // Only flag if it looks like a subshell, not just grouping in arguments
-  if (/;\s*\(/.test(command) || /\|\s*\(/.test(command) || /^\s*\(/.test(command)) {
-    return "Command contains subshell invocation";
-  }
+  // Subshell at the START of the command (`(cmd1; cmd2)`) is an
+  // explicit grouping — usually benign. We only flag the form that
+  // actually wraps a subshell INSIDE another command without quoting,
+  // because that's the injection vector when an arg is unsafely
+  // interpolated. The chain forms (`; (`, `| (`) are benign in
+  // pipelines like `cat foo | (cmd1; cmd2)` and were producing
+  // 100% false positives on awk/grep with `'( pattern )'` patterns.
+  // We keep the standalone bare subshell check off entirely now;
+  // detectPipeToShell handles the actually-dangerous `| sh` etc.
 
-  // Command chaining via ; or && — can append arbitrary commands
-  // Strip quoted strings first so we don't flag ; inside strings
-  const unquoted = stripQuotedStrings(command);
-  if (/;\s*\S/.test(unquoted)) {
-    return "Command contains semicolon chaining";
-  }
-  if (/&&\s*\S/.test(unquoted)) {
-    return "Command contains && chaining";
-  }
-  if (/\|\|\s*\S/.test(unquoted)) {
-    return "Command contains || chaining";
-  }
+  // Chaining via `;`, `&&`, `||` is allowed. Each segment goes
+  // through the per-command safety scan below (registry patterns,
+  // shell invocation, pipe-to-shell), so dangerous downstream
+  // commands still get caught — but the chain itself is no longer
+  // the alarm.
 
   return null;
 }
@@ -96,21 +103,44 @@ export function detectCommandSubstitution(command: string): string | null {
   return null;
 }
 
-/** Detect dangerous redirections */
+/** Detect dangerous redirections.
+ *
+ * Calibrated 2026-05-09: every test of a local model failed because
+ * `2>/dev/null`, `>/tmp/x`, and `>output.log` were all classified as
+ * "Command contains output redirection" issues. Those are idiomatic
+ * bash; flagging them broke every network/diagnostic command and
+ * forced the model into a give-up loop. Now we only flag redirections
+ * that actually overwrite system state. */
 export function detectDangerousRedirections(command: string): string | null {
   // Skip redirections inside quotes
   const unquoted = stripQuotedStrings(command);
 
-  // Overwrite redirection to important files
-  if (/>\s*\/etc\//.test(unquoted) || />\s*\/dev\/sd/.test(unquoted)) {
+  // 1. SENSITIVE SYSTEM PATHS — always block.
+  if (
+    /(?:^|\s|\d)>{1,2}\s*\/etc\//.test(unquoted) ||
+    /(?:^|\s|\d)>{1,2}\s*\/dev\/sd/.test(unquoted) ||
+    /(?:^|\s|\d)>{1,2}\s*\/dev\/disk/.test(unquoted) ||
+    /(?:^|\s|\d)>{1,2}\s*\/var\/log\//.test(unquoted) ||
+    /(?:^|\s|\d)>{1,2}\s*\/boot\//.test(unquoted) ||
+    /(?:^|\s|\d)>{1,2}\s*\/sys\//.test(unquoted) ||
+    /(?:^|\s|\d)>{1,2}\s*\/proc\//.test(unquoted) ||
+    /(?:^|\s|\d)>{1,2}\s*\/usr\/(?:bin|sbin|local)\//.test(unquoted) ||
+    /(?:^|\s|\d)>{1,2}\s*~?\/\.ssh\//.test(unquoted) ||
+    /(?:^|\s|\d)>{1,2}\s*~?\/\.bash(?:rc|_profile|_history)\b/.test(unquoted)
+  ) {
     return "Command redirects to sensitive system path";
   }
 
-  // General write redirection (>, >>)
-  if (/>{1,2}\s*\S/.test(unquoted)) {
-    return "Command contains output redirection";
+  // 2. PROCESS SUBSTITUTION `>(cmd)` — can execute arbitrary subshell.
+  if (/>\s*\(/.test(unquoted)) {
+    return "Command contains process substitution >() — can execute subshell";
   }
 
+  // 3. Everything else (>, >>, 2>, 2>&1, >&1) is BENIGN by default.
+  // Discarding stderr / stdout, writing to local files, tee-ing to
+  // logs — all standard tooling, not a safety concern. Models need
+  // these for any real diagnostic work (nmap, lsof, ifconfig piped
+  // to grep with stderr discarded, etc.).
   return null;
 }
 

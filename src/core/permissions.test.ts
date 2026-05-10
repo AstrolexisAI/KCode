@@ -60,14 +60,15 @@ describe("detectCommandInjection", () => {
     expect(result).toBeNull();
   });
 
-  test("detects subshell via ;(", () => {
-    const result = detectCommandInjection("ls; (rm -rf /)");
-    expect(result).toContain("subshell");
+  // Calibrated 2026-05-09: chain+paren patterns are NOT a first-line
+  // injection signal — too many false positives on benign pipelines.
+  // Dangerous segments like `rm -rf /` are caught by detectDestructiveRemoval.
+  test("safe: chain+paren grouping (downstream rm caught by other detector)", () => {
+    expect(detectCommandInjection("ls; (echo grouped)")).toBeNull();
   });
 
-  test("detects subshell via |(", () => {
-    const result = detectCommandInjection("echo test | (cat)");
-    expect(result).toContain("subshell");
+  test("safe: pipe+paren grouping for subshell-scoped operations", () => {
+    expect(detectCommandInjection("echo test | (cat)")).toBeNull();
   });
 
   test("returns null for safe command", () => {
@@ -92,14 +93,15 @@ describe("detectDangerousRedirections", () => {
     expect(result).toContain("sensitive system path");
   });
 
-  test("detects general output redirection", () => {
-    const result = detectDangerousRedirections("echo test > output.txt");
-    expect(result).toContain("redirection");
+  // Calibrated 2026-05-09: redirects to local files / /tmp / /dev/null
+  // are now SAFE (idiomatic bash, not a safety concern). Models need
+  // these for diagnostic work. Only sensitive system paths get flagged.
+  test("safe: redirect to local file in cwd", () => {
+    expect(detectDangerousRedirections("echo test > output.txt")).toBeNull();
   });
 
-  test("detects append redirection", () => {
-    const result = detectDangerousRedirections("echo test >> log.txt");
-    expect(result).toContain("redirection");
+  test("safe: append redirect to local log file", () => {
+    expect(detectDangerousRedirections("echo test >> log.txt")).toBeNull();
   });
 
   test("returns null for safe command without redirection", () => {
@@ -247,10 +249,10 @@ describe("analyzeBashCommand", () => {
     expect(result.issues.length).toBeGreaterThan(0);
   });
 
-  test("command with output redirection is moderate", () => {
+  test("safe: command with output redirection to local file", () => {
     const result = analyzeBashCommand("echo test > output.txt");
-    expect(result.safe).toBe(false);
-    expect(result.riskLevel).toBe("moderate");
+    expect(result.safe).toBe(true);
+    expect(result.riskLevel).toBe("safe");
   });
 
   test("bash script.sh is dangerous", () => {

