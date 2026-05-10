@@ -6,6 +6,7 @@ import { migration as m002 } from "./migrations/002_migrate_model_names";
 import { migration as m003 } from "./migrations/003_add_compaction_config";
 import { migration as m004 } from "./migrations/004_migrate_legacy_memory";
 import { migration as m005 } from "./migrations/005_backfill_context_sizes";
+import { migration as m006 } from "./migrations/006_upgrade_underestimated_context";
 import type { Migration } from "./types";
 
 /**
@@ -14,4 +15,4 @@ import type { Migration } from "./types";
  * 1. Create src/migrations/migrations/NNN_description.ts
  * 2. Import and add it to this array
  */
-export const ALL_MIGRATIONS: Migration[] = [m001, m002, m003, m004, m005];
+export const ALL_MIGRATIONS: Migration[] = [m001, m002, m003, m004, m005, m006];

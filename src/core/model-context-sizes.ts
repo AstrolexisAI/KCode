@@ -84,6 +84,25 @@ const EXACT: Record<string, number> = {
   "gemini-2.0-flash": 1_000_000,
   "gemini-1.5-pro": 2_000_000,
   "gemini-1.5-flash": 1_000_000,
+
+  // ── Local MLX / GGUF (mnemo:mark5 series + their MLX repos) ─
+  // These map BOTH the codename and the MLX HuggingFace repo so the
+  // wizard, runtime, and migration all converge on the right size.
+  // GLM-4.7-Flash supports 128k natively; without this it was clamped
+  // to KCode's 32k default and auto-compacted aggressively (verified
+  // 2026-05-09 on Mac — 4 tool calls hit 94% of a fake 32k window).
+  "mnemo:mark5-mini": 131_072,
+  "mlx-community/GLM-4.7-Flash-4bit": 131_072,
+  "mnemo:mark5-coder": 131_072,
+  "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit-DWQ": 131_072,
+  "mnemo:mark5-mid": 131_072,
+  "mlx-community/gemma-4-31b-it-4bit": 131_072,
+  "mnemo:mark5-max": 131_072,
+  "mlx-community/gemma-4-31b-it-8bit": 131_072,
+  "mnemo:mark5-nano": 32_768,
+  "mlx-community/Qwen3-8B-8bit": 32_768,
+  "mnemo:mark5-pico": 16_384,
+  "mlx-community/Qwen3.5-4B-MLX-4bit": 16_384,
 };
 
 /**
