@@ -70,9 +70,7 @@ describe("checkModelTaskMismatch", () => {
   test("GLM-4.7-Flash + complex-edit → no mismatch (its strength)", () => {
     // GLM-4.7-Flash is still good at explicit coding tasks where the
     // intent is unambiguous (file path + change is clear).
-    expect(
-      checkModelTaskMismatch("mlx-community/GLM-4.7-Flash-4bit", "complex-edit"),
-    ).toBeNull();
+    expect(checkModelTaskMismatch("mlx-community/GLM-4.7-Flash-4bit", "complex-edit")).toBeNull();
   });
 
   test("Empty/unknown model → no mismatch", () => {

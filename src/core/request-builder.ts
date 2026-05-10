@@ -851,9 +851,7 @@ export async function executeModelRequest(
       const remedy = isLocal
         ? "Local model server is down. Restart with `kcode kodi up` (or check `kcode kodi status`)."
         : "Check network connectivity, then retry. If this persists, the provider may be down — try `/multimodel on` to enable a fallback.";
-      const wrapped = new Error(
-        `Cannot reach ${modelName} at ${req.url} — ${raw}. ${remedy}`,
-      );
+      const wrapped = new Error(`Cannot reach ${modelName} at ${req.url} — ${raw}. ${remedy}`);
       throw wrapped;
     }
     throw err;

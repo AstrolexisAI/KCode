@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { writeFileSync, existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { _resetShellRegistry, getShell, registerShell } from "../core/bg-shell-registry";
 import { executeKillShell, killShellDefinition } from "./kill-shell";
 

@@ -678,12 +678,8 @@ async function _executeBashInner(input: Record<string, unknown>): Promise<ToolRe
       // Persistent shell registry — the model can introspect this
       // bg shell later via BashOutput / KillShell instead of being
       // blind after the initial 3-second window.
-      const {
-        ensureRegistryDir,
-        newShellId,
-        logPathFor,
-        registerShell,
-      } = require("../core/bg-shell-registry.js") as typeof import("../core/bg-shell-registry");
+      const { ensureRegistryDir, newShellId, logPathFor, registerShell } =
+        require("../core/bg-shell-registry.js") as typeof import("../core/bg-shell-registry");
       ensureRegistryDir();
       const shellId = newShellId();
       const tmpLog = logPathFor(shellId);
@@ -784,9 +780,7 @@ async function _executeBashInner(input: Record<string, unknown>): Promise<ToolRe
         // Wrap the wrapper output with a header line so the model knows
         // the shellId for follow-up tools. Format kept tight so it doesn't
         // dwarf the actual command output for short jobs.
-        const header = registeredShellId
-          ? `[shellId: ${registeredShellId}]\n`
-          : "";
+        const header = registeredShellId ? `[shellId: ${registeredShellId}]\n` : "";
 
         // Operator-mind: when the spawned command is a known long-running
         // server, do not trust the wrapper's "PID: X" output. Probe the

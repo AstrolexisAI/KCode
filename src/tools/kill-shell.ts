@@ -5,7 +5,7 @@
 // dev servers the model spawned, or canceling parallel work that's
 // no longer needed.
 
-import { isShellAlive, killShell, getShell, purgeShell } from "../core/bg-shell-registry";
+import { getShell, isShellAlive, killShell, purgeShell } from "../core/bg-shell-registry";
 import type { ToolDefinition, ToolResult } from "../core/types";
 
 export const killShellDefinition: ToolDefinition = {

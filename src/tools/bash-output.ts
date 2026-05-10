@@ -9,12 +9,7 @@
 // inspect progress — it would have to remember the PID and shell out
 // to `cat /tmp/...` (which used to be deleted after 3 seconds anyway).
 
-import {
-  getShell,
-  isShellAlive,
-  listShells,
-  readShellOutput,
-} from "../core/bg-shell-registry";
+import { getShell, isShellAlive, listShells, readShellOutput } from "../core/bg-shell-registry";
 import type { ToolDefinition, ToolResult } from "../core/types";
 
 export const bashOutputDefinition: ToolDefinition = {
@@ -43,9 +38,7 @@ export const bashOutputDefinition: ToolDefinition = {
   },
 };
 
-export async function executeBashOutput(
-  input: Record<string, unknown>,
-): Promise<ToolResult> {
+export async function executeBashOutput(input: Record<string, unknown>): Promise<ToolResult> {
   const shellId = typeof input.shellId === "string" ? input.shellId : undefined;
   const tailBytes = typeof input.tailBytes === "number" ? input.tailBytes : undefined;
 

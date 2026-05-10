@@ -54,7 +54,10 @@ export function registerShell(record: Omit<BgShellRecord, "logPath">): BgShellRe
   ensureRegistryDir();
   const full: BgShellRecord = { ...record, logPath: logPathFor(record.shellId) };
   _shells.set(record.shellId, full);
-  log.debug("bg-shell", `registered ${record.shellId} pid=${record.pid} cmd=${record.command.slice(0, 60)}`);
+  log.debug(
+    "bg-shell",
+    `registered ${record.shellId} pid=${record.pid} cmd=${record.command.slice(0, 60)}`,
+  );
   return full;
 }
 
@@ -115,7 +118,10 @@ export function killShell(shellId: string, force = false): { killed: boolean; re
   }
   try {
     process.kill(record.pid, force ? "SIGKILL" : "SIGTERM");
-    log.info("bg-shell", `signaled ${shellId} pid=${record.pid} (${force ? "SIGKILL" : "SIGTERM"})`);
+    log.info(
+      "bg-shell",
+      `signaled ${shellId} pid=${record.pid} (${force ? "SIGKILL" : "SIGTERM"})`,
+    );
     return { killed: true };
   } catch (err) {
     return { killed: false, reason: err instanceof Error ? err.message : String(err) };

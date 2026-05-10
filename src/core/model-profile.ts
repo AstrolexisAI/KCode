@@ -71,9 +71,7 @@ export function detectModelSize(modelName: string): ModelSize {
   // Check catalog first by codename or mlxRepo (so MLX-served users
   // get the right profile too — e.g. "mlx-community/GLM-4.7-Flash-4bit"
   // resolves to the mark5-mini entry's 32B paramBillions).
-  const entry = MODEL_CATALOG.find(
-    (m) => m.codename === modelName || m.mlxRepo === modelName,
-  );
+  const entry = MODEL_CATALOG.find((m) => m.codename === modelName || m.mlxRepo === modelName);
   if (entry) {
     if (entry.paramBillions <= 4) return "tiny";
     if (entry.paramBillions <= 10) return "small";

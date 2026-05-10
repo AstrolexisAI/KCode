@@ -385,9 +385,7 @@ export async function createStreamWithRetry(
                 const settings = await loadUserSettingsRaw();
                 const url = cand.baseUrl.toLowerCase();
                 if (url.includes("anthropic.com")) {
-                  rescueConfig.apiKey = String(
-                    settings.anthropicApiKey ?? settings.apiKey ?? "",
-                  );
+                  rescueConfig.apiKey = String(settings.anthropicApiKey ?? settings.apiKey ?? "");
                 } else if (url.includes("x.ai")) {
                   rescueConfig.apiKey = String(settings.xaiApiKey ?? "");
                 } else if (url.includes("openai.com")) {

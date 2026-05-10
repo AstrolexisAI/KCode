@@ -7,7 +7,6 @@ import { agentDefinition, executeAgent } from "./agent";
 import { askUserDefinition, executeAskUser } from "./ask-user";
 import { bashDefinition, executeBash } from "./bash";
 import { bashOutputDefinition, executeBashOutput } from "./bash-output";
-import { killShellDefinition, executeKillShell } from "./kill-shell";
 import { browserDefinition, executeBrowser } from "./browser";
 import { clipboardDefinition, executeClipboard } from "./clipboard-tool";
 import {
@@ -33,6 +32,7 @@ import { executeGlob, globDefinition } from "./glob";
 import { executeGrep, grepDefinition } from "./grep";
 import { executeGrepReplace, grepReplaceDefinition } from "./grep-replace";
 import { executeImageGen, imageGenDefinition } from "./image-gen";
+import { executeKillShell, killShellDefinition } from "./kill-shell";
 import { executeKulvex, kulvexDefinition } from "./kulvex";
 import { executeLearn, learnDefinition } from "./learn";
 import { executeLs, lsDefinition } from "./ls";

@@ -117,7 +117,8 @@ export const MODEL_CATALOG: CatalogEntry[] = [
     minVramMB: 16384,
     contextSize: 32768,
     localFile: "mark5-mini.gguf",
-    description: "GLM-4.7-Flash — fits 16GB GPUs, strong tool execution; weak intent reasoning on short ambiguous prompts (use /multimodel for analysis)",
+    description:
+      "GLM-4.7-Flash — fits 16GB GPUs, strong tool execution; weak intent reasoning on short ambiguous prompts (use /multimodel for analysis)",
     mlxRepo: "mlx-community/GLM-4.7-Flash-4bit",
     mlxQuant: "4bit",
   },
