@@ -49,7 +49,11 @@ import {
 } from "../core/sandbox";
 import type { BashInput, ToolDefinition, ToolResult } from "../core/types";
 
-const MAX_TIMEOUT = 600_000; // 10 minutes
+// MAX_TIMEOUT bumped 2026-05-10 from 10min → 60min: the auto-extender
+// for `kcode rag index` etc. needs headroom for big repos and benchmarks.
+// The model still defaults to 2min for ad-hoc commands; only the
+// dynamic per-command extension can reach this ceiling.
+const MAX_TIMEOUT = 3_600_000; // 60 minutes
 const DEFAULT_TIMEOUT = 120_000; // 2 minutes
 
 /**
@@ -538,6 +542,25 @@ async function _executeBashInner(input: Record<string, unknown>): Promise<ToolRe
 
     // Override timeout for security tools (they often take longer)
     effectiveTimeoutMs = Math.max(timeoutMs, secToolInfo.timeout);
+  }
+
+  // ─── Long-running KCode subcommand detection ─────────────────────
+  // The 2-min default cap kills `kcode rag index <largepath>`,
+  // `kcode benchmark`, and similar long ops that genuinely need 5+
+  // minutes. Bump the timeout for known-long kcode subcommands so the
+  // model doesn't have to manually pass timeout: 600000 every time.
+  // Verified 2026-05-10 with Curly: 1345-file index hit 2-min cap.
+  if (/\bkcode\s+rag\s+index\b/.test(command)) {
+    // Indexing scales with file count. 30 min cap is generous enough
+    // for ~10K-file repos (~600 chunks/min through ANE batched).
+    effectiveTimeoutMs = Math.max(effectiveTimeoutMs, 1_800_000);
+    log.info("tool", "kcode rag index detected — extending bash timeout to 30min");
+  } else if (/\bkcode\s+benchmark\b/.test(command)) {
+    effectiveTimeoutMs = Math.max(effectiveTimeoutMs, 3_600_000);
+    log.info("tool", "kcode benchmark detected — extending bash timeout to 60min");
+  } else if (/\bkcode\s+(?:audit|distill|sbom|teach)\b/.test(command)) {
+    effectiveTimeoutMs = Math.max(effectiveTimeoutMs, 600_000);
+    log.info("tool", "long-running kcode subcommand detected — extending bash timeout to 10min");
   }
 
   // ─── Sudo password handling ────────────────────────────────────

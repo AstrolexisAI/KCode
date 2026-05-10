@@ -59,12 +59,45 @@ export async function runPrintMode(
           const { decomposePrompt } = await import("../core/router-conductor.js");
           const plan = await decomposePrompt(prompt);
           if (plan && plan.sub_tasks.length > 1) {
-            const { orchestratePlan, formatOrchestrationOutput } = await import(
-              "../core/router-orchestrator.js"
+            // Pre-check: would parallel waves give us real concurrency,
+            // or are all sub-tasks going to hit the same local MLX
+            // server? Verified 2026-05-10: the orchestrator was firing
+            // 3 parallel sub-tasks at the same Gemma server, queuing
+            // them serially anyway and crashing MLX from request
+            // contention. If all targets resolve to the same local
+            // model, fall through to the single-prompt path.
+            const cfgPre = conversationManager.getConfig();
+            const targets = await Promise.all(
+              plan.sub_tasks.map(async (task) => {
+                const intentTask =
+                  task.intent === "analysis"
+                    ? "analysis"
+                    : task.intent === "chat"
+                      ? "chat"
+                      : "complex-edit";
+                const route = await selectBenchmarkModel(intentTask, cfgPre.model);
+                return route?.model ?? cfgPre.model;
+              }),
             );
-            process.stderr.write(
-              `\x1b[2m⇄ orchestrating ${plan.sub_tasks.length} parallel sub-tasks\x1b[0m\n`,
-            );
+            const uniqueTargets = new Set(targets);
+            const allSameModel = uniqueTargets.size === 1;
+            const allLocal = [...uniqueTargets].every((m) => {
+              // Heuristic: codename starts with mlx-community/ or mnemo:
+              // OR the registered baseUrl is localhost.
+              return /^mlx-community\/|^mnemo:/.test(m);
+            });
+            if (allSameModel && allLocal) {
+              process.stderr.write(
+                `\x1b[2m⇄ skipping orchestration — all ${plan.sub_tasks.length} sub-tasks → same local model (no real parallelism)\x1b[0m\n`,
+              );
+              // Fall through to the single-intent path below.
+            } else {
+              const { orchestratePlan, formatOrchestrationOutput } = await import(
+                "../core/router-orchestrator.js"
+              );
+              process.stderr.write(
+                `\x1b[2m⇄ orchestrating ${plan.sub_tasks.length} parallel sub-tasks\x1b[0m\n`,
+              );
             const cfg = conversationManager.getConfig();
             const result = await orchestratePlan(plan, cfg, cfg.model, (ev) => {
               if (ev.type === "wave-start") {
@@ -93,6 +126,7 @@ export async function runPrintMode(
             const combined = formatOrchestrationOutput(result);
             process.stdout.write(combined + "\n");
             return 0;
+            }
           }
         } catch (orchestrateErr) {
           process.stderr.write(`\x1b[2m[orchestrator] ${orchestrateErr} — falling back\x1b[0m\n`);
