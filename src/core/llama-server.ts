@@ -281,19 +281,34 @@ export async function startServer(options?: {
       }
       // Sanitize model name to prevent injection (only allow alphanumeric, -, /, .)
       const safeModel = mlxModel.replace(/[^a-zA-Z0-9\-/._]/g, "");
+      // Prompt cache flags so MLX keeps recent prompt KV across turns
+      // instead of rebuilding from scratch each request. Without these,
+      // the cache rebuild between turns LOOKS LIKE the model is being
+      // unloaded — RAM usage drops, next turn rebuilds → spike again.
+      // Verified 2026-05-10 with Curly: model active mem oscillating
+      // 30GB→18GB→30GB on every chat turn until --prompt-cache-size set.
+      //   --prompt-cache-size 32  : keep last 32 prompt caches
+      //   --prompt-cache-bytes 4G : cap total prompt cache at 4GB
       const wrapperScript = `import mlx.core as mx
 if hasattr(mx, 'set_wired_limit'):
     mx.set_wired_limit(${wiredBytes})
     _orig = mx.set_wired_limit
     mx.set_wired_limit = lambda *a, **kw: _orig(${wiredBytes})
 import sys
-sys.argv = ['mlx_lm.server', '--model', '${safeModel}', '--port', '${safePort}', '--host', '127.0.0.1']
+sys.argv = [
+    'mlx_lm.server',
+    '--model', '${safeModel}',
+    '--port', '${safePort}',
+    '--host', '127.0.0.1',
+    '--prompt-cache-size', '32',
+    '--prompt-cache-bytes', '4294967296',
+]
 from mlx_lm.server import main
 main()`;
       args = ["-c", wrapperScript];
       log.info(
         "server",
-        `Starting MLX server with disk offloading (wired: ${config.mlxWiredLimitMB}MB) on port ${port}`,
+        `Starting MLX server with wired pinning + persistent KV cache (wired: ${config.mlxWiredLimitMB}MB, cache: 4GB) on port ${port}`,
       );
     } else {
       args = [
@@ -305,6 +320,12 @@ main()`;
         port.toString(),
         "--host",
         "127.0.0.1",
+        // Same persistent-cache flags for the no-wired-limit path so chat
+        // turns reuse KV cache instead of rebuilding each time.
+        "--prompt-cache-size",
+        "32",
+        "--prompt-cache-bytes",
+        "4294967296",
       ];
       log.info("server", `Starting MLX server on port ${port}: ${cmd} ${args.join(" ")}`);
     }
