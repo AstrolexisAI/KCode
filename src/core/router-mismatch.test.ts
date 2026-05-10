@@ -11,6 +11,7 @@ describe("checkModelTaskMismatch", () => {
     expect(m).not.toBeNull();
     expect(m?.reason).toMatch(/Qwen3-Coder is excellent at code-gen/);
     expect(m?.suggestion).toMatch(/multimodel on/);
+    expect(m?.suggestion).toMatch(/mark5-mid/);
   });
 
   test("Qwen3-Coder + chat task → mismatch", () => {
@@ -54,9 +55,24 @@ describe("checkModelTaskMismatch", () => {
     expect(checkModelTaskMismatch("grok-4", "complex-edit")).toBeNull();
   });
 
-  test("GLM-4.7 → no mismatch (verified 2026-05-08 strong agentic)", () => {
-    expect(checkModelTaskMismatch("mlx-community/GLM-4.7-Flash-4bit", "analysis")).toBeNull();
-    expect(checkModelTaskMismatch("mlx-community/GLM-4.7-Flash-4bit", "complex-edit")).toBeNull();
+  test("GLM-4.7-Flash + analysis → mismatch (verified 2026-05-09 weak intent)", () => {
+    // Initial verification 2026-05-08 said agentic was strong, but
+    // 2026-05-09 testing on Mac proved it confuses ambiguous Spanish
+    // intent like "analiza la red local" (reads source files instead
+    // of running ifconfig). Listed as a mismatch for analysis tasks
+    // so multimodel routing is suggested.
+    const m = checkModelTaskMismatch("mlx-community/GLM-4.7-Flash-4bit", "analysis");
+    expect(m).not.toBeNull();
+    expect(m?.reason).toMatch(/GLM-4\.7-Flash/);
+    expect(m?.suggestion).toMatch(/multimodel on/);
+  });
+
+  test("GLM-4.7-Flash + complex-edit → no mismatch (its strength)", () => {
+    // GLM-4.7-Flash is still good at explicit coding tasks where the
+    // intent is unambiguous (file path + change is clear).
+    expect(
+      checkModelTaskMismatch("mlx-community/GLM-4.7-Flash-4bit", "complex-edit"),
+    ).toBeNull();
   });
 
   test("Empty/unknown model → no mismatch", () => {

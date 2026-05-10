@@ -380,6 +380,17 @@ const MISMATCH_RULES: ReadonlyArray<MismatchRule> = [
       "Qwen3-Coder is excellent at code-gen but ignores tool-result hints in agentic / analysis prompts (verified 2026-05-08).",
   },
   {
+    // GLM-4.7-Flash 4-bit (mark5-mini default) confuses ambiguous
+    // intent prompts: "analiza la red local" → reads source files
+    // instead of running ifconfig/netstat (verified 2026-05-09 on Mac).
+    // Strong for explicit tool-call paths, weak for short ambiguous
+    // queries that need real reasoning.
+    modelMatch: /glm-4\.7-flash/i,
+    badTasks: new Set<BenchmarkTaskType>(["analysis"]),
+    reason:
+      "GLM-4.7-Flash 4-bit is tuned for explicit tool execution but struggles with ambiguous intent in short prompts (e.g. 'analiza la red' → reads source files).",
+  },
+  {
     modelMatch: /gemma-?[234]/i,
     badTasks: new Set<BenchmarkTaskType>(["complex-edit", "simple-edit", "multi-step"]),
     reason:
@@ -408,7 +419,7 @@ export function checkModelTaskMismatch(
       return {
         reason: rule.reason,
         suggestion:
-          "Enable multi-model routing so KCode auto-picks a stronger model for this task: run `/multimodel on` (or set `multimodel: true` in ~/.kcode/settings.json).",
+          "Run `/multimodel on` so KCode auto-picks a stronger model per task, or switch with `/model mnemo:mark5-mid` for a heavier local default (Gemma 4 31B, 24GB VRAM).",
       };
     }
   }

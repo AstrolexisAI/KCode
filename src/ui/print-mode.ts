@@ -31,6 +31,14 @@ export async function runPrintMode(
       checkModelTaskMismatch,
       markMismatchSeen,
     } = await import("../core/router.js");
+    // Honor explicit --model: when the user pinned a model on the
+    // command line, never let the auto-router override it. Without
+    // this, benchmark harnesses that pass --model "X" would silently
+    // get rerouted to whatever multi-model picks, defeating the
+    // entire point of the override (verified 2026-05-09 with a
+    // Gemma Q6 bench that ran 4/5 tests on GLM-4.7-Flash instead).
+    const cfgPin = conversationManager.getConfig();
+    const modelPinned = cfgPin.modelExplicitlySet === true;
     if (!isMultimodelEnabled()) {
       // Multimodel OFF — surface a one-time-per-session recommendation
       // if the default model is a known-weak match for the task at hand.
@@ -44,7 +52,7 @@ export async function runPrintMode(
         process.stderr.write(`\x1b[33m  ${mismatch.suggestion}\x1b[0m\n`);
       }
     }
-    if (isMultimodelEnabled()) {
+    if (isMultimodelEnabled() && !modelPinned) {
       // Conductor path — only for prompts > 60 chars (avoids overhead on short chats)
       if (prompt.length > 60) {
         try {

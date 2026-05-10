@@ -1727,7 +1727,11 @@ export function useMessageProcessor(params: UseMessageProcessorParams): UseMessa
             /* non-fatal */
           }
         }
-        if (isMultimodelEnabled()) {
+        // Same guard as print mode: explicit --model pin must win over
+        // multi-model auto-routing. Otherwise benchmark/manual model
+        // selection silently gets rerouted (verified 2026-05-09).
+        const cfgGuard = conversationManager.getConfig();
+        if (isMultimodelEnabled() && !cfgGuard.modelExplicitlySet) {
           if (userInput.length > 60) {
             try {
               setLoadingMessage("Decomposing prompt...");
