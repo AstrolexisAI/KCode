@@ -675,8 +675,18 @@ async function _executeBashInner(input: Record<string, unknown>): Promise<ToolRe
   // but first capture initial output for ~3 seconds via a temp file.
   if (isBackground) {
     return new Promise((resolve) => {
-      const tmpDir = "/tmp/kcode-bg";
-      const tmpLog = `${tmpDir}/bg-${Date.now()}-${require("node:crypto").randomBytes(4).toString("hex")}.log`;
+      // Persistent shell registry — the model can introspect this
+      // bg shell later via BashOutput / KillShell instead of being
+      // blind after the initial 3-second window.
+      const {
+        ensureRegistryDir,
+        newShellId,
+        logPathFor,
+        registerShell,
+      } = require("../core/bg-shell-registry.js") as typeof import("../core/bg-shell-registry");
+      ensureRegistryDir();
+      const shellId = newShellId();
+      const tmpLog = logPathFor(shellId);
 
       // For background sudo commands, inject password via SUDO_ASKPASS
       let bgCommand = command;
@@ -708,18 +718,19 @@ async function _executeBashInner(input: Record<string, unknown>): Promise<ToolRe
       }
 
       // Wrapper script:
-      // 1. Start the real command, teeing output to a temp file
-      // 2. After the command starts, the parent bash exits
-      // The real command keeps running because nohup + disown detaches it
+      // 1. Start the real command, redirecting output to the persistent log
+      // 2. After spawn, the parent bash returns the PID immediately
+      // 3. We capture ~3s of initial output for the model's first read,
+      //    BUT we leave the log intact so BashOutput can re-read later.
+      // 4. nohup + disown detaches the real command from the parent.
       const wrapper = `
-        mkdir -p ${tmpDir}
+        mkdir -p $(dirname ${tmpLog})
         nohup bash -c ${shellEscape(bgCommand)} > ${tmpLog} 2>&1 &
         BG_PID=$!
         disown $BG_PID
         echo "PID: $BG_PID"
         sleep 3
         cat ${tmpLog} 2>/dev/null
-        rm -f ${tmpLog}
       `;
 
       const isWin = process.platform === "win32";
@@ -748,6 +759,35 @@ async function _executeBashInner(input: Record<string, unknown>): Promise<ToolRe
         const duration = ((Date.now() - startTime) / 1000).toFixed(1);
         log.debug("tool", `Bash (background) returned in ${duration}s: ${cmdPrefix}`);
 
+        // Extract real PID from wrapper output and register the shell
+        // so BashOutput / KillShell can find it later. If the wrapper
+        // didn't print a PID (e.g. spawn failed), we skip registration
+        // and let the operator-mind verifier surface the failure.
+        let registeredShellId: string | null = null;
+        try {
+          const pidMatch = output.match(/^PID:\s*(\d+)/m);
+          if (pidMatch) {
+            const pid = parseInt(pidMatch[1]!, 10);
+            registerShell({
+              shellId,
+              pid,
+              command,
+              startedAt: startTime,
+              cwd: process.cwd(),
+            });
+            registeredShellId = shellId;
+          }
+        } catch (regErr) {
+          log.debug("tool", `bg shell registration failed (non-fatal): ${regErr}`);
+        }
+
+        // Wrap the wrapper output with a header line so the model knows
+        // the shellId for follow-up tools. Format kept tight so it doesn't
+        // dwarf the actual command output for short jobs.
+        const header = registeredShellId
+          ? `[shellId: ${registeredShellId}]\n`
+          : "";
+
         // Operator-mind: when the spawned command is a known long-running
         // server, do not trust the wrapper's "PID: X" output. Probe the
         // server over HTTP and report a real failure if it isn't actually
@@ -763,13 +803,13 @@ async function _executeBashInner(input: Record<string, unknown>): Promise<ToolRe
             if (verdict.ok) {
               resolve({
                 tool_use_id: "",
-                content: `${output}\n\n✓ ${verdict.report}`,
+                content: `${header}${output}\n\n✓ ${verdict.report}`,
               });
               return;
             }
             resolve({
               tool_use_id: "",
-              content: `${output}\n\n${verdict.report}`,
+              content: `${header}${output}\n\n${verdict.report}`,
               is_error: true,
             });
             return;
@@ -780,7 +820,7 @@ async function _executeBashInner(input: Record<string, unknown>): Promise<ToolRe
 
         resolve({
           tool_use_id: "",
-          content: output || "(background process started)",
+          content: `${header}${output || "(background process started)"}`,
         });
       });
 

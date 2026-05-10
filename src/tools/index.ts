@@ -6,6 +6,8 @@ import { ToolRegistry } from "../core/tool-registry";
 import { agentDefinition, executeAgent } from "./agent";
 import { askUserDefinition, executeAskUser } from "./ask-user";
 import { bashDefinition, executeBash } from "./bash";
+import { bashOutputDefinition, executeBashOutput } from "./bash-output";
+import { killShellDefinition, executeKillShell } from "./kill-shell";
 import { browserDefinition, executeBrowser } from "./browser";
 import { clipboardDefinition, executeClipboard } from "./clipboard-tool";
 import {
@@ -106,6 +108,8 @@ export function registerBuiltinTools(mcpManager?: McpManager): ToolRegistry {
 
   // Built-in tools
   registry.register("Bash", bashDefinition, executeBash);
+  registry.register("BashOutput", bashOutputDefinition, executeBashOutput);
+  registry.register("KillShell", killShellDefinition, executeKillShell);
   registry.register("Read", readDefinition, executeRead);
   registry.register("Write", writeDefinition, executeWrite);
   registry.register("Edit", editDefinition, executeEdit);
