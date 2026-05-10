@@ -21,9 +21,11 @@ const DEFERRAL_PATTERNS = [
   /\b(?:Let me know|Dime cómo|Dime si)\b/i,
   // v2.10.86b: intention-without-execution patterns
   /\b(?:Próximos\s+(?:Pasos|pasos)|Next\s+Steps)\b/i,
-  /\b(?:Voy\s+a\s+(?:proceder|realizar|ejecutar|analizar|leer|revisar))\b/i,
-  /\b(?:I(?:'ll| will)\s+(?:start|begin|proceed|analyze|read|review|examine))\b/i,
-  /(?:Leeré|Analizaré|Revisaré|Evaluaré|Inspeccionaré)/i,
+  /\b(?:Voy\s+a\s+(?:proceder|realizar|ejecutar|analizar|leer|revisar|simplificar|intentar|probar|modificar|reformular|usar|investigar|verificar|comprobar|escanear|buscar|consultar|reintentar))\b/i,
+  /\b(?:Déjame\s+(?:intentar|probar|simplificar|verificar|comprobar|usar|investigar|reformular|reintentar))\b/i,
+  /\b(?:I(?:'ll| will)\s+(?:start|begin|proceed|analyze|read|review|examine|simplify|try|retry|investigate|verify|check|search|scan))\b/i,
+  /\b(?:Let\s+me\s+(?:try|simplify|investigate|verify|check|search|scan|retry))\b/i,
+  /(?:Leeré|Analizaré|Revisaré|Evaluaré|Inspeccionaré|Probaré|Intentaré|Verificaré|Reintentaré|Simplificaré|Buscaré)/i,
 ];
 
 const ACTION_INTENT =
@@ -184,6 +186,28 @@ Para empezar la ejecución, voy a realizar las siguientes acciones técnicas:
     // didn't fire because the model used intention declarations
     // instead of question-based deferrals.
     expect(hasDeferral(assistantText)).toBe(true);
+  });
+
+  test("Curly's network-analysis hang case triggers (2026-05-09)", () => {
+    // Real failure mode: GLM-4.7-Flash ran 11 tools across a network
+    // analysis, hit a bash syntax error on a complex awk pipe, then
+    // emitted "Voy a simplificar el comando:" and ENDED the turn
+    // without calling any tool. The original DEFERRAL list missed
+    // "simplificar" (and other recovery verbs) so the action-defer
+    // nudge never fired and the session sat idle until Ctrl+C.
+    const userMsg = "analiza que linux hay en la red local";
+    const assistantText = "Voy a simplificar el comando:";
+    expect(hasActionIntent(userMsg)).toBe(true);
+    expect(hasDeferral(assistantText)).toBe(true);
+  });
+
+  test("Other recovery verbs after tool failure trigger nudge", () => {
+    expect(hasDeferral("Voy a intentar con un enfoque diferente:")).toBe(true);
+    expect(hasDeferral("Voy a probar otro comando:")).toBe(true);
+    expect(hasDeferral("Voy a reformular la consulta:")).toBe(true);
+    expect(hasDeferral("Déjame intentar con un comando más simple:")).toBe(true);
+    expect(hasDeferral("Let me try a different approach:")).toBe(true);
+    expect(hasDeferral("I'll simplify the command:")).toBe(true);
   });
 
   test("grok planning style also triggers", () => {

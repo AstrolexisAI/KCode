@@ -102,6 +102,41 @@ describe("tryLevel1 — other verb anchors (regression guards)", () => {
     const r = tryLevel1("git status for the branch", cwd);
     expect(r.handled).toBe(false);
   });
+
+  // ── Search/Find regression guards (verified 2026-05-09 with Curly) ──
+  // The find/search shortcut is for CODE search (grep + filename glob).
+  // Network/web/long-NL prompts must fall through to the LLM, otherwise
+  // the user types "busca en la red local" and gets "No results found"
+  // from a grep in their cwd.
+  test("'busca foo' (single token) IS intercepted as code search", () => {
+    const r = tryLevel1("busca foo", cwd);
+    expect(r.handled).toBe(true);
+  });
+
+  test("'find getUserById' IS intercepted (likely a symbol)", () => {
+    const r = tryLevel1("find getUserById", cwd);
+    expect(r.handled).toBe(true);
+  });
+
+  test("'busca en la red local un linux server' is NOT intercepted (network task)", () => {
+    const r = tryLevel1("busca en la red local un linux server", cwd);
+    expect(r.handled).toBe(false);
+  });
+
+  test("'busca en internet la doc de bun' is NOT intercepted (web task)", () => {
+    const r = tryLevel1("busca en internet la doc de bun", cwd);
+    expect(r.handled).toBe(false);
+  });
+
+  test("'search un bug en este modulo' is NOT intercepted (long NL → LLM)", () => {
+    const r = tryLevel1("search un bug en este modulo", cwd);
+    expect(r.handled).toBe(false);
+  });
+
+  test("'donde esta auth.ts' IS intercepted (short, looks like file)", () => {
+    const r = tryLevel1("donde esta auth.ts", cwd);
+    expect(r.handled).toBe(true);
+  });
 });
 
 // ─── Phase 22 Bug #6 regression — single-HTML detection ─────────

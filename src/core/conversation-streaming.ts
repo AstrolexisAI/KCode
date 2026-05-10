@@ -454,6 +454,19 @@ export async function* processSSEStream(
   const textChunks: string[] = [];
   let streamedOutputChars = 0;
   let charsSinceRepCheck = 0;
+  // Failsafe: if the model emits a wall of text without calling any
+  // tool, that's almost always a degenerate "stuck explaining" loop.
+  // Verified 2026-05-09 on Mac across two sessions:
+  //   • "No se pudo… Déjame intentar…" × 30 (258K tokens in 80s)
+  //   • "Voy a intentar un enfoque más simple…" × 15 (~3K chars
+  //     before the model exceeded the MLX context window entirely)
+  //
+  // 6K chars (~1.5K tokens) catches both within 2-3 reps. A
+  // legitimate text-only answer rarely exceeds 6K; the few that do
+  // (long explanations) usually call at least one tool first. Lower
+  // is safer here than higher — surfacing a "retrying" signal at 5s
+  // beats letting the user wait 60s for the hard cap to kick in.
+  const NO_TOOL_TEXT_LIMIT = 6_000;
   // Phase 33: independent counter for the thinking channel so phase 15
   // on content doesn't compete with the reasoning-loop detector.
   let thinkingCharsSinceRepCheck = 0;
@@ -568,6 +581,30 @@ export async function* processSSEStream(
               stopReason = "end_turn";
               yield { type: "text_delta", text: "\n\n[Output truncated: exceeded maximum length]" };
               textChunks.push("\n\n[Output truncated: exceeded maximum length]");
+              break;
+            }
+
+            // Failsafe: large text emission with zero tool calls in
+            // flight = stuck-explaining loop. Lighter than the cap
+            // above and catches Curly's 2026-05-09 case where
+            // detectRepetitionLoop missed because of mid-token
+            // boundaries from the streaming chunk timing.
+            if (
+              streamedOutputChars >= NO_TOOL_TEXT_LIMIT &&
+              activeToolCalls.size === 0 &&
+              textChunks.length > 1
+            ) {
+              log.warn(
+                "llm",
+                `No-tool text limit (${NO_TOOL_TEXT_LIMIT} chars) hit with zero tool calls — aborting`,
+              );
+              repetitionAborted = true;
+              stopReason = "repetition_aborted";
+              yield {
+                type: "turn_end",
+                stopReason: "repetition_aborted",
+                emptyType: undefined,
+              } as import("./types").StreamEvent;
               break;
             }
 

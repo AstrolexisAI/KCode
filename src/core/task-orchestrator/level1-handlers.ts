@@ -743,11 +743,33 @@ export function tryLevel1(message: string, cwd: string): Level1Result {
   }
 
   // ── Find / Search ──
+  // Only intercept when the prompt looks like a CODE search:
+  //   - target is short (≤ 3 tokens) and looks like a symbol or filename
+  //   - NOT followed by contextual phrases like "en la red", "en internet",
+  //     "online", "en google" etc., which mean a network/web action
+  // Examples that should match: "busca foo", "find getUserById", "where is auth.ts"
+  // Examples that should NOT (verified 2026-05-09 with Curly):
+  //   "busca en la red local un linux server"  → network task
+  //   "busca en internet la doc de X"          → web task
+  //   "busca un bug en este archivo"           → analysis task
+  const NETWORK_OR_WEB_CONTEXT =
+    /^(?:en\s+(?:la\s+)?(?:red|internet|web|wifi|lan)|online|en\s+google|en\s+bing|en\s+stackoverflow)\b/i;
   const findMatch = lower.match(
     /^(?:find|search|buscar?|donde|where)\s+(?:is\s+)?["']?(.+?)["']?\s*$/i,
   );
   if (findMatch) {
     const query = findMatch[1]!.trim();
+    // Reject if the captured "query" is actually a context phrase that
+    // turns this into a network/web request — fall through to LLM.
+    if (NETWORK_OR_WEB_CONTEXT.test(query)) {
+      return { handled: false, output: "" };
+    }
+    // Reject if the query is more than 3 words — long natural-language
+    // sentences like "un bug en el módulo de auth que rompe el login"
+    // are model territory, not grep.
+    if (query.split(/\s+/).length > 3) {
+      return { handled: false, output: "" };
+    }
     const grepResult = run(
       `grep -rn "${query}" --include="*.ts" --include="*.js" --include="*.py" --include="*.go" --include="*.rs" --include="*.cpp" --include="*.c" --include="*.java" --include="*.rb" --include="*.swift" -l 2>/dev/null | head -20`,
       cwd,

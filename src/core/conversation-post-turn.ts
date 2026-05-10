@@ -217,12 +217,18 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
       // model that says "I'll read the file" AND then calls Read
       // won't match this path.
       /\b(?:Próximos\s+(?:Pasos|pasos)|Next\s+Steps)\b/i,
-      /\b(?:Voy\s+a\s+(?:proceder|realizar|ejecutar|analizar|leer|revisar))\b/i,
-      /\b(?:I(?:'ll| will)\s+(?:start|begin|proceed|analyze|read|review|examine))\b/i,
+      // Action verbs added 2026-05-09 after Curly's network-analysis
+      // session hung on "Voy a simplificar el comando:" — the original
+      // list missed retry/recovery verbs that show up after a tool
+      // failure (simplificar, intentar, probar, modificar, reformular).
+      /\b(?:Voy\s+a\s+(?:proceder|realizar|ejecutar|analizar|leer|revisar|simplificar|intentar|probar|modificar|reformular|usar|investigar|verificar|comprobar|escanear|buscar|consultar|reintentar))\b/i,
+      /\b(?:Déjame\s+(?:intentar|probar|simplificar|verificar|comprobar|usar|investigar|reformular|reintentar))\b/i,
+      /\b(?:I(?:'ll| will)\s+(?:start|begin|proceed|analyze|read|review|examine|simplify|try|retry|investigate|verify|check|search|scan))\b/i,
+      /\b(?:Let\s+me\s+(?:try|simplify|investigate|verify|check|search|scan|retry))\b/i,
       // No \b wrappers: accented chars (é) aren't \w in JS regex
       // without the u flag, so \b breaks between r and é. These
       // conjugations are distinctive enough to not need word boundaries.
-      /(?:Leeré|Analizaré|Revisaré|Evaluaré|Inspeccionaré)/i,
+      /(?:Leeré|Analizaré|Revisaré|Evaluaré|Inspeccionaré|Probaré|Intentaré|Verificaré|Reintentaré|Simplificaré|Buscaré)/i,
     ];
     const hasDeferral = DEFERRAL_PATTERNS.some((p) => p.test(fullText));
 
