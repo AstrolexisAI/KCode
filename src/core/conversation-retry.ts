@@ -347,6 +347,78 @@ export async function createStreamWithRetry(
         }
       }
 
+      // Cloud rescue when a local model dies mid-conversation. The
+      // explicit fallback chain above handles user-configured chains;
+      // this path picks ANY available cloud model when the user has
+      // multimodel ON but no explicit fallback set, so a crashed
+      // llama-server / MLX server doesn't kill the session. Without
+      // this, Curly's mac (local-only config) hits a brick wall when
+      // the local server crashes — repeatedly seen 2026-05-09.
+      const errMsgLower = (lastError?.message ?? "").toLowerCase();
+      const looksLikeLocalConnectFail =
+        /cannot reach.*localhost|cannot reach.*127\.0\.0\.1|unable to connect|econnrefused/i.test(
+          errMsgLower,
+        );
+      if (looksLikeLocalConnectFail) {
+        try {
+          const { isMultimodelEnabled } = await import("./router.js");
+          if (isMultimodelEnabled()) {
+            const { listModels } = await import("./models.js");
+            const all = await listModels();
+            const LOCAL = /localhost|127\.0\.0\.1|0\.0\.0\.0/;
+            const triedModels = new Set(
+              [ctx.config.model, ctx.config.fallbackModel, ctx.config.tertiaryModel].filter(
+                Boolean,
+              ),
+            );
+            const cloudCandidates = all.filter(
+              (m) => !LOCAL.test(m.baseUrl) && !triedModels.has(m.name),
+            );
+            for (const cand of cloudCandidates.slice(0, 3)) {
+              log.warn(
+                "llm",
+                `Local server unreachable — cloud rescue: trying ${cand.name} at ${cand.baseUrl}`,
+              );
+              const rescueConfig = { ...ctx.config, apiBase: cand.baseUrl };
+              try {
+                const { loadUserSettingsRaw } = await import("./config.js");
+                const settings = await loadUserSettingsRaw();
+                const url = cand.baseUrl.toLowerCase();
+                if (url.includes("anthropic.com")) {
+                  rescueConfig.apiKey = String(
+                    settings.anthropicApiKey ?? settings.apiKey ?? "",
+                  );
+                } else if (url.includes("x.ai")) {
+                  rescueConfig.apiKey = String(settings.xaiApiKey ?? "");
+                } else if (url.includes("openai.com")) {
+                  rescueConfig.apiKey = String(settings.apiKey ?? "");
+                } else if (url.includes("moonshot")) {
+                  rescueConfig.apiKey = String(settings.kimiApiKey ?? "");
+                }
+                if (!rescueConfig.apiKey) continue; // no key configured for this provider
+                const stream = await executeModelRequest(
+                  cand.name,
+                  rescueConfig,
+                  ctx.systemPrompt,
+                  ctx.messages,
+                  ctx.tools,
+                  ctx.abortController,
+                );
+                log.info("llm", `Cloud rescue: ${cand.name} connected`);
+                return stream;
+              } catch (rescueErr) {
+                log.debug(
+                  "llm",
+                  `Cloud rescue ${cand.name} failed: ${rescueErr instanceof Error ? rescueErr.message : rescueErr}`,
+                );
+              }
+            }
+          }
+        } catch (rescueWrapErr) {
+          log.debug("llm", `Cloud rescue setup failed: ${rescueWrapErr}`);
+        }
+      }
+
       // Auto-cascade to smaller Anthropic models on rate limit exhaustion
       // Only cascade if utilization is high (>80%) — low utilization means it's a
       // temporary burst limit that will resolve with more retries on the same model

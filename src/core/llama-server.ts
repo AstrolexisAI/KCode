@@ -279,7 +279,16 @@ main()`;
     // llama.cpp exposes /health, MLX exposes /v1/models
     const healthEndpoint = isMlx ? "/v1/models" : "/health";
     const startTime = Date.now();
-    const maxWait = 120_000; // 2 minutes max for model loading
+    // Default: 2min for small/medium quants. Larger MLX repos (Q6/Q8
+    // 30B+ models = 25-35GB on disk) need 4-6min on first load
+    // because MLX reads safetensors fully into unified memory
+    // sequentially. Override via KCODE_SERVER_READY_TIMEOUT_MS for
+    // automated benchmarks. Verified 2026-05-09 on M5 Max:
+    // gemma-4-31b-it-6bit (~25GB) hit 120s cap on cold load.
+    const envOverride = Number(process.env.KCODE_SERVER_READY_TIMEOUT_MS);
+    const maxWait = Number.isFinite(envOverride) && envOverride > 0
+      ? envOverride
+      : 120_000;
     const pollInterval = 500;
     let settled = false;
 

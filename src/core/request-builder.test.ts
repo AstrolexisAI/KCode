@@ -3,9 +3,11 @@ import { convertToOpenAIMessages } from "./message-converters.ts";
 import {
   classifyApiErrorHint,
   estimateToolDefinitionTokens,
+  executeModelRequest,
   formatApiErrorMessage,
   resolveApiKey,
 } from "./request-builder.ts";
+import { ToolRegistry } from "./tool-registry.ts";
 import type { KCodeConfig } from "./types.ts";
 
 // ─── resolveApiKey ─────────────────────────────────────────────
@@ -309,6 +311,102 @@ describe("convertToOpenAIMessages system role", () => {
 });
 
 // ─── ModelProvider enum completeness ───────────────────────────
+
+describe("executeModelRequest connect-fail UX", () => {
+  // When fetch fails because the LLM endpoint is unreachable, we MUST
+  // surface (a) which URL failed and (b) a remedy. Without this the
+  // user only sees Bun's generic "Unable to connect" string and
+  // cannot tell whether their MLX server died or their API key is bad.
+  test("local server crash → mentions URL + restart hint", async () => {
+    const config: KCodeConfig = {
+      apiBase: "http://localhost:10091/v1",
+      apiKey: "",
+      model: "mlx-community/GLM-4.7-Flash-4bit",
+      customFetch: async () => {
+        throw new TypeError("Unable to connect. Is the computer able to access the url?");
+      },
+    } as unknown as KCodeConfig;
+
+    const tools = new ToolRegistry();
+    let caught: Error | undefined;
+    try {
+      await executeModelRequest(
+        "mlx-community/GLM-4.7-Flash-4bit",
+        config,
+        "you are a helpful assistant",
+        [{ role: "user", content: "hola" }],
+        tools,
+        null,
+      );
+    } catch (e) {
+      caught = e as Error;
+    }
+    expect(caught).toBeDefined();
+    expect(caught!.message).toContain("Cannot reach");
+    expect(caught!.message).toContain("localhost:10091");
+    expect(caught!.message).toMatch(/kcode kodi up/);
+  });
+
+  test("cloud unreachable → suggests fallback (multimodel)", async () => {
+    const config: KCodeConfig = {
+      apiBase: "https://api.anthropic.com",
+      apiKey: "sk-ant-test",
+      model: "claude-haiku-4-5",
+      customFetch: async () => {
+        throw new TypeError("fetch failed");
+      },
+    } as unknown as KCodeConfig;
+
+    const tools = new ToolRegistry();
+    let caught: Error | undefined;
+    try {
+      await executeModelRequest(
+        "claude-haiku-4-5",
+        config,
+        "test",
+        [{ role: "user", content: "test" }],
+        tools,
+        null,
+      );
+    } catch (e) {
+      caught = e as Error;
+    }
+    expect(caught).toBeDefined();
+    expect(caught!.message).toContain("Cannot reach");
+    expect(caught!.message).toMatch(/multimodel/);
+  });
+
+  test("user-aborted error passes through unchanged", async () => {
+    const ac = new AbortController();
+    ac.abort();
+    const config: KCodeConfig = {
+      apiBase: "http://localhost:10091/v1",
+      apiKey: "",
+      model: "test",
+      customFetch: async () => {
+        throw new Error("aborted");
+      },
+    } as unknown as KCodeConfig;
+
+    const tools = new ToolRegistry();
+    let caught: Error | undefined;
+    try {
+      await executeModelRequest(
+        "test",
+        config,
+        "test",
+        [{ role: "user", content: "hi" }],
+        tools,
+        ac,
+      );
+    } catch (e) {
+      caught = e as Error;
+    }
+    expect(caught).toBeDefined();
+    // Should NOT have been wrapped — user-aborted errors must pass through
+    expect(caught!.message).not.toContain("Cannot reach");
+  });
+});
 
 describe("ModelProvider coverage", () => {
   test("all expected providers are valid ModelProvider values", async () => {

@@ -827,12 +827,37 @@ export async function executeModelRequest(
   // Default to offline-aware fetch so localhost/LAN models keep working
   // but cloud APIs are blocked when KCODE_OFFLINE=1 is active.
   const fetchFn = config.customFetch ?? offlineAwareFetch;
-  const response = await fetchFn(req.url, {
-    method: "POST",
-    headers: req.headers,
-    body: JSON.stringify(req.body),
-    signal: controller?.signal,
-  }).finally(() => clearTimeout(timeoutId));
+  let response: Response;
+  try {
+    response = await fetchFn(req.url, {
+      method: "POST",
+      headers: req.headers,
+      body: JSON.stringify(req.body),
+      signal: controller?.signal,
+    }).finally(() => clearTimeout(timeoutId));
+  } catch (err) {
+    // Wrap raw fetch errors (Bun's "Unable to connect. Is the computer
+    // able to access the url?" or Node's ECONNREFUSED) with the
+    // endpoint that failed + a remedy. Without this the user sees a
+    // useless generic message and has no idea which server died.
+    const raw = err instanceof Error ? err.message : String(err);
+    if (controller?.signal.aborted) throw err; // user-aborted: pass through
+    const isLocal = /localhost|127\.0\.0\.1|0\.0\.0\.0/.test(req.url);
+    const looksLikeConnectFail =
+      /unable to connect|econnrefused|fetch failed|enotfound|connect ECONNREFUSED|EAI_AGAIN/i.test(
+        raw,
+      );
+    if (looksLikeConnectFail) {
+      const remedy = isLocal
+        ? "Local model server is down. Restart with `kcode kodi up` (or check `kcode kodi status`)."
+        : "Check network connectivity, then retry. If this persists, the provider may be down — try `/multimodel on` to enable a fallback.";
+      const wrapped = new Error(
+        `Cannot reach ${modelName} at ${req.url} — ${raw}. ${remedy}`,
+      );
+      throw wrapped;
+    }
+    throw err;
+  }
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "");
