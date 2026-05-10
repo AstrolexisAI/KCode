@@ -25,6 +25,11 @@ let pasteTimer: ReturnType<typeof setTimeout> | null = null;
 export function installPasteInterceptor(onPaste: (text: string) => void): () => void {
   // Enable bracketed paste mode
   process.stdout.write("\x1b[?2004h");
+  // Disable terminal focus reporting (DEC mode 1004). When some other
+  // app left it on, macOS Terminal injects ESC[I / ESC[O sequences
+  // into KCode's input every time the user switches tabs, garbling
+  // the prompt buffer (seen 2026-05-09 with `[O[I[O[I` ghosts).
+  process.stdout.write("\x1b[?1004l");
 
   const handler = (chunk: Buffer | string) => {
     const str = typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf-8");
@@ -35,11 +40,18 @@ export function installPasteInterceptor(onPaste: (text: string) => void): () => 
     const hasBracketEnd = str.includes("\x1b[201~") || str.includes("[201~");
 
     // Strip bracketed paste sequences (with or without \x1b prefix)
+    // and tab-focus events (ESC[I / ESC[O — DEC mode 1004) — both
+    // are control-only and must never appear in the input buffer.
+    // Only ESC-prefixed forms are stripped: bare "[I"/"[O" can occur
+    // in legitimate paste content (e.g. log lines), so we don't touch
+    // those — DEC 1004 always sends the ESC byte.
     const cleaned = str
       .replace(/\x1b\[200~/g, "")
       .replace(/\x1b\[201~/g, "")
       .replace(/\[200~/g, "")
-      .replace(/\[201~/g, "");
+      .replace(/\[201~/g, "")
+      .replace(/\x1b\[I/g, "")
+      .replace(/\x1b\[O/g, "");
 
     if (cleaned.length === 0) {
       // Only bracket sequences — mark as pasting to suppress Ink

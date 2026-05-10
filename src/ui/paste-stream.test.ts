@@ -94,12 +94,16 @@ Paragraph text here.`;
 });
 
 describe("Paste content integrity", () => {
+  // Mirror the production stripping in installPasteInterceptor —
+  // bracketed paste markers + DEC 1004 focus events.
   function normalizePaste(str: string): string {
     const cleaned = str
       .replace(/\x1b\[200~/g, "")
       .replace(/\x1b\[201~/g, "")
       .replace(/\[200~/g, "")
-      .replace(/\[201~/g, "");
+      .replace(/\[201~/g, "")
+      .replace(/\x1b\[I/g, "")
+      .replace(/\x1b\[O/g, "");
     return cleaned.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   }
 
@@ -137,6 +141,22 @@ describe("Paste content integrity", () => {
   test("strips bare bracket sequences", () => {
     const input = "[200~hello world[201~";
     expect(normalizePaste(input)).toBe("hello world");
+  });
+
+  test("strips DEC 1004 focus events from input (macOS Terminal tab switch)", () => {
+    // When the user switches Terminal tabs, DEC mode 1004 (if enabled
+    // by an earlier app) injects ESC[I (focus in) / ESC[O (focus out)
+    // pairs into stdin. Without filtering, KCode's input prompt
+    // accumulates ghost text like "[O[I[O[I". Verified 2026-05-09.
+    const input = "\x1b[O\x1b[Ihello\x1b[O\x1b[Iworld\x1b[O";
+    expect(normalizePaste(input)).toBe("helloworld");
+  });
+
+  test("does NOT strip bare [I / [O without ESC (legitimate paste content)", () => {
+    // Paste content like log lines containing literal "[INFO]" etc.
+    // must survive — only the ESC-prefixed DEC 1004 form is removed.
+    const input = "see [INFO] and [O] for details";
+    expect(normalizePaste(input)).toBe("see [INFO] and [O] for details");
   });
 
   test("normalizes Windows line endings", () => {
