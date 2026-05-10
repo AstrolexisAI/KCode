@@ -41,25 +41,38 @@ export interface CatalogEntry {
 }
 
 // ── Model Catalog ────────────────────────────────────────────────────────
-// 2026-05-08 catalog refresh after multi-model verification on macOS:
+// 2026-05-09 catalog refresh after structured agentic benchmark on macOS
+// M5 Max 48GB. 5-task suite (network analysis, port listing, IP routing,
+// large file scan) measured tool-call rate + accuracy + hallucination.
+// Cross-checked all outputs against ground-truth (arp -a, lsof, etc.).
+// Replaces the 2026-05-08 catalog claims, several of which were unverified.
 //
-// AGENTIC tier (general tool use, network/system, mixed work):
-//   mark5-mini  → GLM-4.7-Flash 4bit  (16GB VRAM)  ← recommended default
-//   GLM-4.7 verified to issue macOS-correct commands directly (ifconfig,
-//   arp, lsof), use nmap when present, multi-stage exploration, no
-//   "tools restricted" hallucinations.
+// COMPACT AGENTIC tier (16GB VRAM — broadest hardware coverage):
+//   mark5-mini  → GLM-4.7-Flash 4bit  (16GB VRAM)
+//   3/5 turns called tools in bench; tokenizer breakdown observed on
+//   long prompts ("9999,9999,..." spam). Adequate for explicit tasks
+//   where the user gives a clear file path / command. Not for
+//   open-ended discovery — use /multimodel or mark5-mid for that.
 //
-// CODING tier (pure code generation, refactor, fix bug):
+// MID AGENTIC tier (24-32GB VRAM — best local agentic / NEW DEFAULT):
+//   mark5-mid  → Gemma 4 31B 6bit  (24GB VRAM, ~25GB on disk)
+//   Bench result: 9 tool calls across 5 tasks, ZERO hallucinations,
+//   honest acknowledgment of failure modes (e.g. "needs sudo for OS
+//   detection"). Cross-OS hint (Linux↔macOS) auto-substitution
+//   verified working. Best agentic local model in the 24GB tier.
+//
+// HIGH-QUALITY SINGLE-SHOT tier (36GB+ — chat / summary / translation):
+//   mark5-max  → Gemma 4 31B 8bit  (36GB VRAM, ~33GB on disk)
+//   Counterintuitive 2026-05-09 finding: Q8 is LESS agentic than Q6.
+//   Bench result: 5 tools / 5 tasks (vs Q6's 9 tools / 5 tasks),
+//   3/5 task success (vs Q6's 5/5). Q8 with higher precision is more
+//   "decisive" — accepts the first tool result as authoritative and
+//   stops, whereas Q6's slight quant noise drives it to retry/explore.
+//   Pick Q8 for single-shot tasks (explain X, translate Y, summarize Z),
+//   pick Q6 for multi-step exploration (audit, debug, network analysis).
+//
+// CODING tier (pure code generation, weak agentic):
 //   mark5-coder → Qwen3-Coder 30B-A3B 4bit DWQ  (16GB VRAM)
-//   Best-in-class local coder. Tool-fitness=weak for agentic mixed
-//   work (verified 2026-05-08), so it's deliberately a separate
-//   tier and not a default — pick it when the task is pure code-gen.
-//
-// CHAT / TRANSLATION tier (Spanish↔English, explanations, doc-writing):
-//   mark5-mid  → Gemma 4 31B 4bit  (24GB VRAM)
-//   mark5-max  → Gemma 4 31B 8bit  (36GB VRAM)
-//   Gemma is chat/translation-tuned. Falls into explain mode on
-//   coding prompts (verified). Excellent for Spanish/English chat.
 //
 // SMALL tier (entry-level, CPU-only or 4-12GB GPUs):
 //   mark5-pico → Qwen3.5 4B  (3GB)
@@ -68,8 +81,9 @@ export interface CatalogEntry {
 // REMOVED:
 //   mark5-80b (Qwen3-Coder-Next 80B) — flagship at 53GB, dropped
 //     when Qwen3-Coder marked weak agentic 2026-05-08
-//   Qwen3.6-35B — never made it into the catalog after E2E showed
-//     it hallucinates fake hostnames/IPs in network output
+//   Qwen3.6-35B — bench 2026-05-09 confirmed it hallucinates network
+//     data (presented invented IP/hostname tables as authoritative).
+//     Worse than visible failure (GLM) for trust-critical tasks.
 export const MODEL_CATALOG: CatalogEntry[] = [
   {
     codename: "mnemo:mark5-pico",
@@ -103,7 +117,7 @@ export const MODEL_CATALOG: CatalogEntry[] = [
     minVramMB: 16384,
     contextSize: 32768,
     localFile: "mark5-mini.gguf",
-    description: "GLM-4.7-Flash — fits 16GB GPUs, strong agentic tool use (recommended default)",
+    description: "GLM-4.7-Flash — fits 16GB GPUs, strong tool execution; weak intent reasoning on short ambiguous prompts (use /multimodel for analysis)",
     mlxRepo: "mlx-community/GLM-4.7-Flash-4bit",
     mlxQuant: "4bit",
   },
@@ -122,14 +136,15 @@ export const MODEL_CATALOG: CatalogEntry[] = [
   {
     codename: "mnemo:mark5-mid",
     paramBillions: 31,
-    quant: "Q4_K_M",
-    sizeGB: 18.6,
+    quant: "Q6_K",
+    sizeGB: 25,
     minVramMB: 24576,
     contextSize: 131072,
     localFile: "mark5-mid.gguf",
-    description: "Gemma 4 31B — chat / translation / Spanish↔English (24GB GPUs)",
-    mlxRepo: "mlx-community/gemma-4-31b-it-4bit",
-    mlxQuant: "4bit",
+    description:
+      "Gemma 4 31B 6-bit — best agentic local (verified 2026-05-09): 9 tool calls / 5 tasks, zero hallucinations on network/system inspection. 24GB+ tier.",
+    mlxRepo: "mlx-community/gemma-4-31b-it-6bit",
+    mlxQuant: "6bit",
   },
   {
     codename: "mnemo:mark5-max",
@@ -139,7 +154,8 @@ export const MODEL_CATALOG: CatalogEntry[] = [
     minVramMB: 36864,
     contextSize: 131072,
     localFile: "mark5-max.gguf",
-    description: "Gemma 4 31B at 8-bit — chat best-quality, 36GB+ GPUs",
+    description:
+      "Gemma 4 31B 8-bit — single-shot quality (chat, summary, translation). Less persistent than mark5-mid for agentic exploration (verified 2026-05-09: 5 tools / 5 tasks vs Q6's 9 tools / 5 tasks; Q8 stops on first tool result, Q6 retries). 36GB+ tier.",
     mlxRepo: "mlx-community/gemma-4-31b-it-8bit",
     mlxQuant: "8bit",
   },

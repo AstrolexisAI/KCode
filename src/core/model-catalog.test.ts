@@ -120,10 +120,14 @@ describe("model-catalog", () => {
     expect(findCatalogEntry("mnemo:mark5-80b")).toBeUndefined();
   });
 
-  test("mark5-mini is GLM-4.7-Flash (agentic default), not Gemma any more", () => {
+  test("mark5-mini is GLM-4.7-Flash, not Gemma any more", () => {
+    // Description updated 2026-05-09 — removed "recommended default"
+    // language since GLM-4.7-Flash 4-bit struggles with ambiguous
+    // intent prompts. Still the 16GB tier choice; just not blanket-
+    // recommended for analysis tasks (that's now multimodel territory).
     const e = findCatalogEntry("mnemo:mark5-mini");
     expect(e?.mlxRepo).toMatch(/GLM-4\.7-Flash/);
-    expect(e?.description).toMatch(/agentic|recommended default/i);
+    expect(e?.description).toMatch(/GLM-4\.7-Flash/);
   });
 
   test("mark5-coder is Qwen3-Coder", () => {
