@@ -38,6 +38,14 @@ def main() -> int:
     model = AutoModel.from_pretrained(MODEL_NAME).eval()
 
     print("[2/4] Tracing the model with a representative input...")
+    # Fixed batch=1 trace. We tried RangeDim(1, 32) for flexible batch
+    # 2026-05-10 to enable batched inference on ANE — but Core ML fell
+    # back to CPU for RangeDim shapes on this model (verified: 309%
+    # CPU usage during inference vs <5% with fixed batch=1, throughput
+    # 3-6 emb/s vs 18 emb/s). ANE requires fixed shapes for many ops.
+    # Reverted to single-sample to keep ANE active. ~50% ANE
+    # utilization is the practical ceiling without major model
+    # surgery (per-batch-size separate models or multi-process spawn).
     example = tokenizer(
         "una oración de ejemplo en español",
         return_tensors="pt",
@@ -69,7 +77,7 @@ def main() -> int:
         (example["input_ids"], example["attention_mask"]),
     )
 
-    print("[3/4] Converting to Core ML (FP16, ANE-targeted)...")
+    print("[3/4] Converting to Core ML (FP16, ANE-targeted, fixed batch=1)...")
     import coremltools as ct
     from coremltools.converters.mil import Builder as mb  # noqa: F401
 

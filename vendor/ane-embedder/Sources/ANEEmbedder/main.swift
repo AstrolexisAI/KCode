@@ -113,56 +113,19 @@ struct ANEEmbedder {
     }
 
     static func embed(texts: [String], model: MLModel) throws -> [[Float]] {
-        // BGE-M3 export expects an "input_ids" tensor of shape
-        // [1, seq_len]. We tokenize per-string then submit ALL of them
-        // as one MLArrayBatchProvider so Core ML can dispatch the work
-        // across ANE's compute units in parallel. With sequential calls
-        // (one prediction per text), only 1 of ANE's 16 compute units
-        // was active at a time → ~5-10% utilization, throughput capped
-        // at ~18 embeddings/sec. The batch path lets ANE run multiple
-        // forward passes concurrently and keeps the chip busy.
-        // Verified 2026-05-10 with Curly: batched runs hit 80%+ ANE
-        // utilization on his M5 Max vs ~50% on the sequential path.
-        if texts.isEmpty { return [] }
-
-        // Build providers in parallel — tokenization is the slow part
-        // (Python RPC roundtrip). Sequential here was ~50ms × N.
-        // Doing it in parallel cuts to max(50ms, N/concurrency * 50ms).
-        let placeholder = try MLDictionaryFeatureProvider(dictionary: [:])
-        var providers: [MLFeatureProvider] = Array(
-            repeating: placeholder as MLFeatureProvider,
-            count: texts.count
-        )
-        var providerErrors: [Error?] = Array(repeating: nil, count: texts.count)
-        let lock = NSLock()
-        DispatchQueue.concurrentPerform(iterations: texts.count) { i in
-            do {
-                let ids = try tokenize(texts[i])
-                let p = try buildProvider(inputIds: ids, model: model)
-                lock.lock()
-                providers[i] = p
-                lock.unlock()
-            } catch {
-                lock.lock()
-                providerErrors[i] = error
-                lock.unlock()
-            }
-        }
-        if let firstErr = providerErrors.compactMap({ $0 }).first {
-            throw firstErr
-        }
-
-        // Single batched MLArrayBatchProvider call. Core ML internally
-        // schedules these to ANE compute units; for batch ≥ 4 we see
-        // significant parallelism.
-        let batchProvider = MLArrayBatchProvider(array: providers)
-        let opts = MLPredictionOptions()
-        let results = try model.predictions(from: batchProvider, options: opts)
-
+        // Sequential loop with batch=1 model. We tried 2026-05-10 to
+        // re-convert with flexible batch (RangeDim(1,32)) for parallel
+        // ANE dispatch — Core ML fell back to CPU on the flexible
+        // shape, dropping throughput from 18 emb/s → 5 emb/s. Reverted
+        // to the working batch=1 model. ~50% ANE utilization is the
+        // practical ceiling for BGE-M3 without major re-engineering
+        // (per-batch-size separate models + dispatcher, or N parallel
+        // helper processes each holding model copies).
         var output: [[Float]] = []
-        output.reserveCapacity(results.count)
-        for i in 0..<results.count {
-            let result = results.features(at: i)
+        for text in texts {
+            let inputIds = try tokenize(text)
+            let provider = try buildProvider(inputIds: inputIds, model: model)
+            let result = try model.prediction(from: provider)
             let vec = try extractEmbedding(from: result, model: model)
             output.append(vec)
         }
