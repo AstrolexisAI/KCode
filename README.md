@@ -82,6 +82,26 @@ The setup wizard (`bun run src/index.ts setup` or `kcode setup`) auto-detects yo
 
 Override with `KCODE_FORCE_LOCAL=1` or `--model <codename>`. Build a standalone binary yourself with `bun run build` (~101 MB).
 
+### macOS Apple Silicon (M1–M5)
+
+On Apple Silicon KCode uses MLX directly instead of llama.cpp. Beyond the default setup, you can squeeze the hardware further:
+
+- **Wider RAM ceiling for the GPU** — on Macs with ≥36 GB unified memory, raise the iogpu wired-memory limit so MLX can pin a 31B Q6 model (~26 GB) without swap. Example for a 48 GB Mac:
+
+  ```bash
+  sudo sysctl iogpu.wired_limit_mb=40960     # 40 GB; persist with a LaunchDaemon
+  ```
+
+  KCode then pins the model into wired memory via `mx.set_wired_limit()` and **keeps the MLX server alive across `kcode --print` exits**, so back-to-back invocations don't pay the cold-load cost. `/quit` from the TUI still releases everything.
+
+- **Persistent prompt cache** — MLX is launched with `--prompt-cache-size 32 --prompt-cache-bytes 4G`, eliminating the per-turn "unloading" pause that earlier versions exhibited.
+
+- **ANE-accelerated RAG embeddings** — when [`vendor/ane-embedder`](./vendor/ane-embedder/) is built (`./vendor/ane-embedder/build.sh`), KCode runs BGE-M3 multilingual embeddings on the Apple Neural Engine via Core ML, freeing the GPU for the LLM. Realistic throughput on M-series: ~18 embeddings/s at ~50% ANE utilization (ANE serializes large transformer pipelines as a single stream — this is the known ceiling, not a bug).
+
+- **Clean TUI input** — DEC mode 1004 focus events from Terminal.app and iTerm2 are stripped from the input stream so Cmd-Tab / window-focus changes never leak `\x1b[I` / `\x1b[O` into your prompt.
+
+- **Models tuned for macOS defaults** — on a 48 GB M-series Mac, `mark5-mid` resolves to Gemma 3 31B Q6 (better for agentic exploration than Q8 because the quant noise keeps the model from converging too early on a single plan). `mark5-mini` and `mark5-max` cover the lower and upper ends.
+
 ---
 
 ## Features
@@ -91,6 +111,8 @@ Override with `KCODE_FORCE_LOCAL=1` or `--model <codename>`. Build a standalone 
 - **Hardware-aware setup wizard** -- detects GPU/VRAM, recommends and downloads the best model for your hardware
 - **llama.cpp** (Linux/Windows) and **MLX** (macOS Apple Silicon) managed automatically
 - **Multi-GPU inference** -- distribute across multiple GPUs (e.g., RTX 5090 + 4090) via llama.cpp RPC
+- **Apple Silicon optimizations** -- MLX with wired-memory pinning (`mx.set_wired_limit`), persistent prompt cache to avoid per-turn model "unloading", and ANE-accelerated RAG embeddings on M-series chips
+- **Bring-your-own MLX model** -- `kcode models use <owner/repo>` registers any Hugging Face MLX repo as the local default, with context size auto-detected from `config.json`
 - **Offline mode** -- fully air-gapped operation with local RAG engine
 - **Privacy-first** -- your code stays on your machine
 
