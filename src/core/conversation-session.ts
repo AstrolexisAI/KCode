@@ -1,6 +1,7 @@
 // KCode - Conversation Session Module
 // Extracted from conversation.ts — fork, restore, session data collection, cost formatting, reset
 
+import { randomBytes } from "node:crypto";
 import { getBranchManager } from "./branch-manager";
 import { log } from "./logger";
 import { CHARS_PER_TOKEN } from "./token-budget";
@@ -121,7 +122,7 @@ export function forkConversation(
   }
 
   // Generate new session ID for the fork
-  const newSessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const newSessionId = `${Date.now()}-${randomBytes(4).toString("hex")}`;
 
   // Persist branch relationship (only if session persistence is enabled)
   if (!config.noSessionPersistence) {
