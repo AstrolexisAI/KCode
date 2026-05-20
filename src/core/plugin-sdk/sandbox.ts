@@ -1,5 +1,20 @@
 // KCode - Plugin Sandbox
 // Restricts plugin execution to safe operations within plugin directory.
+//
+// Security model — what this sandbox does and does NOT protect against:
+//   ✓ Plugin code accidentally escaping its own directory (path traversal)
+//   ✓ Obvious shell-injection patterns in command/args (`;`, `$()`, pipe-to-sh)
+//   ✓ Accidental invocation of destructive binaries (rm, dd, sudo, …)
+//   ✓ Leaking host secrets via env (KCODE_API_KEY, ANTHROPIC_API_KEY, …)
+//   ✓ Local shell injection — spawnSync uses argv arrays, no /bin/sh
+//
+//   ✗ Malicious plugins running an *allowed* binary for hostile purposes
+//     (curl, wget, ssh, python — any allowed binary's full capabilities).
+//   ✗ OS-level escapes (filesystem outside cwd, network, kernel resources).
+//
+// For hostile-plugin isolation use OS primitives (bubblewrap, Docker,
+// seccomp) on top of this sandbox; the in-process checks are a
+// best-effort safety net, not a security boundary against active threats.
 
 import { isAbsolute, relative, resolve } from "node:path";
 
@@ -106,7 +121,25 @@ export class PluginSandbox {
       };
     }
 
-    // Check for shell injection patterns
+    // Validate the command string itself before the joined-fullCmd check:
+    // catches shell metas in `command` even if a future refactor stops
+    // including `command` in the joined string.
+    if (/[;&|`$<>(){}\s]/.test(command)) {
+      return {
+        valid: false,
+        error: `Command must be a single executable token (no shell metacharacters or whitespace)`,
+      };
+    }
+    // Reject relative-path traversal in the command itself
+    // (allowlist: alphanumerics, _, -, ., absolute paths via /).
+    if (command.includes("..") || !/^[A-Za-z0-9_./-]+$/.test(command)) {
+      return {
+        valid: false,
+        error: `Command contains disallowed characters or path traversal`,
+      };
+    }
+
+    // Check for shell injection patterns across the full invocation
     const fullCmd = [command, ...args].join(" ");
     const injectionPatterns = [
       /[;&|`$]/, // Shell operators

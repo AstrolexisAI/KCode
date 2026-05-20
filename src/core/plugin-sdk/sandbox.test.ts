@@ -63,6 +63,21 @@ describe("PluginSandbox", () => {
       expect(sandbox.validateCommand("echo", ["$(whoami)"]).valid).toBe(false);
       expect(sandbox.validateCommand("echo", ["hello | sh"]).valid).toBe(false);
     });
+
+    test("blocks shell metacharacters in command itself", () => {
+      expect(sandbox.validateCommand("evil; rm", []).valid).toBe(false);
+      expect(sandbox.validateCommand("cat $(whoami)", []).valid).toBe(false);
+      expect(sandbox.validateCommand("echo hi", []).valid).toBe(false); // whitespace
+    });
+
+    test("blocks path traversal in command", () => {
+      expect(sandbox.validateCommand("../bin/evil", []).valid).toBe(false);
+      expect(sandbox.validateCommand("plugins/../etc/shadow", []).valid).toBe(false);
+    });
+
+    test("allows absolute paths for command", () => {
+      expect(sandbox.validateCommand("/usr/bin/echo", ["hi"]).valid).toBe(true);
+    });
   });
 
   describe("executeWithTimeout", () => {
