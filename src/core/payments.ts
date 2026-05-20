@@ -372,8 +372,10 @@ export async function activateProFromPayment(email: string, customerId: string):
   // Assemble key body (without checksum)
   const body = `${customerHash}${entropy}`;
 
-  // Compute checksum: first 2 hex chars of SHA-256(body)
-  const checksum = createHash("sha256").update(body).digest("hex").slice(0, 2);
+  // Compute checksum: first 8 hex chars of SHA-256(body) (32-bit tamper check,
+  // matches backend/src/keys.ts. The checksum is not a security boundary —
+  // real authorization is the server-side DB lookup.)
+  const checksum = createHash("sha256").update(body).digest("hex").slice(0, 8);
 
   const proKey = `kcode_pro_${body}${checksum}`;
 

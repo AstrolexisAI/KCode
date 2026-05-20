@@ -30,9 +30,28 @@ function getHardwareFingerprint(): string {
 }
 
 // ── Key checksum validation ────────────────────────────────────
-// Keys use a simple checksum: last 2 chars of the payload must equal
-// the first 2 hex chars of SHA-256(payload_without_checksum).
-// This catches typos and naive brute-force attempts.
+// Keys carry a tamper-detection checksum: the last N hex chars of the
+// payload equal the first N hex chars of SHA-256(payload_without_checksum).
+// N = 8 since 2026-05-20 (32-bit); legacy keys with N = 2 are still accepted.
+// Note: the checksum is not a security boundary — real authorization is
+// the server-side DB lookup. This guards against typos and accidental
+// tampering.
+const CHECKSUM_LEN = 8;
+const LEGACY_CHECKSUM_LEN = 2;
+
+/** Strip a valid trailing checksum and return the body, or null if no length matches. */
+function stripValidatedChecksum(payload: string): string | null {
+  const { createHash } = require("node:crypto") as typeof import("node:crypto");
+  for (const len of [CHECKSUM_LEN, LEGACY_CHECKSUM_LEN]) {
+    if (payload.length <= len) continue;
+    const body = payload.slice(0, -len);
+    const check = payload.slice(-len).toLowerCase();
+    const expected = createHash("sha256").update(body).digest("hex").slice(0, len);
+    if (check === expected) return body;
+  }
+  return null;
+}
+
 export function validateKeyChecksum(key: string): boolean {
   const prefix = key.startsWith("kcode_pro_")
     ? "kcode_pro_"
@@ -46,12 +65,7 @@ export function validateKeyChecksum(key: string): boolean {
   if (payload.length < 20) return false;
   // Legacy keys without checksum: accept if payload is all hex (pre-checksum era)
   if (/^[0-9a-f]+$/i.test(payload)) return true;
-  // Checksum keys: last 2 chars = first 2 hex of SHA-256(rest)
-  const body = payload.slice(0, -2);
-  const check = payload.slice(-2).toLowerCase();
-  const { createHash } = require("node:crypto") as typeof import("node:crypto");
-  const expected = createHash("sha256").update(body).digest("hex").slice(0, 2);
-  return check === expected;
+  return stripValidatedChecksum(payload) !== null;
 }
 
 // ── Trial key support ─────────────────────────────────────────
@@ -67,12 +81,13 @@ export function isTrialKey(key: string): boolean {
 function parseTrialExpiry(key: string): number | null {
   if (!isTrialKey(key)) return null;
   const payload = key.slice("kcode_trial_".length);
-  // Format: {random}_{expiryTimestamp}_{checksum}
-  // The checksum is the last 2 chars, expiryTimestamp is the second-to-last segment
-  const bodyWithoutChecksum = payload.slice(0, -2);
-  const parts = bodyWithoutChecksum.split("_");
+  // Format: {random}_{expiryTimestamp}{checksum}
+  // Use the validator's known-good body so we don't have to assume a checksum
+  // length (8-hex current, 2-hex legacy both supported).
+  const body = stripValidatedChecksum(payload);
+  if (body === null) return null;
+  const parts = body.split("_");
   if (parts.length < 2) return null;
-  // Expiry is the last segment before checksum
   const expiryStr = parts[parts.length - 1];
   const expiry = Number(expiryStr);
   if (!Number.isFinite(expiry) || expiry <= 0) return null;

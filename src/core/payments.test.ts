@@ -261,8 +261,8 @@ describe("activateProFromPayment", () => {
     const key = await activateProFromPayment("user@example.com", "cus_stripe_abc");
 
     expect(key).toStartWith("kcode_pro_");
-    // Key should have prefix (10) + customerHash (12) + entropy (32) + checksum (2) = 56 total length
-    expect(key.length).toBe(56);
+    // Key should have prefix (10) + customerHash (12) + entropy (32) + checksum (8) = 62 total length
+    expect(key.length).toBe(62);
     // Note: file persistence verified in isolation tests — parallel worker env race makes this flaky
   });
 
@@ -283,13 +283,13 @@ describe("activateProFromPayment", () => {
 
     const key = await activateProFromPayment("user@example.com", "cus_check123");
 
-    // Manually verify the checksum format
+    // Manually verify the checksum format (8 hex chars since 2026-05-20)
     const payload = key.slice("kcode_pro_".length);
-    const body = payload.slice(0, -2);
-    const checksum = payload.slice(-2);
+    const body = payload.slice(0, -8);
+    const checksum = payload.slice(-8);
 
     const { createHash } = await import("node:crypto");
-    const expected = createHash("sha256").update(body).digest("hex").slice(0, 2);
+    const expected = createHash("sha256").update(body).digest("hex").slice(0, 8);
     expect(checksum).toBe(expected);
   });
 
