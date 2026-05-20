@@ -1,7 +1,7 @@
 // KCode - Diff Viewer Tool
 // Compare two files or show git diff for a file with colored unified output
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { formatDiffPreview, generateDiff } from "../core/diff";
@@ -124,11 +124,14 @@ function diffGit(file: string, staged: boolean, contextLines: number): ToolResul
     };
   }
 
-  const flag = staged ? "--cached" : "";
+  // argv-style invocation — resolvedFile is passed as its own argument so
+  // shell metacharacters in the path cannot be interpreted. The line-119
+  // reject above is kept as belt-and-braces (and to give callers a clean
+  // error instead of a "file not found" from git).
+  const args = ["diff", ...(staged ? ["--cached"] : []), `-U${contextLines}`, "--", resolvedFile];
 
   try {
-    const cmd = `git diff ${flag} -U${contextLines} -- "${resolvedFile}"`;
-    const output = execSync(cmd, {
+    const output = execFileSync("git", args, {
       cwd: process.cwd(),
       stdio: "pipe",
       timeout: 10000,
@@ -162,21 +165,13 @@ function diffGit(file: string, staged: boolean, contextLines: number): ToolResul
     if (msg.includes("not a git repository")) {
       return { tool_use_id: "", content: "Error: Not in a git repository.", is_error: true };
     }
-    // git diff returns exit code 1 when there are differences — handle gracefully
-    if (msg.includes("Command failed") && msg.includes("git diff")) {
-      try {
-        // Sanitize inputs to prevent shell injection
-        const safeFile = resolvedFile.replace(/["`$\\]/g, "");
-        const safeCtx = String(Math.min(Math.max(parseInt(String(contextLines)) || 3, 0), 100));
-        const result = execSync(`git diff ${flag} -U${safeCtx} -- "${safeFile}" 2>&1 || true`, {
-          cwd: process.cwd(),
-          stdio: "pipe",
-          timeout: 10000,
-        }).toString();
-        return { tool_use_id: "", content: result || `No changes for ${file}.` };
-      } catch {
-        return { tool_use_id: "", content: `No changes for ${file}.` };
-      }
+    // git diff exits 1 when there ARE differences — execFileSync throws, but
+    // the diff payload is on err.stdout. No re-run with shell needed.
+    const spawnErr = err as { stdout?: Buffer | string };
+    const stdout =
+      typeof spawnErr.stdout === "string" ? spawnErr.stdout : (spawnErr.stdout?.toString() ?? "");
+    if (stdout.trim()) {
+      return { tool_use_id: "", content: stdout };
     }
     return {
       tool_use_id: "",
