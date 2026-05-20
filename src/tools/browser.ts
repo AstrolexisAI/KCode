@@ -2,7 +2,7 @@
 // Uses Playwright for headless browser control: navigate, screenshot, extract, interact.
 // Falls back to curl + readability if Playwright is not installed.
 
-import { execSync, spawn } from "node:child_process";
+import { execFileSync, execSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -164,8 +164,13 @@ function generatePlaywrightScript(input: Record<string, unknown>): string {
 
 async function fallbackNavigate(url: string): Promise<string> {
   try {
-    const html = execSync(
-      `curl -sL --max-time 15 -H "User-Agent: Mozilla/5.0" ${JSON.stringify(url)}`,
+    // execFileSync with argv — url is passed as a distinct argument and
+    // never reaches a shell, so the URL's content (even one crafted with
+    // quotes / semicolons that would defeat JSON.stringify in a `sh -c`
+    // context) cannot inject commands.
+    const html = execFileSync(
+      "curl",
+      ["-sL", "--max-time", "15", "-H", "User-Agent: Mozilla/5.0", url],
       { stdio: "pipe", timeout: 20_000, maxBuffer: 5 * 1024 * 1024 },
     ).toString();
 
@@ -233,17 +238,23 @@ export async function executeBrowser(input: Record<string, unknown>): Promise<To
     const tmpScript = join(tmpdir(), `kcode-browser-${Date.now()}.js`);
     await Bun.write(tmpScript, script);
 
-    const output = execSync(
-      `npx playwright test --reporter=list ${tmpScript} 2>/dev/null || node ${tmpScript}`,
-      {
-        stdio: "pipe",
-        timeout: 60_000,
-        maxBuffer: 10 * 1024 * 1024,
-        env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: "0" },
-      },
-    )
-      .toString()
-      .trim();
+    // Try playwright first; fall back to plain node if playwright fails.
+    // Decomposed from `playwright ... || node ...` shell idiom to avoid
+    // shell interpolation of tmpScript (Date.now() today, but defensive).
+    const execOpts = {
+      stdio: "pipe" as const,
+      timeout: 60_000,
+      maxBuffer: 10 * 1024 * 1024,
+      env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: "0" },
+    };
+    let output: string;
+    try {
+      output = execFileSync("npx", ["playwright", "test", "--reporter=list", tmpScript], execOpts)
+        .toString()
+        .trim();
+    } catch {
+      output = execFileSync("node", [tmpScript], execOpts).toString().trim();
+    }
 
     // Cleanup
     try {
