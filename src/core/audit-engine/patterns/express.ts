@@ -1,3 +1,7 @@
+// kcode-disable: audit — this file is pattern DATA, not executable code.
+// Regex / explanation / fix_template strings are designed to look like the
+// very anti-patterns we hunt for; without this directive the scanner matches
+// its own definitions and produces critical-severity false positives.
 // KCode - Express framework pack (P2.3, v2.10.391)
 //
 // Express-specific bug shapes complementing the existing
