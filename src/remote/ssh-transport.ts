@@ -2,12 +2,35 @@
  * SSH Transport layer for KCode Remote Mode.
  * Handles SSH connectivity, remote command execution, tunneling, and agent lifecycle.
  *
- * Security: All SSH commands use execFileSync/Bun.spawn with argument arrays
- * to prevent shell injection. No shell interpolation.
+ * Security: local ssh invocation uses execFileSync / Bun.spawn with argument
+ * arrays — no local shell interpolation. The remote command is built by
+ * single-quote escaping each argument (POSIX rules) and passing the joined
+ * string as ONE argument to ssh, so the remote shell receives each command
+ * element as a literal. Callers that want shell features (pipes, redirects,
+ * globs) must wrap their command explicitly: `["bash", "-c", "ls | grep x"]`.
  */
 
 import { execFileSync, type SpawnSyncReturns } from "node:child_process";
 import type { RemoteAgentInfo, TunnelInfo } from "./types";
+
+/**
+ * POSIX single-quote escape. Wraps the string in `'...'` and replaces each
+ * embedded single quote with `'\''` so the remote shell parses the value as
+ * a single literal token.
+ */
+function shellEscape(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+
+/**
+ * Build the remote command string by escaping each arg and joining with
+ * spaces. When `cwd` is given, the command is prefixed with `cd <cwd> && `
+ * (cwd is escaped too).
+ */
+function buildRemoteCommand(command: string[], cwd?: string): string {
+  const escaped = command.map(shellEscape).join(" ");
+  return cwd ? `cd ${shellEscape(cwd)} && ${escaped}` : escaped;
+}
 
 /** Options for SSH commands */
 interface SSHOptions {
@@ -224,6 +247,12 @@ export async function createTunnel(
 /**
  * Execute a command on the remote host via SSH, streaming stdout/stderr.
  *
+ * Each element of `command` is shell-escaped and concatenated into a single
+ * string passed to ssh, so the remote shell sees command[0] as the program
+ * and the rest as literal arguments. Shell metacharacters in args are not
+ * interpreted (no injection). Callers that want pipes/redirects must opt
+ * in explicitly with `["bash", "-c", "..."]`.
+ *
  * @param host SSH host string
  * @param command Array of command + arguments (no shell interpolation)
  * @param cwd Optional working directory on remote
@@ -235,10 +264,8 @@ export async function executeRemote(
   cwd?: string,
   opts: SSHOptions = {},
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  // Build the remote command: if cwd is given, prepend cd
-  const remoteArgs = cwd ? ["cd", cwd, "&&", ...command] : command;
-
-  const args = [...buildSSHArgs(host, opts), "--", ...remoteArgs];
+  const remoteCmd = buildRemoteCommand(command, cwd);
+  const args = [...buildSSHArgs(host, opts), "--", remoteCmd];
 
   const proc = Bun.spawn(["ssh", ...args], {
     stdout: "pipe",
@@ -262,6 +289,8 @@ export async function executeRemote(
 /**
  * Execute a command on the remote host synchronously.
  * Useful for simple commands where async is not needed.
+ * Args are shell-escaped before being sent to ssh — see executeRemote
+ * for the security note.
  */
 export function executeRemoteSync(
   host: string,
@@ -269,9 +298,8 @@ export function executeRemoteSync(
   cwd?: string,
   opts: SSHOptions = {},
 ): { stdout: string; stderr: string; exitCode: number } {
-  const remoteArgs = cwd ? ["cd", cwd, "&&", ...command] : command;
-
-  const args = [...buildSSHArgs(host, opts), "--", ...remoteArgs];
+  const remoteCmd = buildRemoteCommand(command, cwd);
+  const args = [...buildSSHArgs(host, opts), "--", remoteCmd];
 
   try {
     const stdout = execFileSync("ssh", args, {
