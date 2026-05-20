@@ -2,7 +2,7 @@
 // Environment/dynamic context methods and system introspection helpers
 // (extracted from SystemPromptBuilder)
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { log } from "./logger";
@@ -513,16 +513,23 @@ export function detectListeningPorts(): string | null {
 
 export function getDiskUsage(cwd: string): string | null {
   try {
-    const output = execSync(
-      `df -h "${cwd}" 2>/dev/null | tail -1 | awk '{print $4 " available (" $5 " used)"}'`,
-      {
-        stdio: "pipe",
-        timeout: 2000,
-      },
-    )
-      .toString()
-      .trim();
-    return output || null;
+    // execFileSync with argv — cwd is a distinct argument, no shell, no
+    // injection. Parse the df output in JS instead of piping to tail/awk.
+    // -P forces POSIX columns: Filesystem | Size | Used | Avail | Use% | Mount
+    const output = execFileSync("df", ["-P", "-h", cwd], {
+      stdio: "pipe",
+      timeout: 2000,
+      encoding: "utf-8",
+    }).trim();
+    const lines = output.split("\n");
+    // Use the last line; df may wrap long filesystem names onto a second line.
+    const lastLine = lines[lines.length - 1];
+    if (!lastLine) return null;
+    const cols = lastLine.split(/\s+/);
+    const avail = cols[3];
+    const used = cols[4];
+    if (!avail || !used) return null;
+    return `${avail} available (${used} used)`;
   } catch (err) {
     log.debug("prompt", "Failed to get disk usage: " + err);
     return null;
