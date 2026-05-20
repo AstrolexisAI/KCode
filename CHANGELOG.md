@@ -13,6 +13,1463 @@ where regressions hide.
 
 (Nothing pending.)
 
+## [2.10.466] — 2026-05-10
+
+### Fixed
+- backfill model tags so multimodel routing actually calls cloud APIs
+
+## [2.10.465] — 2026-05-10
+
+### Fixed
+- /quit and TUI shutdown now actually kill MLX (override wired-pin persistence)
+
+## [2.10.464] — 2026-05-10
+
+### Fixed
+- revert flexible-batch (CPU fallback) + add multi-process pool for real parallelism
+
+## [2.10.463] — 2026-05-10
+
+### Added
+- use 100% — dynamic bash timeout + skip fake-parallel orchestration + agentic tools hint + ANE batch inference
+
+## [2.10.462] — 2026-05-10
+
+### Fixed
+- respect mlxWiredLimitMB as persistent-intent — don't kill MLX on kcode exit
+
+## [2.10.461] — 2026-05-10
+
+### Fixed
+- persistent prompt cache stops the per-turn 'unloading' illusion
+
+## [2.10.460] — 2026-05-10
+
+### Fixed
+- prefer the live local default over the first-registered local entry
+
+## [2.10.459] — 2026-05-10
+
+### Fixed
+- lower compactThreshold default 0.75 → 0.6 + token-ratio calibration scaffold
+
+## [2.10.458] — 2026-05-10
+
+### Fixed
+- allow README on 'crear nuevo proyecto' / 'create new project' intent
+
+## [2.10.457] — 2026-05-09
+
+### Fixed
+- Gemma mismatch rule was contradicting catalog post-bench
+
+## [2.10.456] — 2026-05-09
+
+### Fixed
+- no-tool failsafe must reset on tool calls — caught Curly's 392K loop
+
+## [2.10.455] — 2026-05-09
+
+### Fixed
+- distinguish MLX cold-load from dead + spawn lock to stop respawn cascade
+
+## [2.10.454] — 2026-05-09
+
+### Added
+- Gemma 4 31B Q6 → mark5-mid agentic default; Q8 reframed as single-shot
+- parallel bg shells — BashOutput + KillShell + persistent registry
+- real xlm-roberta tokenizer via Python sidecar + auto-index TUI startup
+
+### Fixed
+- strip macOS Terminal focus events from input stream (DEC mode 1004)
+- no-tool failsafe at 6K, action-defer patterns extended, search shortcut tighter
+- allow idiomatic bash — every local model bench failed on '2>/dev/null'
+- respect explicit --model + GLM-4.7-Flash mismatch rule + better suggestion
+- correct GLM-4.7-Flash classification + context window registry + migration 006
+- surface endpoint+remedy on connect-fail, cloud rescue, configurable server timeout
+- prevent silent failures in non-interactive runs
+
+## [2.10.438] — 2026-05-09
+
+### Added
+- kcode rag status / index / search — ANE-backed semantic search
+- kcode ane status / probe / similarity diagnostics + Kodi PATH fix
+- pass attention_mask + pad to MAX_SEQ_LEN=512
+
+## [2.10.436] — 2026-05-08
+
+### Fixed
+- offline license takes precedence over cloud cache
+
+## [2.10.435] — 2026-05-08
+
+### Added
+- paid-addon ANE embedder scaffolding (macOS-arm64-only)
+- give-up detection + cost-aware sort + auto-blacklist
+- warn when default model mismatches task + extend code classifier
+- auto-substitute Linux→macOS commands when 1:1 equivalence
+
+### Fixed
+- cost-sort regression, sandbox bypass, warning spam
+
+## [2.10.433] — 2026-05-08
+
+### Added
+- brew-install fallback + anti-give-up directive
+
+## [2.10.430] — 2026-05-08
+
+### Fixed
+- left-pad ECDH P-256 private key to 32 bytes
+
+## [2.10.429] — 2026-05-08
+
+### Fixed
+- replace Qwen3-Coder backed mark5 entries with Gemma
+- promote Gemma 2/3/4 from 'weak' to 'good'
+
+## [2.10.428] — 2026-05-08
+
+### Fixed
+- mark Qwen3-Coder as 'weak' for agentic sessions
+
+## [2.10.427] — 2026-05-08
+
+### Fixed
+- imperative cross-OS hint + actionable Grep error
+
+## [2.10.426] — 2026-05-08
+
+### Fixed
+- reactive cross-OS command-equivalence hint on failure
+
+## [2.10.425] — 2026-05-08
+
+### Fixed
+- explicit Linux↔macOS command equivalence table
+
+## [2.10.422] — 2026-05-08
+
+### Added
+- tool-fitness badge in /model + kcode models list
+- list authorized SSH remotes in system prompt
+- GlobOnRemote / GrepOnRemote — fs search on authorized hosts
+- WriteOnRemote / EditOnRemote — write + transactional edit
+- BashOnRemote / ReadOnRemote — operate authorized hosts
+- RemoteAuthorize — model-callable SSH bootstrap
+- authorize/list/rm/test for SSH bootstrap
+- OS-aware tool hints + bash-not-paste directive
+- hash-chained transcript + post-auth release script
+- boot banner + Header swap when offline mode is forced
+- kcode sbom (CycloneDX 1.6) + kcode doctor --secure
+- gate the long tail of egress (auth, plugins, voice, RAG, hooks)
+- gate chat completions, conductor, and telemetry sinks
+- gate cloud discovery + auto-update + model downloads
+- KCODE_OFFLINE env var + skip dead local endpoints
+
+### Fixed
+- require entropy/quotes for prose secret patterns
+- auto-Read on Edit failure + cleanup stale local registry entries
+
+## [2.10.421] — 2026-05-05
+
+### Added
+- tiered severity (critical/warning/advisory) + orienting messages
+
+## [2.10.420] — 2026-05-05
+
+### Fixed
+- /clear also resets the App.tsx UI state, not just conversation
+
+## [2.10.419] — 2026-05-05
+
+### Added
+- add xAI to provider auto-discovery
+
+## [2.10.418] — 2026-05-05
+
+### Added
+- \`models use\` auto-sizes context to fit available memory
+
+## [2.10.417] — 2026-05-04
+
+### Fixed
+- /clear actually clears the conversation
+
+## [2.10.416] — 2026-05-04
+
+### Fixed
+- \`models use\` now updates the registry + saved preference too
+
+## [2.10.415] — 2026-05-03
+
+### Fixed
+- run discovery before model resolution, not inside the local-server branch
+
+## [2.10.414] — 2026-05-03
+
+### Fixed
+- override saved-preference + multi-model when sharing
+
+## [2.10.413] — 2026-05-03
+
+### Added
+- share Kulvex inference instead of loading a duplicate model
+
+## [2.10.412] — 2026-05-03
+
+### Added
+- stop local MLX/llama server on kcode exit
+
+## [2.10.411] — 2026-05-03
+
+### Added
+- explicit /scan slash command + conditional audit prompt
+
+## [2.10.410] — 2026-05-03
+
+### Added
+- \`models use\` bootstraps server.json when missing
+
+## [2.10.409] — 2026-05-03
+
+### Added
+- bring-your-own MLX model — \`models use\` + \`--model owner/repo\` passthrough
+- standalone model download script using hf_transfer
+
+### Fixed
+- pin huggingface_hub<1.0 + tolerate `hf` rename
+
+## [2.10.408] — 2026-05-03
+
+### Added
+- public install.sh + setup --yes for scripted installs
+
+### Fixed
+- stream pip + HuggingFace progress to terminal (was hidden behind piped stdout)
+- honor --model flag (Commander parent-option collision) + retry Esc until onDone
+
+## [2.10.407] — 2026-05-02
+
+### Fixed
+- respect unified memory budget on Apple Silicon + tolerant Python lookup
+
+## [2.10.406] — 2026-04-29
+
+### Added
+- cascade-on-confirmed ensemble + multi-provider routing fix
+
+## [2.10.396] — 2026-04-27
+
+### Fixed
+- clear remaining 352 typecheck errors — typecheck is now 0
+- wire banner + incomplete_response handlers in stream-handler
+- caza-bugs round 2 — plugin SDK, App.tsx, hardware (Tier 3.E.2)
+- caza-bugs in production code (Tier 3.E)
+- correct ModelEntry field names in /api/models response
+- resolve 10 typecheck errors that exposed real bugs (Tier 3.C)
+- clear ~110 single-error files from typecheck (Tier 3.B)
+- clear all 151 typecheck errors in src/core/diff subtree
+- Tier 2 cleanup — README Pro narrative + canonical port for kcode serve clients
+- Tier 1 cleanup from external audit (CI branch + import + license + slash count)
+
+## [2.10.395] — 2026-04-27
+
+### Added
+- external-audit response — Reviewable types + SBOM evidence + diff pre-filter + FIX_RESULT.json + docs
+
+## [2.10.394] — 2026-04-27
+
+### Added
+- post-audit polish — CWE backfill + scan disable marker + per-pack metrics
+
+## [2.10.393] — 2026-04-27
+
+### Added
+- P2.4 slice 1 — SBOM dependency scan (npm + curated advisory DB)
+
+### Docs
+- refresh numbers — 399 patterns, 100/92.3/0.960, 7 framework packs
+
+## [2.10.392] — 2026-04-27
+
+### Added
+- P2.3 Rails + Spring + Laravel framework packs (4+3+3 patterns)
+
+## [2.10.391] — 2026-04-27
+
+### Added
+- P2.3 Express + Django framework packs (4 + 4 patterns)
+- P2.3 FastAPI framework pack — 4 new patterns (pack: web)
+- P2.3 Next.js framework pack — first 5 patterns (pack: web)
+
+## [2.10.390] — 2026-04-27
+
+### Added
+- P2.5 /review noise hints + P2.6 /pr --compact body
+- P2.2 Supply-chain scanner pack — first 5 patterns
+- P2.1 Cloud / IaC scanner pack — first 6 patterns
+- P1.3 wire exploit-gen.ts into runAudit + CLI + /scan
+- P1.2 separate SAFE vs HEURISTIC bespoke fixers
+
+## [2.10.389] — 2026-04-27
+
+### Added
+- P1.1 site-level dedupe (+23 pts recall, 100% precision held)
+
+### Fixed
+- async scanProject with periodic event-loop yields
+
+## [2.10.388] — 2026-04-27
+
+### Fixed
+- P0 cleanup from external audit + /scan UX (indeterminate bar, event-loop yields)
+
+## [2.10.385] — 2026-04-27
+
+### Added
+- cancel /scan with Esc + visible "Press Esc to cancel" hint
+
+## [2.10.383] — 2026-04-26
+
+### Fixed
+- wire dangerous-patterns registry into Bash flow + git/cloud destructive ops
+
+## [2.10.382] — 2026-04-26
+
+### Added
+- new fsw-005b-buffer-size-unchecked pattern (read-past-end)
+
+## [2.10.381] — 2026-04-26
+
+### Fixed
+- applyRecipe idempotency recognizes audit-fix:/KCODE-FIX: tags
+
+## [2.10.380] — 2026-04-26
+
+### Fixed
+- three hardening fixes from external audit (HD.1-3)
+
+## [2.10.379] — 2026-04-26
+
+### Added
+- /fix --ci is an alias for --safe-only (CI-safe default)
+
+## [2.10.378] — 2026-04-26
+
+### Added
+- explicit Fixed / Manual / Ignored sections in PR body
+
+## [2.10.377] — 2026-04-26
+
+### Fixed
+- /scan passes through --since / --pack / --max-files
+
+## [2.10.375] — 2026-04-26
+
+### Fixed
+- shell-quote-aware tokenizer for /scan /review /fix subcommands
+
+## [2.10.374] — 2026-04-26
+
+### Added
+- activate learning loop — demoted patterns pre-marked needs_context
+
+## [2.10.373] — 2026-04-26
+
+### Added
+- stable finding_id hash so /review survives reruns + refactors
+
+### Fixed
+- fail-closed on binary mirror + install.sh bsdiff hint
+
+## [2.10.372] — 2026-04-26
+
+### Added
+- tag flight-software (embedded) + injection (web) patterns
+
+## [2.10.371] — 2026-04-26
+
+### Fixed
+- mirror full binaries to CDN dir alongside manifest + deltas
+- synthetic AI-key fixtures with explicit FAKE markers + GitGuardian config
+
+## [2.10.370] — 2026-04-26
+
+### Added
+- F9 vendible packs taxonomy + AI/ML Security Pack
+
+## [2.10.369] — 2026-04-26
+
+### Added
+- three explicit modes — --safe-only / --annotate / --all
+
+## [2.10.368] — 2026-04-26
+
+### Fixed
+- three regressions in the previous fix commit
+
+## [2.10.367] — 2026-04-26
+
+### Fixed
+- 10 issues from session-wide audit (1 critical, 1 high, 8 medium)
+
+## [2.10.366] — 2026-04-26
+
+### Added
+- taint-lite AST patterns for JS — eval/exec/innerHTML of tainted data
+
+## [2.10.365] — 2026-04-26
+
+### Added
+- public audit benchmark with locked precision/recall regression
+
+## [2.10.364] — 2026-04-26
+
+### Added
+- note + assign + ignore + restore + stats + export + learning loop
+
+## [2.10.363] — 2026-04-26
+
+### Added
+- quantitative AuditConfidence score with five subscores
+
+## [2.10.362] — 2026-04-26
+
+### Added
+- render Evidence Pack fields in Markdown report, PR body, and SARIF
+
+## [2.10.361] — 2026-04-26
+
+### Added
+- structured Evidence Pack JSON contract for verifier output
+
+## [2.10.360] — 2026-04-26
+
+### Added
+- bsdiff binary deltas with SHA-verified fallback
+
+## [2.10.359] — 2026-04-26
+
+### Fixed
+- suppress nag when no update + add CI/quiet/TTY guards
+
+## [2.10.358] — 2026-04-26
+
+### Added
+- self-hosted auto-update via kulvex.ai manifest + rollback
+- emit latest.json manifest for the auto-updater
+
+## [2.10.354] — 2026-04-25
+
+### Added
+- /fix --safe-only restricts to bespoke rewrites
+- `kcode audit --ci` mode for PR pre-merge gates
+- Audit Confidence header — single-glance trustworthiness
+
+### Fixed
+- detectDefaultDiffBase tries origin/HEAD first
+- strip prior reviewer prefix on round-trips (A.1.1 audit fix)
+- Markdown respects review_state — counts, sections, ignored bucket
+- SARIF results respect review_state, exclude ignored
+- /fix and /pr respect review_state, skip ignored
+- typecheck clean for audit-engine + file-actions-audit
+- promote owns verdict + reasoning + fix_support, summary recomputed
+- listChangedFilesSinceRef uses execFileSync, no shell
+- hash-comment language id is 'shell', not 'bash'
+- expand onPhase union with 'initializing' for submodule preflight
+- pr-generator.ts:732 used `result` instead of `auditResult`
+
+## [2.10.351] — 2026-04-25
+
+### Fixed
+- v2.10.351 — verifier resolves AST patterns by id (was "Unknown pattern id")
+
+## [2.10.350] — 2026-04-25
+
+### Fixed
+- v2.10.350 — internal audit of v349, PHP qualified-name FQN fix
+
+## [2.10.349] — 2026-04-25
+
+### Added
+- v2.10.349 — Ruby + PHP AST taint patterns (6 patterns, 2 grammars)
+
+## [2.10.348] — 2026-04-25
+
+### Added
+- v2.10.348 — Rust AST taint patterns (Command::new + std::fs path ops)
+
+## [2.10.347] — 2026-04-25
+
+### Fixed
+- v2.10.347 — internal audit of v346, cpp-ast-002 FP fix
+
+## [2.10.346] — 2026-04-25
+
+### Added
+- v2.10.346 — C and C++ AST taint patterns
+
+## [2.10.345] — 2026-04-25
+
+### Fixed
+- v2.10.345 — internal audit of v343-v344, two real bugs + FP cleanup
+
+## [2.10.344] — 2026-04-25
+
+### Added
+- v2.10.344 — Java AST taint patterns (Runtime.exec / File / Class.forName)
+
+## [2.10.343] — 2026-04-25
+
+### Added
+- v2.10.343 — three more Python AST taint patterns
+
+## [2.10.342] — 2026-04-25
+
+### Fixed
+- v2.10.342 — internal audit of v340-v341, two real bugs fixed
+
+## [2.10.341] — 2026-04-25
+
+### Added
+- v2.10.341 — TypeScript + TSX bundled, ts-ast-001 prototype pollution, js-ast-003 ReDoS
+
+## [2.10.340] — 2026-04-25
+
+### Added
+- v2.10.340 — AST taint patterns for JavaScript/TypeScript and Go
+
+## [2.10.339] — 2026-04-25
+
+### Added
+- v2.10.339 — `kcode grammars install` for AST patterns on the compiled binary
+
+## [2.10.338] — 2026-04-25
+
+### Fixed
+- v2.10.338 — internal audit of v332-v337, AST scope gaps closed
+
+## [2.10.337] — 2026-04-25
+
+### Added
+- v2.10.337 — bundle Python grammar, AST patterns fire end-to-end
+
+## [2.10.336] — 2026-04-25
+
+### Added
+- v2.10.336 — Phase 2 #2: AST-based pattern infrastructure (tree-sitter)
+
+## [2.10.335] — 2026-04-25
+
+### Added
+- v2.10.335 — Phase 2 force-multiplier #1: diff-based audit (--since)
+
+## [2.10.334] — 2026-04-25
+
+### Added
+- v2.10.334 — Phase B: deepen flight-software differential pack
+
+## [2.10.333] — 2026-04-25
+
+### Added
+- v2.10.333 — Phase A round 2: Java/PHP/Ruby web verticals
+
+## [2.10.332] — 2026-04-25
+
+### Added
+- v2.10.332 — Milestone 3 Phase A: web/ML vertical patterns
+
+## [2.10.331] — 2026-04-25
+
+### Fixed
+- v2.10.331 — internal audit of v326-v330, four bugs corrected
+
+## [2.10.330] — 2026-04-25
+
+### Added
+- v2.10.330 — Sprint 5/6: pattern_metrics + 12 new fixtures
+
+## [2.10.329] — 2026-04-25
+
+### Added
+- v2.10.329 — Sprint 4: /pr structured-first, LLM only for the summary
+
+## [2.10.328] — 2026-04-25
+
+### Added
+- v2.10.328 — Sprint 3: /fix honest about fix_support
+
+## [2.10.327] — 2026-04-25
+
+### Added
+- v2.10.327 — Sprint 2: /review v2 with list/promote/demote/tag
+
+## [2.10.326] — 2026-04-25
+
+### Added
+- v2.10.326 — Sprint 1 of audit-pipeline maturity roadmap
+
+## [2.10.325] — 2026-04-25
+
+### Fixed
+- drop "review" alias from review-pr skill — second collision
+
+## [2.10.324] — 2026-04-25
+
+### Fixed
+- drop "review" alias from forensic-audit skill — name collision
+
+## [2.10.323] — 2026-04-25
+
+### Fixed
+- register /review as a builtin skill so the parser routes it
+
+## [2.10.322] — 2026-04-25
+
+### Added
+- /review fprime/ — interactive triage between /scan and /fix
+
+## [2.10.321] — 2026-04-25
+
+### Added
+- v2.10.321 — verifier checklist explicit about port-input vs external; ranking covers project-named test trees
+
+## [2.10.320] — 2026-04-25
+
+### Fixed
+- three blockers preventing presentable upstream PRs
+
+## [2.10.319] — 2026-04-25
+
+### Added
+- spell-check-clean PR body + attribution via post-creation comment
+
+## [2.10.318] — 2026-04-25
+
+### Fixed
+- hoist node:fs import — fixes "writeTemp is not defined" in resume mode
+
+## [2.10.317] — 2026-04-25
+
+### Fixed
+- /pr is now resumable + reports real git/gh stderr
+
+## [2.10.316] — 2026-04-25
+
+### Fixed
+- /pr uses registry-aware async LLM callback (same as /scan v311)
+
+## [2.10.315] — 2026-04-25
+
+### Added
+- v2.10.315 — bespoke fixers for fsw-005 and fsw-010
+
+## [2.10.314] — 2026-04-24
+
+### Added
+- v2.10.314 — +55 patterns (crypto, injection, deserialize, flight-software)
+
+## [2.10.313] — 2026-04-24
+
+### Added
+- v2.10.313 — verifier mitigation checklist + scope-aware ranking + wider context
+
+## [2.10.312] — 2026-04-24
+
+### Fixed
+- cloud escalation /v1 normalization + 401/404 → abort + visible error
+
+## [2.10.311] — 2026-04-24
+
+### Fixed
+- three-fold reach the local model — registry baseUrl + reasoning_content + bigger token budget
+
+## [2.10.310] — 2026-04-24
+
+### Added
+- v2.10.310 — surface needs_context bucket
+
+## [2.10.309] — 2026-04-24
+
+### Fixed
+- cloud-escalation merge now rebuilds false_positives_detail
+
+## [2.10.308] — 2026-04-24
+
+### Fixed
+- remove hardcoded 500-file cap — /scan is unlimited by default
+
+## [2.10.307] — 2026-04-24
+
+### Added
+- v2.10.307 — explicit coverage + FP detail + relevance ranking + adaptive cap
+
+## [2.10.306] — 2026-04-24
+
+### Added
+- v2.10.306 — github repo verification + semantic snippets + informational closeout mode
+
+## [2.10.305] — 2026-04-24
+
+### Added
+- v2.10.305 — ordinal resolution + overclaim rewrite
+
+## [2.10.304] — 2026-04-24
+
+### Fixed
+- 4 externally-audited HIGH/MEDIUM issues (v2.10.304)
+
+## [2.10.303] — 2026-04-24
+
+### Fixed
+- loadSavedKeys was sync-reading an async result; xAI/Kimi/Groq/DeepSeek filtered out of escalation menu
+
+## [2.10.302] — 2026-04-24
+
+### Fixed
+- scroll window + AppMode type + pgup/pgdn/g/G navigation
+
+## [2.10.301] — 2026-04-24
+
+### Fixed
+- probe verdict takes precedence over runtime error (v2.10.301)
+
+## [2.10.300] — 2026-04-24
+
+### Fixed
+- re-read scope post-probe + probe pass overrides phase=failed (v2.10.300)
+
+## [2.10.298] — 2026-04-24
+
+### Added
+- active verification probe registry + Bitcoin RPC probe + evidence tiers (Phase 2 #111)
+
+## [2.10.297] — 2026-04-24
+
+### Fixed
+- stop promoting spawn-only + ||-wrapped runs to verified (#111)
+
+## [2.10.296] — 2026-04-24
+
+### Fixed
+- discard persisted plan when user starts fresh scaffold (#111)
+
+## [2.10.295] — 2026-04-24
+
+### Fixed
+- mandatory-rerun bypass for loop guard + explicit claim gate (#111)
+
+## [2.10.294] — 2026-04-24
+
+### Fixed
+- ensemble never fired due to this.turnCount typo
+
+## [2.10.293] — 2026-04-24
+
+### Security
+- redact quoted 'usuario' / 'contraseña' prose forms (#111)
+
+## [2.10.292] — 2026-04-24
+
+### Fixed
+- prepend grounded closeout to context when scope is bad (#111)
+
+## [2.10.291] — 2026-04-24
+
+### Fixed
+- heredoc-safe redirect extractor + phase lifts on verified rerun (#111)
+
+## [2.10.290] — 2026-04-24
+
+### Fixed
+- detect fabricated artifact + diagnostic claims (#111)
+
+## [2.10.289] — 2026-04-24
+
+### Fixed
+- Bash file mutations land in scope's recordMutation (#111)
+
+## [2.10.288] — 2026-04-24
+
+### Fixed
+- seal UI also for partial scopes + honor seal on turn_end (#111)
+
+## [2.10.287] — 2026-04-24
+
+### Fixed
+- seal post-failure UI so downstream prose can't leak (#111)
+
+## [2.10.286] — 2026-04-24
+
+### Fixed
+- derive install/transactions/refresh/implement steps from scope events (#111)
+
+## [2.10.285] — 2026-04-24
+
+### Added
+- wire multi-strategy compaction into runContextMaintenance
+
+## [2.10.284] — 2026-04-24
+
+### Fixed
+- reinforce rerun directive + collapse all prose blocks on replace (#111)
+
+## [2.10.283] — 2026-04-23
+
+### Added
+- feed AskUser context into scope for TUI-swallowed errors (#111)
+
+## [2.10.282] — 2026-04-23
+
+### Fixed
+- downgrade alive_timeout / started_unverified to phase=partial (#111)
+
+## [2.10.281] — 2026-04-23
+
+### Fixed
+- strip 'cd X && ' prefix from Bash loop-pattern key (#111)
+
+## [2.10.280] — 2026-04-23
+
+### Fixed
+- skip HTTP probe for TUI/CLI projects (#111)
+
+## [2.10.279] — 2026-04-23
+
+### Fixed
+- auto-launch effective-cwd + unverified-artifact gate (#111)
+
+## [2.10.278] — 2026-04-23
+
+### Added
+- SendMessage guidance gate + relaxed isRelevantPatch (#111)
+
+## [2.10.277] — 2026-04-23
+
+### Fixed
+- effective-cwd inference + auto-launch skip for TUI/CLI + runner_misfire transition (#111)
+
+## [2.10.276] — 2026-04-23
+
+### Added
+- runtime-mode inference skips TUI/CLI from web-preflight + runner_misfire status (#111)
+
+## [2.10.275] — 2026-04-23
+
+### Added
+- started_unverified status + plan widget sync + partial-phase suppression (#111)
+
+## [2.10.274] — 2026-04-23
+
+### Added
+- RuntimeStatus classifier + auto-configure transition + freeform suppression + derived plan progress (#111)
+
+## [2.10.273] — 2026-04-23
+
+### Added
+- forced-rerun gate — block closeout until patched artifact is re-executed (#111)
+
+## [2.10.272] — 2026-04-23
+
+### Fixed
+- checkMutationAllowed import, prose-password redaction, timeout classification (#111)
+
+## [2.10.271] — 2026-04-23
+
+### Fixed
+- forced-mkdir directive when executor skips ENOENT recovery (#110)
+
+## [2.10.270] — 2026-04-23
+
+### Added
+- projectRoot state + recovery-cause classifier + bash dir events (#109)
+
+## [2.10.269] — 2026-04-23
+
+### Fixed
+- wire tool-executor to record mutations + supersede-draft closeout
+
+## [2.10.268] — 2026-04-23
+
+### Added
+- phases 6, 7, 8 — plan/recovery/continuation from scope
+
+## [2.10.267] — 2026-04-23
+
+### Added
+- phase 5 — unified visible-text renderer
+
+## [2.10.266] — 2026-04-23
+
+### Added
+- phase 4 — scope-grounded closeout renderer
+
+## [2.10.265] — 2026-04-23
+
+### Added
+- phase 3 — grounding detectors write to scope
+
+## [2.10.264] — 2026-04-23
+
+### Added
+- phase 2 — unified mutation policy + scope drives audit state
+
+## [2.10.263] — 2026-04-23
+
+### Added
+- introduce unified TaskScope state (phase 1 of #100-#108 refactor)
+
+## [2.10.262] — 2026-04-23
+
+### Fixed
+- apply redactor to assistant's own prose at finalization
+
+## [2.10.261] — 2026-04-23
+
+### Fixed
+- detect runtime traceback in bash output + log reality-check counts
+
+## [2.10.260] — 2026-04-23
+
+### Fixed
+- fall back to primary model + pass apiBase/apiKey
+
+## [2.10.259] — 2026-04-23
+
+### Fixed
+- action-specific directive when reasoning loop fires in scaffold task
+
+## [2.10.258] — 2026-04-23
+
+### Fixed
+- GrepReplace audit-guard + patch-without-rerun detector + self-critique observability
+
+## [2.10.257] — 2026-04-23
+
+### Added
+- semantic self-critique pass against tool evidence
+
+## [2.10.256] — 2026-04-23
+
+### Fixed
+- flag readiness claims that contradict errors or blocked repairs
+
+## [2.10.255] — 2026-04-23
+
+### Fixed
+- close bash-mutation bypass of audit-Edit guard; flag strong completion claims
+
+## [2.10.254] — 2026-04-23
+
+### Fixed
+- route scaffold prompts to complex-edit; detect ungrounded auth claims
+
+## [2.10.253] — 2026-04-23
+
+### Fixed
+- broaden creation-claim regexes + verify files exist on disk
+
+## [2.10.252] — 2026-04-23
+
+### Fixed
+- bash HTML-entity decode + grounding gate detects unfounded creation claims
+- replace live Stripe webhook secret with synthetic fixture
+
+## [2.10.251] — 2026-04-23
+
+### Fixed
+- secret redaction + grounding gate on tool output and turn end
+
+## [2.10.250] — 2026-04-23
+
+### Fixed
+- lift turn spinner out of MessageList Static tree
+
+### Docs
+- add Kulvex logo to header
+- add Kulvex logo
+- add ROADMAP, Pro-features brochure, remove CLA
+
+## [2.10.248] — 2026-04-22
+
+### Fixed
+- skip debug engine for monolithic creation prompts
+
+## [2.10.247] — 2026-04-22
+
+### Fixed
+- collapse plan at 2+ parallel complex-edits (was 3)
+
+## [2.10.246] — 2026-04-22
+
+### Fixed
+- short-circuit monolithic prompts + language coverage
+
+## [2.10.245] — 2026-04-22
+
+### Added
+- auto-benchmarking + ✓/[NEW] badges in /model
+
+## [2.10.244] — 2026-04-22
+
+### Added
+- rescue hallucinated tool calls + blacklist repeat offenders
+
+## [2.10.243] — 2026-04-22
+
+### Fixed
+- remove duplicate const models declaration + update README
+
+## [2.10.242] — 2026-04-22
+
+### Fixed
+- stop downstream hallucination when dep made no edits
+
+## [2.10.241] — 2026-04-22
+
+### Fixed
+- restore fileLocks optional + default map
+
+## [2.10.240] — 2026-04-22
+
+### Fixed
+- extend ReDoS detection to catch brace quantifiers
+
+## [2.10.239] — 2026-04-22
+
+### Fixed
+- complete ReDoS mitigation — elapsed-time check + rule disable
+
+## [2.10.238] — 2026-04-22
+
+### Fixed
+- prioritize reliable models, demote flaky ones
+
+## [2.10.237] — 2026-04-22
+
+### Fixed
+- recon nudge ignores failed writes
+
+## [2.10.236] — 2026-04-22
+
+### Fixed
+- permissive JSON extraction for mark7-style output
+
+## [2.10.235] — 2026-04-22
+
+### Fixed
+- upgrade chat sub-tasks with deps to cloud model
+
+## [2.10.234] — 2026-04-22
+
+### Added
+- intent directives + reconnaissance nudge
+
+## [2.10.233] — 2026-04-22
+
+### Fixed
+- correct implementation of race-condition fix
+
+## [2.10.232] — 2026-04-22
+
+### Fixed
+- longer timeout for local + visible failure reasons
+
+## [2.10.231] — 2026-04-22
+
+### Fixed
+- exclude Plan/Task tools from sub-tasks + clear orphaned plan
+
+## [2.10.230] — 2026-04-22
+
+### Fixed
+- 3 real bugs found by orchestrator's analysis sub-task
+
+## [2.10.229] — 2026-04-22
+
+### Added
+- wrap-up warning + synthetic summary + turn limit bump
+
+## [2.10.228] — 2026-04-22
+
+### Fixed
+- preserve assistant messages with tool_calls even if content is null
+
+## [2.10.227] — 2026-04-22
+
+### Fixed
+- guard sub-task assistant content so it's never null
+
+## [2.10.226] — 2026-04-22
+
+### Fixed
+- pass LoopGuardState to executeToolsSequential
+
+## [2.10.225] — 2026-04-22
+
+### Added
+- sub-tasks run full agent loops with tool access
+
+## [2.10.224] — 2026-04-22
+
+### Fixed
+- spinner starts immediately, not after conductor returns
+
+## [2.10.223] — 2026-04-22
+
+### Fixed
+- refresh session-economy panel after orchestrator turn
+
+## [2.10.222] — 2026-04-22
+
+### Added
+- live progress events so long waits feel alive
+
+## [2.10.221] — 2026-04-22
+
+### Added
+- record per-sub-task cost in session economy
+
+## [2.10.220] — 2026-04-22
+
+### Added
+- orchestrator path wired into TUI message processor
+
+## [2.10.219] — 2026-04-22
+
+### Added
+- DAG orchestrator — parallel sub-tasks on specialized models
+
+## [2.10.218] — 2026-04-22
+
+### Fixed
+- guard all 5 assistant pushes against null/empty content
+
+## [2.10.217] — 2026-04-22
+
+### Fixed
+- never push null/undefined as assistant content
+
+## [2.10.215] — 2026-04-22
+
+### Fixed
+- strip empty messages before API request
+
+## [2.10.214] — 2026-04-22
+
+### Fixed
+- empty assistant after reasoning loop + fallback provider leak
+
+## [2.10.213] — 2026-04-22
+
+### Fixed
+- update contextWindowSize when switching models
+
+## [2.10.212] — 2026-04-22
+
+### Fixed
+- raise tool budget cap 15% → 25%
+
+## [2.10.211] — 2026-04-22
+
+### Added
+- unified columnar economy panel — face + cost per column
+
+## [2.10.210] — 2026-04-22
+
+### Fixed
+- add agregar/añadir/insertar/add to complex-edit patterns
+
+## [2.10.209] — 2026-04-22
+
+### Fixed
+- include local models in session economy + fix cambiá routing
+
+## [2.10.208] — 2026-04-22
+
+### Fixed
+- mini-Kodis headless — compact (o.o) face, no box, no body
+
+## [2.10.207] — 2026-04-22
+
+### Added
+- animated mini-Kodis with independent engines per model
+
+## [2.10.206] — 2026-04-22
+
+### Added
+- multi-model team display + 🔀 badge when multimodel active
+
+## [2.10.205] — 2026-04-22
+
+### Fixed
+- accented Spanish imperatives + chat always routes to local
+
+## [2.10.204] — 2026-04-22
+
+### Fixed
+- routing was in runNonInteractive but --print uses runPrintMode
+
+## [2.10.203] — 2026-04-22
+
+### Fixed
+- await loadUserSettingsRaw — was called without await, returning Promise instead of settings
+
+## [2.10.202] — 2026-04-22
+
+### Fixed
+- update apiBase+apiKey when routing, not just model name
+
+## [2.10.201] — 2026-04-21
+
+### Fixed
+- add analysis keywords + fix chat threshold + complex-edit patterns
+
+## [2.10.200] — 2026-04-21
+
+### Fixed
+- wire routing into non-interactive (--print) mode
+
+## [2.10.199] — 2026-04-21
+
+### Added
+- automatic model routing + /multimodel toggle
+
+## [2.10.198] — 2026-04-21
+
+### Added
+- session economy panel + live balance + per-model cost breakdown
+
+## [2.10.197] — 2026-04-21
+
+### Added
+- auto-close plan panel when all steps reach done status
+
+## [2.10.196] — 2026-04-21
+
+### Fixed
+- tags field now loads from models.json + benchmark-accurate labels
+
+## [2.10.195] — 2026-04-21
+
+### Added
+- wire PreWrite and PostWrite in tool-executor.ts
+
+## [2.10.194] — 2026-04-21
+
+### Fixed
+- read API keys from settings.json not just env vars
+
+## [2.10.193] — 2026-04-21
+
+### Added
+- model picker for cloud re-verification + reasoning_content fix
+
+## [2.10.192] — 2026-04-21
+
+### Added
+- tags per model + fix reasoning_content for Kimi/DeepSeek
+
+## [2.10.191] — 2026-04-21
+
+### Fixed
+- exempt only Read from name-level blocking, not all read-only tools
+
+## [2.10.190] — 2026-04-21
+
+### Fixed
+- 3 audit findings — emptyType, burned Read, incomplete banner
+
+## [2.10.189] — 2026-04-21
+
+### Added
+- wire PostEdit for Edit/MultiEdit/Write in tool-executor.ts
+
+## [2.10.188] — 2026-04-21
+
+### Fixed
+- all 3 abort paths now use repetition_aborted stopReason
+
+## [2.10.187] — 2026-04-21
+
+### Fixed
+- proper stopReason + soft UI message instead of alarming banner
+
+## [2.10.186] — 2026-04-21
+
+### Fixed
+- fix actual retry limit in conversation-post-turn.ts
+
+## [2.10.185] — 2026-04-21
+
+### Fixed
+- 4 retries for thinking_only mid-task + urgent Edit directive
+
+## [2.10.184] — 2026-04-21
+
+### Fixed
+- input focus after /model + thinking_only retry for reasoning models
+
+## [2.10.183] — 2026-04-21
+
+### Added
+- viewport that follows selected item, centered
+
+## [2.10.182] — 2026-04-21
+
+### Fixed
+- use correct mode name "toggle" not "model-toggle"
+
+## [2.10.181] — 2026-04-21
+
+### Fixed
+- hide Kodi during /model to prevent arrow-key flicker
+
+## [2.10.180] — 2026-04-21
+
+### Fixed
+- TDZ crash — move isLocal/providerLabel before useMemo hooks
+
+## [2.10.179] — 2026-04-21
+
+### Fixed
+- arrow keys follow visual sort order, not internal array order
+
+## [2.10.178] — 2026-04-21
+
+### Added
+- viewport scroll + sort + sub-headers per provider
+
+## [2.10.176] — 2026-04-21
+
+### Fixed
+- expand OpenAI non-text filter, 122 → 60 useful models
+
+## [2.10.175] — 2026-04-21
+
+### Fixed
+- correct endpoint api.moonshot.ai + kimi-k2.5/k2.6 context sizes
+
+## [2.10.174] — 2026-04-21
+
+### Fixed
+- correct field names + filter non-text models
+
+## [2.10.173] — 2026-04-21
+
+### Fixed
+- discover-then-replace, OAuth key for Anthropic, keep models on failure
+
+## [2.10.172] — 2026-04-21
+
+### Fixed
+- remove stale models before registering fresh ones from API
+
+## [2.10.171] — 2026-04-21
+
+### Added
+- fetch models live from provider API — no more hardcoded names
+
+## [2.10.170] — 2026-04-21
+
+### Fixed
+- [SYSTEM] injections no longer reset turn boundary
+
+## [2.10.169] — 2026-04-21
+
+### Added
+- add Kimi to /cloud menu + fix provider registration for all cloud models
+
+## [2.10.168] — 2026-04-21
+
+### Added
+- add Kimi (Moonshot AI) as supported cloud provider
+
+## [2.10.167] — 2026-04-21
+
+### Fixed
+- context window + empty response + reconnaissance loop guard
+
+## [2.10.166] — 2026-04-21
+
+### Fixed
+- force loop continuation + explicit tool reminder in system prompt
+
+## [2.10.165] — 2026-04-21
+
+### Fixed
+- fire immediately on turn 1 when reasoning model produces 0 tools
+- stale contextWindowCap assertion after df203dd removed 64k cap
+
+## [2.10.164] — 2026-04-21
+
+### Fixed
+- model label stuck bug + hook wiring + doc counts
+
+## [2.10.163] — 2026-04-21
+
+### Fixed
+- merge consecutive thinking blocks + reasoning loop guard
+
+## [2.10.162] — 2026-04-21
+
+### Added
+- post-edit feedback hook + error recovery (P3c + P4b)
+
+### Fixed
+- P1-P4 multi-provider correctness + RAG restore + coding agent improvements
+
+## [2.10.161] — 2026-04-20
+
+### Fixed
+- auto-route xAI + key format validation + hard-stop on bad key in tool output
+
+## [2.10.160] — 2026-04-20
+
+### Fixed
+- remove 64k display cap + update known sizes to real provider max
+
+## [2.10.159] — 2026-04-20
+
+### Fixed
+- known-size fallback so unregistered cloud models don't read as 32k
+
+## [2.10.158] — 2026-04-20
+
+### Fixed
+- session cost was priced off cumulative (double-counted) tokens
+
+## [2.10.157] — 2026-04-20
+
+### Added
+- show per-provider balance in the modal stats line
+
+## [2.10.156] — 2026-04-20
+
+### Added
+- per-provider credit tracking + low-balance alerts
+
+## [2.10.155] — 2026-04-20
+
+### Fixed
+- context-pressure bar measured cumulative usage, not current context
+
+## [2.10.154] — 2026-04-20
+
+### Fixed
+- extract tarball before installing + switch to per-file sha256 sidecar
+
+## [2.10.153] — 2026-04-20
+
+### Fixed
+- handle versioned tarball asset names + extract before install
+
+## [2.10.152] — 2026-04-20
+
+### Fixed
+- three release-pipeline bugs that broke kcode install/update
+
 ## [2.10.150] — 2026-04-20
 
 ### Fixed
