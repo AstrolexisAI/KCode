@@ -4,7 +4,7 @@
 
 # KCode -- Kulvex Code by Astrolexis
 
-> **Deterministic security audit for C, Rust, Go, Python, and 20+ other languages.** 399 curated patterns (372 regex + 27 AST). A small local LLM verifies each finding to strip false positives. Source never leaves your machine.
+> **Deterministic security audit for C, Rust, Go, Python, and 20+ other languages.** 441 curated patterns (387 regex + 54 AST). A small local LLM verifies each finding to strip false positives. Source never leaves your machine.
 
 KCode is an open-source SAST scanner with a twist: the pattern scanner does the bug-finding deterministically, then a small local LLM (runs on a 24GB GPU) verifies each candidate in isolation. The LLM's job is only to downgrade false positives, never to find bugs. Result: ~10k tokens per audit instead of the ~300k an LLM-first tool would burn, and your source never leaves the machine.
 
@@ -28,7 +28,7 @@ Run a focused audit by domain:
 
 ```bash
 kcode
-/scan project/     # 399 patterns, 20+ languages, LLM-verified findings, Esc to cancel
+/scan project/     # 441 patterns, 20+ languages, LLM-verified findings, Esc to cancel
 /fix project/      # deterministic patches (size guards, bounded copies, RAII)
 /pr project/       # branch + commit + LLM-written PR grounded in evidence
 ```
@@ -178,7 +178,7 @@ Supports Spanish (with accent handling for `analizá`, `cambiá`, `auditá`) and
 
 ### Deterministic Audit Engine
 
-- **399 hand-written patterns (372 regex + 27 AST)** across 20+ languages (C, C++, Python, JS, TS, Go, Java, Rust, Swift, Kotlin, C#, PHP, Ruby, Dart, SQL, Scala, Haskell, Zig, Lua, Elixir + framework packs for Next.js, FastAPI, Express, Django, Rails, Spring, Laravel, Flask, React + IaC for Terraform, Kubernetes, Dockerfile, GitHub Actions)
+- **441 hand-written patterns (387 regex + 54 AST)** across 20+ languages (C, C++, Python, JS, TS, Go, Java, Rust, Swift, Kotlin, C#, PHP, Ruby, Dart, SQL, Scala, Haskell, Zig, Lua, Elixir + framework packs for Next.js, FastAPI, Express, Django, Rails, Spring, Laravel, Flask, React + IaC for Terraform, Kubernetes, Dockerfile, GitHub Actions)
 - **Pattern library** rooted in real production bugs (buffer overflow, pointer arithmetic, shell injection, SQL injection, XSS, deserialization, path traversal, hardcoded secrets, TOCTOU, type confusion, etc.)
 - **Fixture regression harness** -- every pattern ships with positive + negative fixtures; 863 regression tests run on every CI build to catch regex drift before release
 - **Model verification** -- each candidate is verified in isolation with a focused prompt ("confirm or FALSE_POSITIVE, prove it with an execution path"), not open-ended discovery
@@ -440,13 +440,13 @@ Use `/plugins` to list installed plugins.
 | Core philosophy | **Machine-first** (pipelines + LLM) | AI-native IDE (vibe coding) | Pair-programming + Git |
 | Where LLM shines | End-stage only (pre-filtered context) | Heavy (editing) | High (direct edits) |
 | Token efficiency | **~10k per audit** | Medium-high | Medium |
-| Determinism | **High** (399 patterns, semantic guards) | Model-dependent | Model-dependent |
+| Determinism | **High** (441 patterns, semantic guards) | Model-dependent | Model-dependent |
 
 ### Features
 
 | Feature | KCode | Cursor | Aider |
 |---------|-------|--------|-------|
-| Deterministic audit engine | **399 patterns, 20+ languages** | -- | -- |
+| Deterministic audit engine | **441 patterns, 20+ languages** | -- | -- |
 | Auto-fix + Auto-PR pipeline | **/scan /fix /pr** | Manual | Manual |
 | Runs 100% local (GPU) | **Yes (0 tokens)** | No (cloud) | Yes (BYO keys) |
 | Hybrid local+cloud verification | **Yes (auto-detects)** | No | No |
