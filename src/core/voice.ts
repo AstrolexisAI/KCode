@@ -9,7 +9,7 @@
 // 2. Local faster-whisper / whisper.cpp if installed
 // 3. Falls back to error with installation instructions
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -124,15 +124,19 @@ async function transcribeViaKulvex(audioPath: string): Promise<string> {
 }
 
 function transcribeViaFasterWhisper(audioPath: string): string {
-  const result = execSync(
-    `python3 -c "
+  // Use execFileSync + sys.argv so audioPath cannot be shell-injected even
+  // if a caller ever passes it from an untrusted source.
+  const script = `
+import sys
 from faster_whisper import WhisperModel
 model = WhisperModel('base', device='cuda', compute_type='float16')
-segments, _ = model.transcribe('${audioPath}')
+segments, _ = model.transcribe(sys.argv[1])
 print(' '.join(s.text for s in segments))
-" 2>/dev/null`,
-    { stdio: "pipe", timeout: 30_000 },
-  )
+`;
+  const result = execFileSync("python3", ["-c", script, audioPath], {
+    stdio: "pipe",
+    timeout: 30_000,
+  })
     .toString()
     .trim();
 
@@ -143,7 +147,7 @@ function transcribeViaWhisperCpp(audioPath: string): string {
   // Find whisper.cpp binary
   const whisperBin = ["whisper-cpp", "main"].find((bin) => {
     try {
-      execSync(`which ${bin}`, { stdio: "pipe" });
+      execFileSync("which", [bin], { stdio: "pipe" });
       return true;
     } catch (err) {
       log.debug("voice", `whisper binary '${bin}' not found: ${err}`);
@@ -164,8 +168,9 @@ function transcribeViaWhisperCpp(audioPath: string): string {
     throw new Error("Whisper model not found. Download ggml-base.bin to ~/.cache/whisper.cpp/");
   }
 
-  const result = execSync(
-    `${whisperBin} -m "${modelPath}" -f "${audioPath}" --no-timestamps -nt 2>/dev/null`,
+  const result = execFileSync(
+    whisperBin,
+    ["-m", modelPath, "-f", audioPath, "--no-timestamps", "-nt"],
     { stdio: "pipe", timeout: 30_000 },
   )
     .toString()
