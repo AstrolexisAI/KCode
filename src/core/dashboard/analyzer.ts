@@ -1,6 +1,7 @@
 // KCode - Project Dashboard Analyzer
 // Gathers comprehensive project metrics by running sub-analyzers in parallel.
 
+import { resolve } from "node:path";
 import { getDb } from "../db";
 import { log } from "../logger";
 import {
@@ -16,6 +17,14 @@ import {
 import type { ProjectDashboard } from "./types";
 
 // ─── Shell helper ──────────────────────────────────────────────
+//
+// Security: Bun.spawn(argv) uses execve, no shell, so shell metacharacters
+// in any argv element are inert. The callers in this file always set
+// argv[0] to a hardcoded literal ("find" or "grep") — caller-controlled
+// values land at argv[1+] as path/filter arguments. The remaining edge
+// case is option-injection (a dir starting with "-" would be parsed as a
+// flag by find/grep); we defend against that by resolving the dir to an
+// absolute path before passing it in (see analyze()).
 
 async function run(cmd: string[]): Promise<{ ok: boolean; stdout: string }> {
   try {
@@ -34,12 +43,17 @@ async function run(cmd: string[]): Promise<{ ok: boolean; stdout: string }> {
 export class ProjectAnalyzer {
   /** Run all sub-analyzers in parallel and return the combined dashboard. */
   async analyze(projectDir: string): Promise<ProjectDashboard> {
+    // resolve() to absolute path so a caller-supplied "-flag-looking"
+    // string can't reach find/grep as an option. Non-existent dirs are
+    // tolerated (sub-analyzers each handle missing inputs and return zeros
+    // — keeps the resilience contract).
+    const safeDir = resolve(projectDir);
     const [project, tests, codeQuality, activity, dependencies] = await Promise.all([
-      this.analyzeProject(projectDir),
-      this.analyzeTests(projectDir),
-      this.analyzeCodeQuality(projectDir),
+      this.analyzeProject(safeDir),
+      this.analyzeTests(safeDir),
+      this.analyzeCodeQuality(safeDir),
       this.analyzeActivity(),
-      this.analyzeDependencies(projectDir),
+      this.analyzeDependencies(safeDir),
     ]);
     return { project, tests, codeQuality, activity, dependencies };
   }
