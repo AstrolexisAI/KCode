@@ -8,7 +8,12 @@ import { runAudit } from "./audit-engine";
 import { getAllPatterns, getPatternById } from "./patterns";
 import { generateMarkdownReport } from "./report-generator";
 import { findSourceFiles, scanProject } from "./scanner";
-import { parseVerdict } from "./verifier";
+import {
+  buildBatchVerifyPrompt,
+  parseBatchVerdicts,
+  parseVerdict,
+  verifyAllCandidates,
+} from "./verifier";
 
 describe("pattern library", () => {
   test("all patterns have unique IDs", () => {
@@ -410,6 +415,126 @@ describe("verifier (JSON Evidence Pack contract, v2.10.361+)", () => {
     const v = parseVerdict(response);
     // Direct parse stays confirmed; sanity check runs in verifyCandidate.
     expect(v?.verdict).toBe("confirmed");
+  });
+});
+
+describe("verifier — batched verification (v2.10.468)", () => {
+  const candA = {
+    pattern_id: "js-001-eval",
+    severity: "critical" as const,
+    file: "/tmp/x.ts",
+    line: 5,
+    matched_text: "eval(req.body)",
+    context: "1: const r = eval(req.body);\n2:",
+  };
+  const candB = {
+    pattern_id: "js-002-innerhtml",
+    severity: "high" as const,
+    file: "/tmp/x.ts",
+    line: 12,
+    matched_text: "el.innerHTML = x",
+    context: "11: el.innerHTML = x;\n12:",
+  };
+
+  test("buildBatchVerifyPrompt includes file path + all candidate sections", () => {
+    const prompt = buildBatchVerifyPrompt("/tmp/x.ts", [candA, candB]);
+    expect(prompt).toContain("FILE: /tmp/x.ts");
+    expect(prompt).toContain("[c0]");
+    expect(prompt).toContain("[c1]");
+    expect(prompt).toContain("eval(req.body)");
+    expect(prompt).toContain("el.innerHTML = x");
+    expect(prompt).toContain("JSON ARRAY");
+  });
+
+  test("parseBatchVerdicts accepts a well-formed array of N", () => {
+    const resp = JSON.stringify([
+      {
+        verdict: "confirmed",
+        reasoning: "real bug",
+        evidence: { sink: "eval" },
+      },
+      {
+        verdict: "false_positive",
+        reasoning: "static literal",
+        evidence: { sink: "innerHTML" },
+      },
+    ]);
+    const out = parseBatchVerdicts(resp, 2);
+    expect(out).not.toBeNull();
+    expect(out?.length).toBe(2);
+    expect(out?.[0]?.verdict).toBe("confirmed");
+    expect(out?.[1]?.verdict).toBe("false_positive");
+  });
+
+  test("parseBatchVerdicts rejects wrong count", () => {
+    const resp = JSON.stringify([{ verdict: "confirmed", reasoning: "x" }]);
+    expect(parseBatchVerdicts(resp, 2)).toBeNull();
+  });
+
+  test("parseBatchVerdicts rejects non-array", () => {
+    expect(parseBatchVerdicts(`{"verdict":"confirmed","reasoning":"x"}`, 1)).toBeNull();
+    expect(parseBatchVerdicts("not json at all", 1)).toBeNull();
+  });
+
+  test("verifyAllCandidates uses ONE callback invocation per batch when batchSize>=N", async () => {
+    let calls = 0;
+    const llmCallback = async () => {
+      calls++;
+      return JSON.stringify([
+        { verdict: "confirmed", reasoning: "real", evidence: { sink: "eval" } },
+        { verdict: "false_positive", reasoning: "safe", evidence: { sink: "innerHTML" } },
+      ]);
+    };
+    const results = await verifyAllCandidates([candA, candB], {
+      llmCallback,
+      batchSize: 5,
+    });
+    expect(calls).toBe(1); // 1 batched call, not 2 single calls
+    expect(results.length).toBe(2);
+    expect(results[0]?.verification.verdict).toBe("confirmed");
+    expect(results[1]?.verification.verdict).toBe("false_positive");
+  });
+
+  test("verifyAllCandidates falls back to per-candidate when batch parse fails", async () => {
+    let calls = 0;
+    const llmCallback = async (prompt: string) => {
+      calls++;
+      // Batch prompt and retry both return garbage; single-candidate prompts
+      // (no '[c0]') return a valid single object.
+      if (prompt.includes("[c0]")) return "garbage that cannot be parsed";
+      return JSON.stringify({
+        verdict: "false_positive",
+        reasoning: "single-mode ok",
+        evidence: { sink: "eval" },
+      });
+    };
+    const results = await verifyAllCandidates([candA, candB], {
+      llmCallback,
+      batchSize: 5,
+    });
+    // 2 batch attempts (initial + retry) + 2 single fallback calls = 4
+    expect(calls).toBe(4);
+    expect(results.length).toBe(2);
+    expect(results[0]?.verification.verdict).toBe("false_positive");
+    expect(results[1]?.verification.verdict).toBe("false_positive");
+  });
+
+  test("verifyAllCandidates preserves single-candidate behaviour with batchSize=1", async () => {
+    let calls = 0;
+    const llmCallback = async () => {
+      calls++;
+      return JSON.stringify({
+        verdict: "confirmed",
+        reasoning: "x",
+        evidence: { sink: "y" },
+      });
+    };
+    const results = await verifyAllCandidates([candA, candB], {
+      llmCallback,
+      batchSize: 1,
+    });
+    expect(calls).toBe(2); // one call per candidate
+    expect(results.length).toBe(2);
   });
 });
 

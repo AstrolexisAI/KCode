@@ -70,6 +70,16 @@ export interface VerifyOptions {
    * surface a "cancelled by user" message. v2.10.385.
    */
   signal?: AbortSignal;
+  /**
+   * If >1, group candidates by file and verify up to `batchSize`
+   * candidates from the same file in a single LLM call. Defaults to
+   * `KCODE_VERIFIER_BATCH_SIZE` env var, or 1 (single-candidate mode)
+   * when unset. Reduces calls AND improves precision (the model sees
+   * shared file context once: imports, helpers, file kind). On batch
+   * parse failure, falls back to per-candidate verification so we
+   * never lose a candidate. v2.10.468.
+   */
+  batchSize?: number;
 }
 
 /**
@@ -463,6 +473,211 @@ export async function verifyCandidate(
   return runWithCallback(candidate, opts.llmCallback);
 }
 
+// ─── Batched verification ────────────────────────────────────────
+//
+// Group candidates from the same file into ONE LLM call. The model
+// sees file context once (imports, helpers, what's a test vs prod)
+// — gives better precision per candidate AND amortises tokens. On
+// any failure (parse error, wrong count) the batch falls back to
+// per-candidate verification so we never drop a finding silently.
+
+/** Build the verify prompt for an N-candidate batch on a single file. */
+export function buildBatchVerifyPrompt(file: string, candidates: Candidate[]): string {
+  if (candidates.length === 0) throw new Error("buildBatchVerifyPrompt: empty batch");
+  // Read the file once and use the same context window logic as the
+  // single-candidate prompt — short files inline, long files windowed
+  // around the SPANNING range of all candidates in this batch.
+  let fileContext = "";
+  try {
+    const content = readFileSync(file, "utf-8");
+    const lines = content.split("\n");
+    if (lines.length <= 300) {
+      fileContext = lines.map((l, i) => `${i + 1}: ${l}`).join("\n");
+    } else {
+      const minLine = Math.min(...candidates.map((c) => c.line));
+      const maxLine = Math.max(...candidates.map((c) => c.line));
+      const start = Math.max(0, minLine - 30);
+      const end = Math.min(lines.length, maxLine + 30);
+      fileContext = lines
+        .slice(start, end)
+        .map((l, i) => `${start + i + 1}: ${l}`)
+        .join("\n");
+    }
+  } catch {
+    // Fall through with per-candidate context only.
+  }
+
+  const sections = candidates
+    .map((c, idx) => {
+      const pattern = getPatternById(c.pattern_id);
+      if (!pattern) {
+        return `[c${idx}] (unknown pattern: ${c.pattern_id}) — return needs_context`;
+      }
+      return `[c${idx}] PATTERN: ${pattern.title}
+LINE: ${c.line}
+SEVERITY IF CONFIRMED: ${pattern.severity}
+EXPLANATION: ${pattern.explanation}
+QUESTION: ${pattern.verify_prompt}
+CODE EXCERPT:
+\`\`\`
+${c.context}
+\`\`\``;
+    })
+    .join("\n\n");
+
+  return `You are verifying ${candidates.length} static-analysis candidates from a SINGLE FILE. All share the same file context — read the file once, then decide each candidate.
+
+FILE: ${file}
+${fileContext ? `FULL FILE (numbered lines):\n\`\`\`\n${fileContext}\n\`\`\`\n` : ""}
+CANDIDATES TO VERIFY:
+
+${sections}
+
+For EACH candidate, apply this checklist:
+  1. Is there an assert / bound check / validation in a surrounding
+     function (or another method of the same class) that constrains
+     the suspect value?
+  2. Is the input user-controlled AT RUNTIME, or from trusted compile-time
+     / build-time / static config? Build-time scripts (CMake, scripts/,
+     autocoder/, tools/) are not in most security threat models.
+  3. What is the EXACT chain from an external input boundary
+     (network, IPC, file, CLI) to this line? If you cannot trace
+     it, return needs_context.
+  4. Does the language / type system rule out the concern (bounded
+     int, std::array<T,N>, fixed-size struct member array whose loop
+     bound is its own length)?
+  5. Is the candidate inside a TEST or FIXTURE file (path contains
+     /test/, /tests/, /fixtures/, _test., .test., .spec.)? Test code
+     is not in the runtime threat model — mark false_positive unless
+     the bug also exists in production code referenced by the test.
+
+Be STRICT: prefer false_positive over confirmed when any mitigation
+is present. Only return "confirmed" when you can name the input
+boundary, execution-path steps, and concrete sink for that candidate.
+
+Respond with EXACTLY ONE JSON ARRAY — no prose, no markdown fences,
+no per-candidate header text. One entry per candidate, in c0..c${candidates.length - 1} order:
+
+[
+  {
+    "id": "c0",
+    "verdict": "confirmed" | "false_positive" | "needs_context",
+    "reasoning": "one sentence: input + bypass + outcome, OR the mitigation that rules this out",
+    "evidence": {
+      "input_boundary": "string or empty if false_positive",
+      "execution_path_steps": ["call1", "call2"],
+      "sink": "the dangerous operation",
+      "sanitizers_checked": ["check1"],
+      "mitigations_found": ["mitigation at line N"],
+      "suggested_fix_strategy": "rewrite" | "annotate" | "manual",
+      "suggested_fix": "minimal code change, or empty",
+      "test_suggestion": "regression test recipe, or empty"
+    }
+  },
+  ... (one per candidate, in order)
+]
+`;
+}
+
+/** Parse a batch JSON array response into N Verifications in the same order as the prompt. */
+export function parseBatchVerdicts(response: string, expectedCount: number): Verification[] | null {
+  const arr = extractAndParseJsonArray(response);
+  if (!Array.isArray(arr)) return null;
+  if (arr.length !== expectedCount) return null;
+  const out: Verification[] = [];
+  for (let i = 0; i < arr.length; i++) {
+    const item = arr[i];
+    if (!item || typeof item !== "object") return null;
+    const v = coerceVerification(item);
+    if (!v) return null;
+    out.push(v);
+  }
+  return out;
+}
+
+/**
+ * Extract the first JSON ARRAY from `response`. Mirrors the same
+ * tolerances as extractAndParseJson (markdown fences, leading prose,
+ * trailing commas) but balances `[...]` instead of `{...}`. Returns
+ * the parsed array or null.
+ */
+function extractAndParseJsonArray(response: string): unknown[] | null {
+  let text = response.trim();
+  const fenceMatch = text.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```\s*$/);
+  if (fenceMatch?.[1]) text = fenceMatch[1].trim();
+  const start = text.indexOf("[");
+  if (start === -1) return null;
+  let depth = 0;
+  let inString = false;
+  let isEscaped = false;
+  let end = -1;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]!;
+    if (isEscaped) {
+      isEscaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      isEscaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === "[") depth++;
+    else if (ch === "]") {
+      depth--;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+    }
+  }
+  if (end === -1) return null;
+  const candidate = text.slice(start, end + 1).replace(/,(\s*[}\]])/g, "$1");
+  try {
+    const parsed = JSON.parse(candidate);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Verify a batch of candidates (all from the same file) in ONE LLM call.
+ * Falls back to per-candidate verification when the batch parse fails
+ * twice, so we never silently lose findings.
+ */
+async function verifyBatchForFile(
+  candidates: Candidate[],
+  callback: (prompt: string) => Promise<string>,
+): Promise<Verification[]> {
+  if (candidates.length === 0) return [];
+  if (candidates.length === 1) {
+    return [await runWithCallback(candidates[0]!, callback)];
+  }
+  const prompt = buildBatchVerifyPrompt(candidates[0]!.file, candidates);
+  const first = await callback(prompt);
+  let parsed = parseBatchVerdicts(first, candidates.length);
+  if (!parsed) {
+    const retry = await callback(
+      `${prompt}\n\nYour previous response was not a valid JSON array of ${candidates.length} entries. Return EXACTLY one JSON array, no prose.`,
+    );
+    parsed = parseBatchVerdicts(retry, candidates.length);
+  }
+  if (parsed) {
+    return parsed.map((v) => sanityCheckVerdict(v));
+  }
+  // Last resort — single-candidate fallback so we don't drop the batch.
+  const out: Verification[] = [];
+  for (const c of candidates) {
+    out.push(await runWithCallback(c, callback));
+  }
+  return out;
+}
+
 /**
  * Combine a primary verdict and a fallback verdict under cascade-on-confirmed
  * semantics. Called only when primary returned `confirmed` and a fallback
@@ -524,6 +739,81 @@ export async function verifyAllCandidates(
   // ambiguous behaviour.
   const cascadeMode: "on-confirmed" | "on-needs-context" =
     opts.cascadeMode ?? (opts.fallbackCallback ? "on-confirmed" : "on-needs-context");
+
+  // Batched path — group candidates by file, send up to `batchSize` per
+  // call. Skipped (single-candidate path below) when batchSize <= 1.
+  const batchSize =
+    opts.batchSize ??
+    (() => {
+      const raw = process.env.KCODE_VERIFIER_BATCH_SIZE;
+      if (raw) {
+        const n = parseInt(raw, 10);
+        if (Number.isFinite(n) && n > 0) return n;
+      }
+      return 1;
+    })();
+  if (batchSize > 1) {
+    const byFile = new Map<string, Candidate[]>();
+    for (const c of candidates) {
+      const arr = byFile.get(c.file) ?? [];
+      arr.push(c);
+      byFile.set(c.file, arr);
+    }
+    let done = 0;
+    for (const [, fileCands] of byFile) {
+      for (let i = 0; i < fileCands.length; i += batchSize) {
+        if (opts.signal?.aborted) {
+          const { ScanCancelledError } = await import("./scan-state");
+          throw new ScanCancelledError(`Scan cancelled at candidate ${done}/${candidates.length}`);
+        }
+        const batch = fileCands.slice(i, i + batchSize);
+        opts.onProgress?.(done, candidates.length, batch[0]!);
+        let verifications: Verification[];
+        try {
+          verifications = await verifyBatchForFile(batch, opts.llmCallback);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          verifications = batch.map(() => ({
+            verdict: "needs_context" as const,
+            reasoning: `Batch verification failed: ${msg}`,
+          }));
+        }
+        for (let j = 0; j < batch.length; j++) {
+          let v = verifications[j]!;
+          // Cascade is per-candidate, only on confirmed in on-confirmed mode.
+          if (
+            opts.fallbackCallback &&
+            cascadeMode === "on-confirmed" &&
+            v.verdict === "confirmed"
+          ) {
+            try {
+              const fb = await runWithCallback(batch[j]!, opts.fallbackCallback);
+              v = combineVerdicts(v, fb);
+            } catch {
+              /* fall through with primary verdict */
+            }
+          } else if (
+            opts.fallbackCallback &&
+            cascadeMode === "on-needs-context" &&
+            v.verdict === "needs_context"
+          ) {
+            try {
+              const fb = await runWithCallback(batch[j]!, opts.fallbackCallback);
+              v = { ...fb, reasoning: `[☁ escalated] ${fb.reasoning}` };
+            } catch {
+              /* keep needs_context */
+            }
+          }
+          results.push({ candidate: batch[j]!, verification: v });
+          done++;
+          opts.onVerified?.(batch[j]!, v, done - 1, candidates.length);
+        }
+        await new Promise((r) => setTimeout(r, 10));
+      }
+    }
+    return results;
+  }
+  // ─── single-candidate path (default, batchSize === 1) ───
   // Track consecutive transport-level failures. If the first 3
   // candidates ALL fail with a network/connect-style error, the
   // verifier endpoint is unreachable — abort the whole pass instead
@@ -614,3 +904,4 @@ export async function verifyAllCandidates(
 
 // Exported for tests
 export { buildVerifyPrompt, coerceVerification, extractAndParseJson, parseVerdict };
+// Batched-verification helpers exported above via direct `export function`.
