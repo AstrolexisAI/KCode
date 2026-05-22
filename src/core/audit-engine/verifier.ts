@@ -16,7 +16,7 @@
 //   minimal evidence pack so accounting stays honest.
 
 import { readFileSync } from "node:fs";
-import { recordVerdict } from "./audit-history";
+import { lookupSnippetCache, recordVerdict } from "./audit-history";
 import { getPatternById } from "./patterns";
 import type {
   Candidate,
@@ -481,6 +481,17 @@ export async function verifyCandidate(
   candidate: Candidate,
   opts: VerifyOptions,
 ): Promise<Verification> {
+  // Snippet cache: if this exact (pattern_id, matched_text) has been
+  // verified ≥3 times with ≥80% agreement, reuse the historical
+  // verdict and skip the LLM call entirely. Conservative thresholds
+  // ensure we never short-circuit on noisy data. v2.10.471.
+  const hit = lookupSnippetCache(candidate.pattern_id, candidate.matched_text);
+  if (hit) {
+    return {
+      verdict: hit.verdict,
+      reasoning: `[cache hit: ${hit.samples} prior samples agree] verdict carried over without LLM call`,
+    };
+  }
   return runWithCallback(candidate, opts.llmCallback);
 }
 
@@ -536,11 +547,17 @@ ${c.context}
     })
     .join("\n\n");
 
-  return `You are verifying ${candidates.length} static-analysis candidates from a SINGLE FILE. All share the same file context — read the file once, then decide each candidate.
+  // Prompt structure is intentionally PREFIX-STABLE per file: the same
+  // file produces an identical leading section across batches, letting
+  // llama-server's prompt cache hit on the 2nd+ batch (large win when
+  // a file has >batchSize candidates split into multiple batches).
+  // The variable content (candidates list) lives AFTER the stable
+  // file context so the cache prefix never breaks.
+  return `You are verifying static-analysis candidates from a SINGLE FILE. All share the same file context — read the file once, then decide each candidate.
 
 FILE: ${file}
 ${fileContext ? `FULL FILE (numbered lines):\n\`\`\`\n${fileContext}\n\`\`\`\n` : ""}
-CANDIDATES TO VERIFY:
+CANDIDATES TO VERIFY (${candidates.length} total):
 
 ${sections}
 
@@ -666,27 +683,56 @@ async function verifyBatchForFile(
   callback: (prompt: string) => Promise<string>,
 ): Promise<Verification[]> {
   if (candidates.length === 0) return [];
-  if (candidates.length === 1) {
-    return [await runWithCallback(candidates[0]!, callback)];
+
+  // Snippet-cache pre-pass: split into cache-hits (instant) and
+  // misses (need LLM). The LLM batch only verifies the misses, so
+  // recurring patterns get faster over time as the history fills.
+  const results: (Verification | null)[] = new Array(candidates.length).fill(null);
+  const misses: Candidate[] = [];
+  const missIndices: number[] = [];
+  for (let i = 0; i < candidates.length; i++) {
+    const c = candidates[i]!;
+    const hit = lookupSnippetCache(c.pattern_id, c.matched_text);
+    if (hit) {
+      results[i] = {
+        verdict: hit.verdict,
+        reasoning: `[cache hit: ${hit.samples} prior samples agree] verdict carried over without LLM call`,
+      };
+    } else {
+      misses.push(c);
+      missIndices.push(i);
+    }
   }
-  const prompt = buildBatchVerifyPrompt(candidates[0]!.file, candidates);
+
+  if (misses.length === 0) {
+    return results.map((r) => r!); // all cache-hits
+  }
+  if (misses.length === 1) {
+    results[missIndices[0]!] = await runWithCallback(misses[0]!, callback);
+    return results.map((r) => r!);
+  }
+
+  // Batched verification on misses only.
+  const prompt = buildBatchVerifyPrompt(misses[0]!.file, misses);
   const first = await callback(prompt);
-  let parsed = parseBatchVerdicts(first, candidates.length);
+  let parsed = parseBatchVerdicts(first, misses.length);
   if (!parsed) {
     const retry = await callback(
-      `${prompt}\n\nYour previous response was not a valid JSON array of ${candidates.length} entries. Return EXACTLY one JSON array, no prose.`,
+      `${prompt}\n\nYour previous response was not a valid JSON array of ${misses.length} entries. Return EXACTLY one JSON array, no prose.`,
     );
-    parsed = parseBatchVerdicts(retry, candidates.length);
+    parsed = parseBatchVerdicts(retry, misses.length);
   }
   if (parsed) {
-    return parsed.map((v) => sanityCheckVerdict(v));
+    for (let j = 0; j < misses.length; j++) {
+      results[missIndices[j]!] = sanityCheckVerdict(parsed[j]!);
+    }
+    return results.map((r) => r!);
   }
-  // Last resort — single-candidate fallback so we don't drop the batch.
-  const out: Verification[] = [];
-  for (const c of candidates) {
-    out.push(await runWithCallback(c, callback));
+  // Last resort: per-candidate fallback on the miss subset only.
+  for (let j = 0; j < misses.length; j++) {
+    results[missIndices[j]!] = await runWithCallback(misses[j]!, callback);
   }
-  return out;
+  return results.map((r) => r!);
 }
 
 /**
@@ -832,34 +878,51 @@ export async function verifyAllCandidates(
             reasoning: `Batch verification failed: ${msg}`,
           }));
         }
+        // Cascade in PARALLEL: collect the indices that need a fallback
+        // call, fire all of them with Promise.all, then merge results.
+        // Sequential await per-candidate forced cascades for a 10-candidate
+        // batch with 5 confirmed to take 5 × cloud_latency. Parallel
+        // collapses that to a single ~max(cloud_latency).
+        const cascadeNeeded: number[] = [];
+        if (opts.fallbackCallback) {
+          for (let j = 0; j < verifications.length; j++) {
+            const v = verifications[j]!;
+            if (
+              (cascadeMode === "on-confirmed" && v.verdict === "confirmed") ||
+              (cascadeMode === "on-needs-context" && v.verdict === "needs_context")
+            ) {
+              cascadeNeeded.push(j);
+            }
+          }
+        }
+        const cascadeResults = await Promise.all(
+          cascadeNeeded.map(async (j) => {
+            try {
+              const fb = await runWithCallback(work.candidates[j]!, opts.fallbackCallback!);
+              return { j, fb };
+            } catch {
+              return { j, fb: null };
+            }
+          }),
+        );
+        const fbByIdx = new Map<number, Verification>();
+        for (const { j, fb } of cascadeResults) {
+          if (fb) fbByIdx.set(j, fb);
+        }
+
         for (let j = 0; j < work.candidates.length; j++) {
           const c = work.candidates[j]!;
           let v = verifications[j]!;
-          if (
-            opts.fallbackCallback &&
-            cascadeMode === "on-confirmed" &&
-            v.verdict === "confirmed"
-          ) {
-            try {
-              const fb = await runWithCallback(c, opts.fallbackCallback);
+          const fb = fbByIdx.get(j);
+          if (fb) {
+            if (cascadeMode === "on-confirmed") {
               v = combineVerdicts(v, fb);
-            } catch {
-              /* keep primary */
-            }
-          } else if (
-            opts.fallbackCallback &&
-            cascadeMode === "on-needs-context" &&
-            v.verdict === "needs_context"
-          ) {
-            try {
-              const fb = await runWithCallback(c, opts.fallbackCallback);
+            } else {
               v = { ...fb, reasoning: `[☁ escalated] ${fb.reasoning}` };
-            } catch {
-              /* keep needs_context */
             }
           }
           slotResults[work.indices[j]!] = { candidate: c, verification: v };
-          recordVerdict(c.pattern_id, v.verdict, c.file);
+          recordVerdict(c.pattern_id, v.verdict, c.file, c.matched_text);
           completed++;
           opts.onVerified?.(c, v, completed - 1, candidates.length);
         }
@@ -952,7 +1015,7 @@ export async function verifyAllCandidates(
       };
     }
     results.push({ candidate: c, verification });
-    recordVerdict(c.pattern_id, verification.verdict, c.file);
+    recordVerdict(c.pattern_id, verification.verdict, c.file, c.matched_text);
     // Fire post-verification callback for live progress bars
     opts.onVerified?.(c, verification, i, candidates.length);
     // Yield to event loop so Ink/React can re-render the progress bar.

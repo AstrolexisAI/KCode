@@ -10,7 +10,9 @@ import {
   getAllPatternPrecision,
   getPatternPrecision,
   getTotalVerdictCount,
+  lookupSnippetCache,
   recordVerdict,
+  snippetHash,
 } from "./audit-history";
 
 let TMP: string;
@@ -108,5 +110,56 @@ describe("resilience — DB failures are silent", () => {
     process.env.KCODE_AUDIT_HISTORY_PATH = "/nonexistent-dir-x9z/db";
     _resetAuditHistoryForTest();
     expect(() => recordVerdict("p", "confirmed")).not.toThrow();
+  });
+});
+
+describe("snippetHash", () => {
+  test("is stable across whitespace variations", () => {
+    expect(snippetHash("p", "eval(req.body)")).toBe(snippetHash("p", "eval( req.body )"));
+    expect(snippetHash("p", "eval(req.body)")).toBe(snippetHash("p", "  eval(req.body)\n"));
+  });
+  test("differs across patterns or content", () => {
+    expect(snippetHash("p1", "x")).not.toBe(snippetHash("p2", "x"));
+    expect(snippetHash("p", "x")).not.toBe(snippetHash("p", "y"));
+  });
+});
+
+describe("lookupSnippetCache", () => {
+  test("returns null with no history", () => {
+    expect(lookupSnippetCache("p", "snippet")).toBe(null);
+  });
+  test("returns null below minSamples (default 3)", () => {
+    recordVerdict("p", "confirmed", "/f.ts", "snippet1");
+    recordVerdict("p", "confirmed", "/g.ts", "snippet1");
+    expect(lookupSnippetCache("p", "snippet1")).toBe(null);
+  });
+  test("returns majority verdict above threshold + agreement", () => {
+    for (let i = 0; i < 5; i++) recordVerdict("p", "false_positive", "/f.ts", "snippetX");
+    const hit = lookupSnippetCache("p", "snippetX");
+    expect(hit).not.toBe(null);
+    expect(hit?.verdict).toBe("false_positive");
+    expect(hit?.samples).toBe(5);
+  });
+  test("returns null when agreement < 80%", () => {
+    // 5 records: 3 confirmed, 2 FP = 60% agreement on confirmed
+    for (let i = 0; i < 3; i++) recordVerdict("p", "confirmed", "/f.ts", "ambig");
+    for (let i = 0; i < 2; i++) recordVerdict("p", "false_positive", "/f.ts", "ambig");
+    expect(lookupSnippetCache("p", "ambig")).toBe(null);
+  });
+  test("respects custom thresholds", () => {
+    recordVerdict("p", "confirmed", "/f.ts", "snip");
+    recordVerdict("p", "confirmed", "/f.ts", "snip");
+    // Default (3 samples) -> null
+    expect(lookupSnippetCache("p", "snip")).toBe(null);
+    // minSamples=2 -> hit
+    expect(lookupSnippetCache("p", "snip", 2, 0.8)?.verdict).toBe("confirmed");
+  });
+  test("whitespace-normalized lookup matches recording", () => {
+    recordVerdict("p", "false_positive", "/f.ts", "eval( req.body )");
+    recordVerdict("p", "false_positive", "/f.ts", "eval(req.body)");
+    recordVerdict("p", "false_positive", "/f.ts", "  eval(req.body)\n");
+    const hit = lookupSnippetCache("p", "eval(req.body)");
+    expect(hit?.verdict).toBe("false_positive");
+    expect(hit?.samples).toBe(3);
   });
 });

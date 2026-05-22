@@ -419,6 +419,33 @@ describe("verifier (JSON Evidence Pack contract, v2.10.361+)", () => {
 });
 
 describe("verifier — batched verification (v2.10.468)", () => {
+  // Isolate audit-history DB so the snippet cache doesn't bleed in
+  // from real prior runs and short-circuit our callback counters.
+  let _tmpDir: string;
+  let _origHistoryPath: string | undefined;
+  beforeEach(async () => {
+    const { mkdtempSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    _tmpDir = mkdtempSync(join(tmpdir(), "kcode-verifier-test-"));
+    _origHistoryPath = process.env.KCODE_AUDIT_HISTORY_PATH;
+    process.env.KCODE_AUDIT_HISTORY_PATH = join(_tmpDir, "audit-history.db");
+    const { _resetAuditHistoryForTest } = await import("./audit-history");
+    _resetAuditHistoryForTest();
+  });
+  afterEach(async () => {
+    const { _resetAuditHistoryForTest } = await import("./audit-history");
+    _resetAuditHistoryForTest();
+    if (_origHistoryPath === undefined) delete process.env.KCODE_AUDIT_HISTORY_PATH;
+    else process.env.KCODE_AUDIT_HISTORY_PATH = _origHistoryPath;
+    const { rmSync } = await import("node:fs");
+    try {
+      rmSync(_tmpDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  });
+
   const candA = {
     pattern_id: "js-001-eval",
     severity: "critical" as const,
@@ -594,12 +621,22 @@ describe("verifier — batched verification (v2.10.468)", () => {
 
 describe("audit-engine orchestrator", () => {
   let tmp: string;
+  let _origHistoryPath: string | undefined;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tmp = mkdtempSync(join(tmpdir(), "kcode-audit-engine-test-"));
+    // Isolate the audit-history snippet cache from previous runs.
+    _origHistoryPath = process.env.KCODE_AUDIT_HISTORY_PATH;
+    process.env.KCODE_AUDIT_HISTORY_PATH = join(tmp, "audit-history.db");
+    const { _resetAuditHistoryForTest } = await import("./audit-history");
+    _resetAuditHistoryForTest();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    const { _resetAuditHistoryForTest } = await import("./audit-history");
+    _resetAuditHistoryForTest();
+    if (_origHistoryPath === undefined) delete process.env.KCODE_AUDIT_HISTORY_PATH;
+    else process.env.KCODE_AUDIT_HISTORY_PATH = _origHistoryPath;
     rmSync(tmp, { recursive: true, force: true });
   });
 
