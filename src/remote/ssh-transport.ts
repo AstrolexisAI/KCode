@@ -137,8 +137,10 @@ export async function startRemoteAgent(
   port: number = 0,
   opts: SSHOptions = {},
 ): Promise<RemoteAgentInfo> {
-  const args = [
-    ...buildSSHArgs(host, { ...opts, timeout: 30 }),
+  // Build the remote command via shellEscape so a caller-supplied `dir`
+  // containing shell metacharacters can't be re-parsed by the remote sh
+  // (port is numeric, no escape needed).
+  const remoteCmd = buildRemoteCommand([
     "kcode",
     "serve",
     "--headless",
@@ -146,7 +148,8 @@ export async function startRemoteAgent(
     String(port),
     "--dir",
     dir,
-  ];
+  ]);
+  const args = [...buildSSHArgs(host, { ...opts, timeout: 30 }), "--", remoteCmd];
 
   const proc = Bun.spawn(["ssh", ...args], {
     stdout: "pipe",

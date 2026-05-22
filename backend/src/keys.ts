@@ -4,19 +4,19 @@
 // Checksum sizing: the checksum is tamper-detection, not a security
 // boundary — real authorization lives in the DB lookup (findCustomerByKey /
 // findTrialByKey on the server). A brute-forced checksum still hits
-// "key not found" without DB access. 8 hex (32 bits) makes accidental
-// collisions and casual tampering infeasible while keeping keys short
-// enough to paste. The validator also accepts legacy 2-hex checksums
-// for keys minted before 2026-05-20.
+// "key not found" without DB access. 16 hex (64 bits) makes brute-force
+// infeasible while keeping keys email-pasteable. The validator also
+// accepts legacy 8-hex (pre-2026-05-22) and 2-hex (pre-2026-05-20)
+// checksums so keys minted earlier keep working.
 
 import { createHash, randomBytes } from "node:crypto";
 
-const CHECKSUM_LEN = 8;
-const LEGACY_CHECKSUM_LEN = 2;
+const CHECKSUM_LEN = 16;
+const LEGACY_CHECKSUM_LENS = [8, 2];
 
 /**
  * Generate a pro key tied to a Stripe customer ID.
- * Format: kcode_pro_{customerHash12}{entropy32}{checksum8}
+ * Format: kcode_pro_{customerHash12}{entropy32}{checksum16}
  */
 export function generateProKey(customerId: string): string {
   const customerHash = createHash("sha256").update(customerId).digest("hex").slice(0, 12);
@@ -28,7 +28,7 @@ export function generateProKey(customerId: string): string {
 
 /**
  * Generate a trial key with embedded expiry timestamp.
- * Format: kcode_trial_{random16}_{expiryEpochSeconds}{checksum8}
+ * Format: kcode_trial_{random16}_{expiryEpochSeconds}{checksum16}
  */
 export function generateTrialKey(daysValid: number = 14): string {
   const random = randomBytes(8).toString("hex");
@@ -54,7 +54,7 @@ export function validateKeyChecksum(key: string): boolean {
   const payload = key.slice(prefix.length);
   if (payload.length < 20) return false;
   if (/^[0-9a-f]+$/i.test(payload)) return true;
-  for (const len of [CHECKSUM_LEN, LEGACY_CHECKSUM_LEN]) {
+  for (const len of [CHECKSUM_LEN, ...LEGACY_CHECKSUM_LENS]) {
     if (payload.length <= len) continue;
     const body = payload.slice(0, -len);
     const check = payload.slice(-len).toLowerCase();

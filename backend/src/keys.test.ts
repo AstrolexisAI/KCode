@@ -39,9 +39,9 @@ describe("generateTrialKey", () => {
   test("embeds expiry timestamp", () => {
     const key = generateTrialKey(14);
     const payload = key.slice("kcode_trial_".length);
-    // Format: {random}_{expiryTimestamp}{checksum8} — strip the 8-char
+    // Format: {random}_{expiryTimestamp}{checksum16} — strip the 16-char
     // checksum, then the expiry is the last `_`-segment of the body.
-    const body = payload.slice(0, -8);
+    const body = payload.slice(0, -16);
     const parts = body.split("_");
     const expiry = Number(parts[parts.length - 1]);
     const now = Date.now() / 1000;

@@ -3,7 +3,7 @@
 // Pro ($19/mo individual, $49/mo team): HTTP API, swarm, transcript search,
 //      hooks (webhook+agent-spawn), browser, image-gen, distilled learning
 
-import { createHmac, pbkdf2Sync, randomBytes } from "node:crypto";
+import { createHmac, pbkdf2Sync, randomBytes, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -32,17 +32,30 @@ function getHardwareFingerprint(): string {
 // ── Key checksum validation ────────────────────────────────────
 // Keys carry a tamper-detection checksum: the last N hex chars of the
 // payload equal the first N hex chars of SHA-256(payload_without_checksum).
-// N = 8 since 2026-05-20 (32-bit); legacy keys with N = 2 are still accepted.
+// N = 16 since 2026-05-22 (64-bit); 8-hex (32-bit, 2026-05-20) and 2-hex
+// (legacy, pre-2026-05-20) checksums are still accepted by the validator.
 // Note: the checksum is not a security boundary — real authorization is
 // the server-side DB lookup. This guards against typos and accidental
 // tampering.
-const CHECKSUM_LEN = 8;
-const LEGACY_CHECKSUM_LEN = 2;
+const CHECKSUM_LEN = 16;
+const LEGACY_CHECKSUM_LENS = [8, 2];
+
+/**
+ * Constant-time comparison of two strings of arbitrary (possibly different)
+ * length. Returns false on length mismatch without timing leak past the
+ * length (length of the expected HMAC is public, not secret).
+ */
+function constantTimeStringEq(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
 
 /** Strip a valid trailing checksum and return the body, or null if no length matches. */
 function stripValidatedChecksum(payload: string): string | null {
   const { createHash } = require("node:crypto") as typeof import("node:crypto");
-  for (const len of [CHECKSUM_LEN, LEGACY_CHECKSUM_LEN]) {
+  for (const len of [CHECKSUM_LEN, ...LEGACY_CHECKSUM_LENS]) {
     if (payload.length <= len) continue;
     const body = payload.slice(0, -len);
     const check = payload.slice(-len).toLowerCase();
@@ -318,7 +331,14 @@ export function loadProCache(): ProCache | null {
     const legacyHmac = createHmac("sha256", getCacheHmacKey())
       .update(`${raw.key}|${raw.validatedAt}|${raw.valid}`)
       .digest("hex");
-    if (raw.hmac !== expectedHmac && raw.hmac !== legacyHmac) return null;
+    // Constant-time compare to prevent timing-side-channel recovery of
+    // the expected HMAC byte-by-byte from a malicious cache file.
+    if (
+      !constantTimeStringEq(raw.hmac, expectedHmac) &&
+      !constantTimeStringEq(raw.hmac, legacyHmac)
+    ) {
+      return null;
+    }
 
     // Enforce grace period: non-server-validated cache expires after GRACE_PERIOD_HOURS
     if (!raw.serverValidated && raw.valid) {
