@@ -16,6 +16,7 @@
 //   minimal evidence pack so accounting stays honest.
 
 import { readFileSync } from "node:fs";
+import { recordVerdict } from "./audit-history";
 import { getPatternById } from "./patterns";
 import type {
   Candidate,
@@ -805,6 +806,7 @@ export async function verifyAllCandidates(
             }
           }
           results.push({ candidate: batch[j]!, verification: v });
+          recordVerdict(batch[j]!.pattern_id, v.verdict, batch[j]!.file);
           done++;
           opts.onVerified?.(batch[j]!, v, done - 1, candidates.length);
         }
@@ -892,6 +894,7 @@ export async function verifyAllCandidates(
       };
     }
     results.push({ candidate: c, verification });
+    recordVerdict(c.pattern_id, verification.verdict, c.file);
     // Fire post-verification callback for live progress bars
     opts.onVerified?.(c, verification, i, candidates.length);
     // Yield to event loop so Ink/React can re-render the progress bar.
