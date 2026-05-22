@@ -205,7 +205,7 @@ function tsLangFor(language: string, file?: string): string | null {
  * Returns null when the extension isn't AST-supported; the runner
  * skips the file entirely instead of wasting a parse pass.
  */
-function fileLanguage(file: string): string | null {
+export function fileLanguage(file: string): string | null {
   const lower = file.toLowerCase();
   if (lower.endsWith(".py") || lower.endsWith(".pyi")) return "python";
   if (
@@ -238,6 +238,117 @@ function fileLanguage(file: string): string | null {
   if (lower.endsWith(".rb")) return "ruby";
   if (lower.endsWith(".php")) return "php";
   return null;
+}
+
+/**
+ * Extract byte ranges of every string-literal node in the file. Returns
+ * a sorted array of {start, end} byte offsets, or null when no
+ * tree-sitter grammar is available (caller should pass-through candidates
+ * in that case — fail open).
+ *
+ * Used by the scanner to drop regex matches that fall inside string
+ * literals — eg `verify_signature=False` inside a fix_template string
+ * in patterns/fastapi.ts. Comments are handled separately by the
+ * scanner's own hand-lexer (`computeCommentRanges`); this function
+ * deliberately skips comment nodes to avoid double work. v2.10.467.
+ */
+export async function getStringLiteralRanges(
+  file: string,
+  content: string,
+): Promise<{ start: number; end: number }[] | null> {
+  const lang = fileLanguage(file);
+  if (!lang) return null;
+  const tsLang = tsLangFor(lang, file);
+  if (!tsLang) return null;
+  const module = await loadModule();
+  if (!module) return null;
+  const grammar = await loadGrammar(module, tsLang);
+  if (!grammar) return null;
+  let parser: TreeSitterParser;
+  try {
+    parser = new module.Parser();
+    parser.setLanguage(grammar);
+  } catch {
+    return null;
+  }
+  let tree: { rootNode: TreeSitterNode };
+  try {
+    tree = parser.parse(content);
+  } catch {
+    return null;
+  }
+  const ranges: { start: number; end: number }[] = [];
+  // Iterative DFS — recursive tree walks blow the stack on minified bundles.
+  const stack: TreeSitterNode[] = [tree.rootNode];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node) continue;
+    if (isStringNodeType(node.type)) {
+      ranges.push({ start: node.startIndex, end: node.endIndex });
+      // Don't descend — children of a string are still inside it.
+      continue;
+    }
+    if (isCommentNodeType(node.type)) {
+      // Comments handled by scanner's own lexer; skip subtree.
+      continue;
+    }
+    for (let i = node.namedChildCount - 1; i >= 0; i--) {
+      const c = node.namedChild(i);
+      if (c) stack.push(c);
+    }
+  }
+  ranges.sort((a, b) => a.start - b.start);
+  return ranges;
+}
+
+/**
+ * Predicate: is a tree-sitter node type a string-literal?
+ *
+ * The exact node type varies by grammar (eg JS: "string", "template_string";
+ * Python: "string"; Go: "interpreted_string_literal" / "raw_string_literal";
+ * Rust: "string_literal" / "raw_string_literal"; C/C++: "string_literal" /
+ * "char_literal"). Generic predicate that covers all 11 supported grammars.
+ */
+function isStringNodeType(type: string): boolean {
+  return (
+    type === "string" ||
+    type === "template_string" ||
+    type.endsWith("_string_literal") ||
+    type.endsWith("_string") ||
+    type === "char_literal" ||
+    type === "character_literal"
+  );
+}
+
+function isCommentNodeType(type: string): boolean {
+  return (
+    type === "comment" ||
+    type === "line_comment" ||
+    type === "block_comment" ||
+    type.endsWith("_comment")
+  );
+}
+
+/**
+ * Constant-time lookup: does `offset` fall inside any of the sorted ranges?
+ * Returns false on empty/null ranges (fail open).
+ */
+export function offsetInRanges(
+  ranges: { start: number; end: number }[] | null,
+  offset: number,
+): boolean {
+  if (!ranges || ranges.length === 0) return false;
+  let lo = 0;
+  let hi = ranges.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >>> 1;
+    const r = ranges[mid];
+    if (!r) return false;
+    if (offset < r.start) hi = mid - 1;
+    else if (offset >= r.end) lo = mid + 1;
+    else return true;
+  }
+  return false;
 }
 
 /**

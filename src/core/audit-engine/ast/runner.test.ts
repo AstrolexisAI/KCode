@@ -10,7 +10,13 @@
 
 import { describe, expect, it } from "bun:test";
 import { PYTHON_AST_PATTERNS } from "./python-patterns";
-import { _resetAstRunnerForTest, runAstPatterns } from "./runner";
+import {
+  _resetAstRunnerForTest,
+  fileLanguage,
+  getStringLiteralRanges,
+  offsetInRanges,
+  runAstPatterns,
+} from "./runner";
 
 describe("runAstPatterns — graceful degradation", () => {
   it("returns empty candidates and structured stats with no patterns", async () => {
@@ -43,6 +49,67 @@ describe("runAstPatterns — graceful degradation", () => {
         expect((s.load_error ?? "").length).toBeGreaterThan(0);
       }
     }
+  });
+});
+
+describe("offsetInRanges — binary search", () => {
+  it("returns false for null / empty ranges", () => {
+    expect(offsetInRanges(null, 0)).toBe(false);
+    expect(offsetInRanges([], 100)).toBe(false);
+  });
+  it("detects inside / boundary / outside", () => {
+    const r = [
+      { start: 5, end: 10 },
+      { start: 20, end: 25 },
+      { start: 40, end: 50 },
+    ];
+    expect(offsetInRanges(r, 4)).toBe(false); // before first
+    expect(offsetInRanges(r, 5)).toBe(true); // at start (inclusive)
+    expect(offsetInRanges(r, 9)).toBe(true); // inside
+    expect(offsetInRanges(r, 10)).toBe(false); // at end (exclusive)
+    expect(offsetInRanges(r, 22)).toBe(true); // inside middle range
+    expect(offsetInRanges(r, 45)).toBe(true); // inside last range
+    expect(offsetInRanges(r, 100)).toBe(false); // after last
+  });
+});
+
+describe("fileLanguage — extension routing", () => {
+  it("maps common extensions", () => {
+    expect(fileLanguage("a.ts")).toBe("typescript");
+    expect(fileLanguage("a.tsx")).toBe("typescript");
+    expect(fileLanguage("a.js")).toBe("javascript");
+    expect(fileLanguage("a.py")).toBe("python");
+    expect(fileLanguage("a.go")).toBe("go");
+    expect(fileLanguage("a.rs")).toBe("rust");
+    expect(fileLanguage("a.unknown")).toBe(null);
+  });
+});
+
+describe("getStringLiteralRanges — string-literal awareness", () => {
+  // Skips gracefully when web-tree-sitter / grammar is unavailable
+  // (the fresh-checkout case the existing tests assert).
+  it("returns null for unsupported extension", async () => {
+    _resetAstRunnerForTest();
+    expect(await getStringLiteralRanges("/tmp/x.unknown", "anything")).toBe(null);
+  });
+  it("returns null OR a valid range array for TS — never throws", async () => {
+    _resetAstRunnerForTest();
+    // Snippet with a string literal that contains a regex-flagged
+    // anti-pattern. Filter must catch this if the grammar is loaded.
+    const ts = 'const helpText = "Never call eval(req.body.code) — use JSON.parse";';
+    const ranges = await getStringLiteralRanges("/tmp/x.ts", ts);
+    if (ranges === null) return; // grammar unavailable on this machine; that path is tested above
+    // The opening quote of the string literal is at offset 17 ("Never").
+    // The string ends right before the closing `;` at the end.
+    const stringStart = ts.indexOf('"');
+    const stringEnd = ts.lastIndexOf('"');
+    // The "eval(" mention sits inside the string literal — must be in a range.
+    const evalOffset = ts.indexOf("eval(");
+    expect(evalOffset).toBeGreaterThan(stringStart);
+    expect(evalOffset).toBeLessThan(stringEnd);
+    expect(offsetInRanges(ranges, evalOffset)).toBe(true);
+    // The const keyword at offset 0 sits OUTSIDE any string range.
+    expect(offsetInRanges(ranges, 0)).toBe(false);
   });
 });
 

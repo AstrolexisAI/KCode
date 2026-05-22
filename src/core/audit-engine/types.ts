@@ -212,6 +212,19 @@ export interface BugPattern {
    * Defaults to "security" when undefined.
    */
   category?: "security" | "quality";
+  /**
+   * Opt-in: pattern wants to match content INSIDE string literals and
+   * comments. Default behaviour (when undefined or false) is to drop
+   * matches whose offset falls inside a string-literal / comment node
+   * — that single filter eliminates the entire "scanner catches its
+   * own pattern definitions / log messages / fix-template prose" class
+   * of FPs. v2.10.467 (string-literal awareness).
+   *
+   * Set to `true` for patterns whose target IS string content — eg
+   * hardcoded-secret patterns that look for API keys embedded in
+   * source string literals, or i18n leaks that scan translation files.
+   */
+  matchesInsideStringsOK?: boolean;
 }
 
 /** Stable pack names for the F9 vendible-packs taxonomy. */

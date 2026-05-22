@@ -7,6 +7,7 @@
 import { execSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { extname, join, relative, resolve, sep } from "node:path";
+import { offsetInRanges as offsetInStringRange } from "./ast/runner";
 import { getAllPatterns } from "./patterns";
 import type { BugPattern, Candidate, Language } from "./types";
 
@@ -744,6 +745,7 @@ function applyPattern(
   path: string,
   content: string,
   bypassPathFilters = false,
+  stringRanges: { start: number; end: number }[] | null = null,
 ): Candidate[] {
   const lang = getLanguageForFile(path);
   if (!lang || !pattern.languages.includes(lang)) return [];
@@ -753,6 +755,12 @@ function applyPattern(
   // of false positives where the pattern regex matches example
   // code inside a `// ...` or `/* ... */` or `#` comment.
   const commentRanges = computeCommentRanges(content, lang);
+  // String-literal ranges are pre-computed by the caller (tree-sitter
+  // pass); used here to drop matches whose offset falls inside a
+  // string literal — the "scanner cazándose a sí mismo" FP class.
+  // Patterns that explicitly want to match string content opt in via
+  // matchesInsideStringsOK (eg hardcoded-secret patterns).
+  const stringFilterActive = stringRanges !== null && !pattern.matchesInsideStringsOK;
 
   // Ensure regex has global flag for iterative matching
   const rex = pattern.regex.global
@@ -764,6 +772,11 @@ function applyPattern(
   while ((m = rex.exec(content)) !== null) {
     // Drop matches that fall inside a comment for this language.
     if (isInsideComment(commentRanges, m.index)) {
+      if (m.index === rex.lastIndex) rex.lastIndex++;
+      continue;
+    }
+    // Drop matches inside string literals (tree-sitter pre-pass).
+    if (stringFilterActive && offsetInStringRange(stringRanges!, m.index)) {
       if (m.index === rex.lastIndex) rex.lastIndex++;
       continue;
     }
@@ -961,10 +974,15 @@ export async function scanProject(
       continue;
     }
 
+    // Pre-compute string-literal ranges once per file (tree-sitter
+    // pass; null when no grammar available — filter fails open).
+    // Comments are still handled by the hand-lexer inside applyPattern.
+    const { getStringLiteralRanges } = await import("./ast/runner");
+    const stringRanges = await getStringLiteralRanges(file, content);
     for (const pattern of patterns) {
       const lang = getLanguageForFile(file);
       if (!lang || !pattern.languages.includes(lang)) continue;
-      const matches = applyPattern(pattern, file, content);
+      const matches = applyPattern(pattern, file, content, false, stringRanges);
       candidates.push(...matches);
     }
     scanned++;
