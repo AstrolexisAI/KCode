@@ -519,6 +519,60 @@ describe("verifier — batched verification (v2.10.468)", () => {
     expect(results[1]?.verification.verdict).toBe("false_positive");
   });
 
+  test("verifyAllCandidates with concurrency>1 dispatches batches in parallel", async () => {
+    // Three files × 2 candidates each = 3 batches when batchSize>=2.
+    // With concurrency=2, the first two batches should start before
+    // either finishes — measured by checking inflight count at the
+    // callback site.
+    const files = ["/tmp/a.ts", "/tmp/b.ts", "/tmp/c.ts"];
+    const cands = files.flatMap((f, i) => [
+      { ...candA, file: f, line: i * 10 + 1 },
+      { ...candB, file: f, line: i * 10 + 2 },
+    ]);
+    let inflight = 0;
+    let maxInflight = 0;
+    const llmCallback = async () => {
+      inflight++;
+      if (inflight > maxInflight) maxInflight = inflight;
+      await new Promise((r) => setTimeout(r, 20));
+      inflight--;
+      return JSON.stringify([
+        { verdict: "false_positive", reasoning: "x", evidence: { sink: "y" } },
+        { verdict: "false_positive", reasoning: "x", evidence: { sink: "y" } },
+      ]);
+    };
+    const results = await verifyAllCandidates(cands, {
+      llmCallback,
+      batchSize: 2,
+      concurrency: 2,
+    });
+    expect(results.length).toBe(6);
+    // Two workers should both have been running at some point.
+    expect(maxInflight).toBeGreaterThanOrEqual(2);
+  });
+
+  test("verifyAllCandidates with concurrency=1 keeps strict sequential dispatch", async () => {
+    const files = ["/tmp/a.ts", "/tmp/b.ts"];
+    const cands = files.flatMap((f) => [
+      { ...candA, file: f },
+      { ...candB, file: f },
+    ]);
+    let inflight = 0;
+    let maxInflight = 0;
+    const llmCallback = async () => {
+      inflight++;
+      if (inflight > maxInflight) maxInflight = inflight;
+      await new Promise((r) => setTimeout(r, 5));
+      inflight--;
+      return JSON.stringify([
+        { verdict: "confirmed", reasoning: "x", evidence: { sink: "y" } },
+        { verdict: "confirmed", reasoning: "x", evidence: { sink: "y" } },
+      ]);
+    };
+    await verifyAllCandidates(cands, { llmCallback, batchSize: 2, concurrency: 1 });
+    expect(maxInflight).toBe(1);
+  });
+
   test("verifyAllCandidates preserves single-candidate behaviour with batchSize=1", async () => {
     let calls = 0;
     const llmCallback = async () => {

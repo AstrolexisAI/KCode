@@ -81,6 +81,16 @@ export interface VerifyOptions {
    * never lose a candidate. v2.10.468.
    */
   batchSize?: number;
+  /**
+   * Number of file-batches to dispatch in parallel. Defaults to
+   * `KCODE_VERIFIER_CONCURRENCY` env var, or 1 (sequential, current
+   * behaviour) when unset. Set to match the server's parallel-slot
+   * count (e.g. llama-server's -np N). Sequential cascade calls
+   * per confirmed candidate happen inside each worker, so increasing
+   * concurrency multiplies primary-verifier and cascade work alike.
+   * v2.10.470.
+   */
+  concurrency?: number;
 }
 
 /**
@@ -754,44 +764,87 @@ export async function verifyAllCandidates(
       return 1;
     })();
   if (batchSize > 1) {
-    const byFile = new Map<string, Candidate[]>();
-    for (const c of candidates) {
-      const arr = byFile.get(c.file) ?? [];
-      arr.push(c);
-      byFile.set(c.file, arr);
+    // Pre-compute batches with their original input indices so we can
+    // write results back into stable order even when workers complete
+    // out-of-order.
+    interface BatchWork {
+      candidates: Candidate[];
+      indices: number[];
     }
-    let done = 0;
-    for (const [, fileCands] of byFile) {
+    const indexByCandidate = new Map<Candidate, number>();
+    candidates.forEach((c, i) => indexByCandidate.set(c, i));
+    const fileBuckets = new Map<string, Candidate[]>();
+    for (const c of candidates) {
+      const arr = fileBuckets.get(c.file) ?? [];
+      arr.push(c);
+      fileBuckets.set(c.file, arr);
+    }
+    const batches: BatchWork[] = [];
+    for (const [, fileCands] of fileBuckets) {
       for (let i = 0; i < fileCands.length; i += batchSize) {
+        const slice = fileCands.slice(i, i + batchSize);
+        batches.push({
+          candidates: slice,
+          indices: slice.map((c) => indexByCandidate.get(c) ?? -1),
+        });
+      }
+    }
+    const slotResults: Array<{ candidate: Candidate; verification: Verification } | null> =
+      new Array(candidates.length).fill(null);
+    const concurrency = Math.max(
+      1,
+      opts.concurrency ??
+        (() => {
+          const raw = process.env.KCODE_VERIFIER_CONCURRENCY;
+          if (raw) {
+            const n = parseInt(raw, 10);
+            if (Number.isFinite(n) && n > 0) return n;
+          }
+          return 1;
+        })(),
+    );
+
+    let nextBatchIdx = 0;
+    let completed = 0;
+    let abortReason: Error | null = null;
+
+    async function worker(): Promise<void> {
+      while (true) {
+        if (abortReason) return;
         if (opts.signal?.aborted) {
           const { ScanCancelledError } = await import("./scan-state");
-          throw new ScanCancelledError(`Scan cancelled at candidate ${done}/${candidates.length}`);
+          abortReason = new ScanCancelledError(
+            `Scan cancelled at candidate ${completed}/${candidates.length}`,
+          );
+          return;
         }
-        const batch = fileCands.slice(i, i + batchSize);
-        opts.onProgress?.(done, candidates.length, batch[0]!);
+        const myIdx = nextBatchIdx++;
+        if (myIdx >= batches.length) return;
+        const work = batches[myIdx]!;
+        opts.onProgress?.(completed, candidates.length, work.candidates[0]!);
         let verifications: Verification[];
         try {
-          verifications = await verifyBatchForFile(batch, opts.llmCallback);
+          verifications = await verifyBatchForFile(work.candidates, opts.llmCallback);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          verifications = batch.map(() => ({
+          verifications = work.candidates.map(() => ({
             verdict: "needs_context" as const,
             reasoning: `Batch verification failed: ${msg}`,
           }));
         }
-        for (let j = 0; j < batch.length; j++) {
+        for (let j = 0; j < work.candidates.length; j++) {
+          const c = work.candidates[j]!;
           let v = verifications[j]!;
-          // Cascade is per-candidate, only on confirmed in on-confirmed mode.
           if (
             opts.fallbackCallback &&
             cascadeMode === "on-confirmed" &&
             v.verdict === "confirmed"
           ) {
             try {
-              const fb = await runWithCallback(batch[j]!, opts.fallbackCallback);
+              const fb = await runWithCallback(c, opts.fallbackCallback);
               v = combineVerdicts(v, fb);
             } catch {
-              /* fall through with primary verdict */
+              /* keep primary */
             }
           } else if (
             opts.fallbackCallback &&
@@ -799,19 +852,24 @@ export async function verifyAllCandidates(
             v.verdict === "needs_context"
           ) {
             try {
-              const fb = await runWithCallback(batch[j]!, opts.fallbackCallback);
+              const fb = await runWithCallback(c, opts.fallbackCallback);
               v = { ...fb, reasoning: `[☁ escalated] ${fb.reasoning}` };
             } catch {
               /* keep needs_context */
             }
           }
-          results.push({ candidate: batch[j]!, verification: v });
-          recordVerdict(batch[j]!.pattern_id, v.verdict, batch[j]!.file);
-          done++;
-          opts.onVerified?.(batch[j]!, v, done - 1, candidates.length);
+          slotResults[work.indices[j]!] = { candidate: c, verification: v };
+          recordVerdict(c.pattern_id, v.verdict, c.file);
+          completed++;
+          opts.onVerified?.(c, v, completed - 1, candidates.length);
         }
-        await new Promise((r) => setTimeout(r, 10));
       }
+    }
+
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+    if (abortReason) throw abortReason;
+    for (const r of slotResults) {
+      if (r) results.push(r);
     }
     return results;
   }
