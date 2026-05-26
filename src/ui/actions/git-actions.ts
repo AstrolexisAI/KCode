@@ -1,5 +1,11 @@
 // Git actions
 // Auto-extracted from builtin-actions.ts
+//
+// SECURITY (Bruno 2026-05-26): all shell-mode `execSync` calls replaced with
+// `execFileSync("git", [...argv])` to eliminate command-injection surface.
+// Pipes (`| wc -l`, `| head -N`, etc.) and shell redirects (`2>/dev/null`)
+// are reproduced in JavaScript — no shell ever sees user-controlled tokens.
+// Self-audit pattern: js-007-command-injection — 13 instances patched.
 
 import type { ActionContext } from "./action-helpers.js";
 
@@ -12,31 +18,53 @@ function formatGitError(err: unknown): string {
   return `  Git error: ${String(err)}`;
 }
 
+/**
+ * Run `git` with argv array (NO shell). Returns trimmed stdout.
+ * On non-zero exit, throws — caller handles via formatGitError.
+ *
+ * Reproducing former shell features:
+ * - `2>/dev/null` / `2>&1` are replicated via stdio config + ignoring stderr
+ * - `| head -N`, `| wc -l`, `| sort | uniq -c` are reproduced in JS by callers
+ */
+async function git(
+  args: string[],
+  cwd: string,
+  timeout = 5000,
+  swallowStderr = true,
+): Promise<string> {
+  const { execFileSync } = await import("node:child_process");
+  return execFileSync("git", args, {
+    cwd,
+    timeout,
+    stdio: swallowStderr ? ["pipe", "pipe", "ignore"] : ["pipe", "pipe", "pipe"],
+  })
+    .toString()
+    .trim();
+}
+
+/** Variant that returns "" on failure (mimics ` || true` patterns). */
+async function gitTry(args: string[], cwd: string, timeout = 5000): Promise<string> {
+  try {
+    return await git(args, cwd, timeout, true);
+  } catch {
+    return "";
+  }
+}
+
 export async function handleGitAction(action: string, ctx: ActionContext): Promise<string | null> {
-  const { conversationManager, setCompleted, appConfig, args, switchTheme } = ctx;
+  const { appConfig, args } = ctx;
+  const cwd = appConfig.workingDirectory;
 
   switch (action) {
     case "blame": {
       if (!args?.trim()) return "  Usage: /blame <file path>";
 
-      const { execFileSync } = await import("node:child_process");
       const { resolve: resolvePath, relative } = await import("node:path");
-      const cwd = appConfig.workingDirectory;
       const filePath = resolvePath(cwd, args.trim());
       const relPath = relative(cwd, filePath);
 
       try {
-        // Use execFileSync with array args to prevent shell injection.
-        // The old execSync template literal was CWE-78 — relPath comes
-        // from user input and $() or backticks inside double quotes
-        // still execute in shell mode.
-        const shortOutput = execFileSync("git", ["blame", "--date=short", relPath], {
-          cwd,
-          timeout: 10000,
-          stdio: ["pipe", "pipe", "pipe"],
-        })
-          .toString()
-          .trim();
+        const shortOutput = await git(["blame", "--date=short", relPath], cwd, 10000);
         const rawLines = shortOutput.split("\n");
 
         const lines = [`  Git Blame: ${relPath} (${rawLines.length} lines)\n`];
@@ -58,19 +86,25 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
       }
     }
     case "tags": {
-      const { execSync } = await import("node:child_process");
-      const cwd = appConfig.workingDirectory;
       const arg = args?.trim() ?? "list";
 
       try {
         if (arg === "list" || !arg) {
-          const output = execSync(
-            `git tag -l --sort=-creatordate --format='%(creatordate:short) %(refname:short) %(subject)' 2>/dev/null | head -20`,
-            { cwd, timeout: 5000 },
-          )
-            .toString()
-            .trim();
-          if (!output) return "  No tags found.";
+          // Was: `git tag -l --sort=... --format=... 2>/dev/null | head -20`
+          const allOutput = await git(
+            [
+              "tag",
+              "-l",
+              "--sort=-creatordate",
+              "--format=%(creatordate:short) %(refname:short) %(subject)",
+            ],
+            cwd,
+            5000,
+          );
+          if (!allOutput) return "  No tags found.";
+
+          const allTagLines = allOutput.split("\n");
+          const output = allTagLines.slice(0, 20).join("\n");
 
           const lines = [`  Git Tags\n`];
           for (const line of output.split("\n")) {
@@ -82,11 +116,11 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
             }
           }
 
-          // Count total
-          const total = execSync(`git tag -l 2>/dev/null | wc -l`, { cwd, timeout: 3000 })
-            .toString()
-            .trim();
-          lines.push(`\n  ${total} tag(s) total`);
+          // Count total — was `git tag -l | wc -l`
+          const totalCount = (await gitTry(["tag", "-l"], cwd, 3000))
+            .split("\n")
+            .filter((l) => l.trim().length > 0).length;
+          lines.push(`\n  ${totalCount} tag(s) total`);
           return lines.join("\n");
         }
 
@@ -102,12 +136,10 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
           }
 
           if (message) {
-            execSync(
-              `git tag -a '${tagName.replace(/'/g, "")}' -m '${message.replace(/'/g, "'\\''")}'`,
-              { cwd, timeout: 5000 },
-            );
+            // Message can contain anything safely now — no shell interpolation.
+            await git(["tag", "-a", tagName, "-m", message], cwd, 5000);
           } else {
-            execSync(`git tag '${tagName.replace(/'/g, "")}'`, { cwd, timeout: 5000 });
+            await git(["tag", tagName], cwd, 5000);
           }
           return `  Created tag: ${tagName}${message ? ` ("${message}")` : ""}`;
         }
@@ -118,9 +150,7 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
           if (!/^[a-zA-Z0-9._-]+\.\.[a-zA-Z0-9._-]+$/.test(range)) {
             return "  Usage: /tags log <tag1>..<tag2>";
           }
-          const output = execSync(`git log --oneline '${range}' 2>&1`, { cwd, timeout: 10000 })
-            .toString()
-            .trim();
+          const output = await git(["log", "--oneline", range], cwd, 10000, false);
           if (!output) return `  No commits between ${range}`;
           const logLines = output.split("\n");
           const lines = [`  Changelog: ${range} (${logLines.length} commits)\n`];
@@ -139,28 +169,26 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
     case "file_history": {
       if (!args?.trim()) return "  Usage: /file-history <file path>";
 
-      const { execSync } = await import("node:child_process");
       const { resolve: resolvePath, relative } = await import("node:path");
-      const cwd = appConfig.workingDirectory;
       const filePath = resolvePath(cwd, args.trim());
       const relPath = relative(cwd, filePath);
 
       try {
-        const output = execSync(
-          `git log --oneline --follow --stat -- '${relPath.replace(/'/g, "'\\''")}'  2>&1 | head -60`,
-          { cwd, timeout: 10000 },
-        )
-          .toString()
-          .trim();
-        if (!output) return `  No git history for: ${args.trim()}`;
+        // Was: `git log --oneline --follow --stat -- '<relPath>' 2>&1 | head -60`
+        const fullOutput = await git(
+          ["log", "--oneline", "--follow", "--stat", "--", relPath],
+          cwd,
+          10000,
+          false,
+        );
+        if (!fullOutput) return `  No git history for: ${args.trim()}`;
 
-        // Count total commits for the file
-        const countOutput = execSync(
-          `git log --oneline --follow -- '${relPath.replace(/'/g, "'\\''")}'  2>/dev/null | wc -l`,
-          { cwd, timeout: 5000 },
-        )
-          .toString()
-          .trim();
+        const allLines = fullOutput.split("\n");
+        const output = allLines.slice(0, 60).join("\n");
+
+        // Count total commits for the file — was `... | wc -l`
+        const countText = await gitTry(["log", "--oneline", "--follow", "--", relPath], cwd, 5000);
+        const countOutput = String(countText.split("\n").filter((l) => l.trim().length > 0).length);
 
         const lines = [`  File History: ${relPath} (${countOutput} commits)\n`];
         for (const line of output.split("\n")) {
@@ -175,8 +203,6 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
     case "diff_branch": {
       if (!args?.trim()) return "  Usage: /diff-branch <target branch>";
 
-      const { execSync } = await import("node:child_process");
-      const cwd = appConfig.workingDirectory;
       const target = args.trim();
 
       // Validate branch name
@@ -184,59 +210,30 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
 
       try {
         // Get current branch
-        const current =
-          execSync(`git branch --show-current 2>/dev/null`, { cwd, timeout: 3000 })
-            .toString()
-            .trim() || "HEAD";
+        const current = (await gitTry(["branch", "--show-current"], cwd, 3000)) || "HEAD";
 
         // Check target exists
         try {
-          execSync(`git rev-parse --verify '${target.replace(/'/g, "'\\''")}' 2>/dev/null`, {
-            cwd,
-            timeout: 3000,
-          });
+          await git(["rev-parse", "--verify", target], cwd, 3000);
         } catch {
           return `  Branch not found: ${target}`;
         }
 
         // Merge base
-        const mergeBase = execSync(
-          `git merge-base '${current.replace(/'/g, "'\\''")}' '${target.replace(/'/g, "'\\''")}' 2>/dev/null`,
-          { cwd, timeout: 5000 },
-        )
-          .toString()
-          .trim()
-          .slice(0, 8);
+        const mergeBase = (await gitTry(["merge-base", current, target], cwd, 5000)).slice(0, 8);
 
         // Commit counts
-        const ahead = execSync(
-          `git rev-list --count '${target.replace(/'/g, "'\\''")}'..'${current.replace(/'/g, "'\\''")}' 2>/dev/null`,
-          { cwd, timeout: 5000 },
-        )
-          .toString()
-          .trim();
-        const behind = execSync(
-          `git rev-list --count '${current.replace(/'/g, "'\\''")}'..'${target.replace(/'/g, "'\\''")}' 2>/dev/null`,
-          { cwd, timeout: 5000 },
-        )
-          .toString()
-          .trim();
+        const ahead = await gitTry(["rev-list", "--count", `${target}..${current}`], cwd, 5000);
+        const behind = await gitTry(["rev-list", "--count", `${current}..${target}`], cwd, 5000);
 
-        // Diff stat
-        const diffStat = execSync(
-          `git diff --stat '${target.replace(/'/g, "'\\''")}' 2>/dev/null | tail -1`,
-          { cwd, timeout: 10000 },
-        )
-          .toString()
-          .trim();
+        // Diff stat — was `git diff --stat '<target>' 2>/dev/null | tail -1`
+        const diffStatFull = await gitTry(["diff", "--stat", target], cwd, 10000);
+        const diffStatLines = diffStatFull.split("\n").filter((l) => l.length > 0);
+        const diffStat = diffStatLines.length > 0 ? diffStatLines[diffStatLines.length - 1] : "";
 
-        // Changed files list
-        const changedFiles = execSync(
-          `git diff --name-status '${target.replace(/'/g, "'\\''")}' 2>/dev/null | head -20`,
-          { cwd, timeout: 10000 },
-        )
-          .toString()
-          .trim();
+        // Changed files list — was `... | head -20`
+        const changedFilesFull = await gitTry(["diff", "--name-status", target], cwd, 10000);
+        const changedFiles = changedFilesFull.split("\n").slice(0, 20).join("\n").trim();
 
         const lines = [
           `  Branch Comparison\n`,
@@ -265,14 +262,10 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
                     : (status ?? "");
             lines.push(`    ${statusLabel.padEnd(9)} ${file}`);
           }
-          const totalChanged = execSync(
-            `git diff --name-only '${target.replace(/'/g, "'\\''")}' 2>/dev/null | wc -l`,
-            { cwd, timeout: 5000 },
-          )
-            .toString()
-            .trim();
-          if (parseInt(totalChanged) > 20)
-            lines.push(`\n    ... ${parseInt(totalChanged) - 20} more files`);
+          // Was `git diff --name-only '<target>' | wc -l`
+          const totalChangedRaw = await gitTry(["diff", "--name-only", target], cwd, 5000);
+          const totalChanged = totalChangedRaw.split("\n").filter((l) => l.trim().length > 0).length;
+          if (totalChanged > 20) lines.push(`\n    ... ${totalChanged - 20} more files`);
         }
 
         return lines.join("\n");
@@ -281,11 +274,8 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
       }
     }
     case "diff_stats": {
-      const { execSync } = await import("node:child_process");
-      const cwd = appConfig.workingDirectory;
-
       try {
-        execSync(`git rev-parse --is-inside-work-tree 2>/dev/null`, { cwd, timeout: 3000 });
+        await git(["rev-parse", "--is-inside-work-tree"], cwd, 3000);
       } catch {
         return "  Not a git repository.";
       }
@@ -294,96 +284,87 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
 
       try {
         // Total commits
-        const totalCommits = execSync(`git rev-list --count HEAD 2>/dev/null`, {
-          cwd,
-          timeout: 5000,
-        })
-          .toString()
-          .trim();
+        const totalCommits = await gitTry(["rev-list", "--count", "HEAD"], cwd, 5000);
         lines.push(`  Total commits:  ${parseInt(totalCommits).toLocaleString()}`);
 
-        // Contributors
-        const contributors = execSync(`git shortlog -sn --no-merges HEAD 2>/dev/null | wc -l`, {
-          cwd,
-          timeout: 5000,
-        })
-          .toString()
-          .trim();
+        // Contributors — was `git shortlog -sn --no-merges HEAD | wc -l`
+        const shortlogRaw = await gitTry(["shortlog", "-sn", "--no-merges", "HEAD"], cwd, 5000);
+        const contributors = shortlogRaw.split("\n").filter((l) => l.trim().length > 0).length;
         lines.push(`  Contributors:   ${contributors}`);
 
-        // First and last commit dates
-        const firstCommit = execSync(`git rev-list --max-parents=0 HEAD 2>/dev/null | head -1`, {
-          cwd,
-          timeout: 5000,
-        })
-          .toString()
-          .trim();
+        // First and last commit dates — was `... | head -1`
+        const firstCommitRaw = await gitTry(["rev-list", "--max-parents=0", "HEAD"], cwd, 5000);
+        const firstCommit = firstCommitRaw.split("\n")[0]?.trim() ?? "";
         const firstDate = firstCommit
-          ? execSync(`git log -1 --format='%ai' '${firstCommit}' 2>/dev/null`, {
-              cwd,
-              timeout: 3000,
-            })
-              .toString()
-              .trim()
+          ? await gitTry(["log", "-1", "--format=%ai", firstCommit], cwd, 3000)
           : "";
-        const lastDate = execSync(`git log -1 --format='%ai' 2>/dev/null`, { cwd, timeout: 5000 })
-          .toString()
-          .trim();
+        const lastDate = await gitTry(["log", "-1", "--format=%ai"], cwd, 5000);
         if (firstDate) lines.push(`  First commit:   ${firstDate.slice(0, 10)}`);
         if (lastDate) lines.push(`  Last commit:    ${lastDate.slice(0, 10)}`);
 
         // Commits in last 7 days
-        const weekCommits = execSync(`git rev-list --count --since='7 days ago' HEAD 2>/dev/null`, {
+        const weekCommits = await gitTry(
+          ["rev-list", "--count", "--since=7 days ago", "HEAD"],
           cwd,
-          timeout: 5000,
-        })
-          .toString()
-          .trim();
+          5000,
+        );
         lines.push(`  Last 7 days:    ${weekCommits} commits`);
 
         // Commits in last 30 days
-        const monthCommits = execSync(
-          `git rev-list --count --since='30 days ago' HEAD 2>/dev/null`,
-          { cwd, timeout: 5000 },
-        )
-          .toString()
-          .trim();
+        const monthCommits = await gitTry(
+          ["rev-list", "--count", "--since=30 days ago", "HEAD"],
+          cwd,
+          5000,
+        );
         lines.push(`  Last 30 days:   ${monthCommits} commits`);
 
         lines.push(``);
 
-        // Most changed files (top 10)
-        const hotFiles = execSync(
-          `git log --pretty=format: --name-only 2>/dev/null | sort | uniq -c | sort -rn | head -10`,
-          { cwd, timeout: 10000 },
-        )
-          .toString()
-          .trim();
-        if (hotFiles) {
-          lines.push(`  Most Changed Files:`);
-          for (const line of hotFiles.split("\n")) {
-            const m = line.trim().match(/^(\d+)\s+(.+)$/);
-            if (m && m[2]) lines.push(`    ${m[1]!.padStart(5)}  ${m[2]}`);
+        // Most changed files (top 10) — was `... | sort | uniq -c | sort -rn | head -10`
+        const hotFilesRaw = await gitTry(
+          ["log", "--pretty=format:", "--name-only"],
+          cwd,
+          10000,
+        );
+        if (hotFilesRaw) {
+          const counts = new Map<string, number>();
+          for (const file of hotFilesRaw.split("\n")) {
+            const trimmed = file.trim();
+            if (!trimmed) continue;
+            counts.set(trimmed, (counts.get(trimmed) ?? 0) + 1);
+          }
+          const sorted = Array.from(counts.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10);
+          if (sorted.length > 0) {
+            lines.push(`  Most Changed Files:`);
+            for (const [file, count] of sorted) {
+              lines.push(`    ${String(count).padStart(5)}  ${file}`);
+            }
           }
         }
 
         lines.push(``);
 
-        // Recent activity (commits per day, last 7 days)
-        const dayActivity = execSync(
-          `git log --format='%ad' --date=short --since='7 days ago' 2>/dev/null | sort | uniq -c | sort -rn`,
-          { cwd, timeout: 5000 },
-        )
-          .toString()
-          .trim();
-        if (dayActivity) {
-          lines.push(`  Daily Activity (last 7 days):`);
-          for (const line of dayActivity.split("\n")) {
-            const m = line.trim().match(/^(\d+)\s+(.+)$/);
-            if (m) {
-              const count = parseInt(m[1]!);
-              const bar = "\u2588".repeat(Math.min(count, 30));
-              lines.push(`    ${m[2]}  ${bar} ${count}`);
+        // Daily activity — was `git log --format=%ad --date=short --since='7 days ago' | sort | uniq -c | sort -rn`
+        const dayActivityRaw = await gitTry(
+          ["log", "--format=%ad", "--date=short", "--since=7 days ago"],
+          cwd,
+          5000,
+        );
+        if (dayActivityRaw) {
+          const dayCounts = new Map<string, number>();
+          for (const day of dayActivityRaw.split("\n")) {
+            const trimmed = day.trim();
+            if (!trimmed) continue;
+            dayCounts.set(trimmed, (dayCounts.get(trimmed) ?? 0) + 1);
+          }
+          const sortedDays = Array.from(dayCounts.entries()).sort((a, b) => b[1] - a[1]);
+          if (sortedDays.length > 0) {
+            lines.push(`  Daily Activity (last 7 days):`);
+            for (const [day, count] of sortedDays) {
+              const bar = "█".repeat(Math.min(count, 30));
+              lines.push(`    ${day}  ${bar} ${count}`);
             }
           }
         }
@@ -394,17 +375,14 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
       return lines.join("\n");
     }
     case "git_graph": {
-      const { execSync } = await import("node:child_process");
-      const cwd = appConfig.workingDirectory;
       const count = Math.min(Math.max(parseInt(args?.trim() || "20") || 20, 5), 50);
 
       try {
-        const output = execSync(
-          `git log --graph --oneline --decorate --all -n ${count} 2>/dev/null`,
-          { cwd, timeout: 10000 },
-        )
-          .toString()
-          .trim();
+        const output = await gitTry(
+          ["log", "--graph", "--oneline", "--decorate", "--all", "-n", String(count)],
+          cwd,
+          10000,
+        );
 
         if (!output) return "  No git history found.";
 
@@ -413,17 +391,11 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
           lines.push(`  ${line}`);
         }
 
-        // Branch summary
+        // Branch summary — was `git branch -a | wc -l`
         try {
-          const branches = execSync(`git branch -a 2>/dev/null | wc -l`, { cwd, timeout: 3000 })
-            .toString()
-            .trim();
-          const currentBranch = execSync(`git branch --show-current 2>/dev/null`, {
-            cwd,
-            timeout: 3000,
-          })
-            .toString()
-            .trim();
+          const branchesRaw = await gitTry(["branch", "-a"], cwd, 3000);
+          const branches = branchesRaw.split("\n").filter((l) => l.trim().length > 0).length;
+          const currentBranch = await gitTry(["branch", "--show-current"], cwd, 3000);
           lines.push(`\n  Current: ${currentBranch || "detached HEAD"}  |  Branches: ${branches}`);
         } catch {
           /* skip */
@@ -435,15 +407,11 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
       }
     }
     case "mirrors": {
-      const { execSync } = await import("node:child_process");
-      const cwd = appConfig.workingDirectory;
       const arg = args?.trim() ?? "list";
 
       try {
         if (arg === "list" || !arg) {
-          const output = execSync(`git remote -v 2>/dev/null`, { cwd, timeout: 5000 })
-            .toString()
-            .trim();
+          const output = await gitTry(["remote", "-v"], cwd, 5000);
           if (!output) return "  No remotes configured.";
 
           const lines = [`  Git Remotes\n`];
@@ -460,21 +428,34 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
             }
           }
 
+          const { statSync } = await import("node:fs");
+          const { resolve: resolvePath } = await import("node:path");
+
           for (const [name, urls] of remotes) {
             lines.push(`  ${name}`);
             if (urls.fetch) lines.push(`    fetch: ${urls.fetch}`);
             if (urls.push && urls.push !== urls.fetch) lines.push(`    push:  ${urls.push}`);
 
-            // Last fetch time
+            // Last fetch time — was a shell `stat` invocation. Use Node fs directly,
+            // bounded to the .git directory of the workspace so no untrusted path
+            // can ever be passed through.
             try {
-              const fetchHead = execSync(
-                `stat -c '%Y' '.git/refs/remotes/${name.replace(/'/g, "'\\''")}' 2>/dev/null || stat -c '%Y' .git/FETCH_HEAD 2>/dev/null`,
-                { cwd, timeout: 3000 },
-              )
-                .toString()
-                .trim();
-              if (fetchHead) {
-                const ago = Math.round(Date.now() / 1000 - parseInt(fetchHead));
+              const candidates = [
+                resolvePath(cwd, ".git", "refs", "remotes", name),
+                resolvePath(cwd, ".git", "FETCH_HEAD"),
+              ];
+              let mtimeSec: number | null = null;
+              for (const c of candidates) {
+                try {
+                  const st = statSync(c);
+                  mtimeSec = Math.floor(st.mtimeMs / 1000);
+                  break;
+                } catch {
+                  /* try next */
+                }
+              }
+              if (mtimeSec) {
+                const ago = Math.round(Date.now() / 1000 - mtimeSec);
                 const agoStr =
                   ago < 60
                     ? `${ago}s ago`
@@ -500,17 +481,17 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
           const name = addParts[0]!;
           const url = addParts[1]!;
           if (!/^[a-zA-Z0-9_-]+$/.test(name)) return "  Invalid remote name.";
-          execSync(`git remote add '${name}' '${url.replace(/'/g, "'\\''")}' 2>&1`, {
-            cwd,
-            timeout: 5000,
-          });
+          // Validate URL is a plausible git URL — block control characters and
+          // anything that would have only been weaponized by shell expansion.
+          if (!/^[a-zA-Z0-9_\-./:@+~]+$/.test(url)) return "  Invalid remote URL characters.";
+          await git(["remote", "add", name, url], cwd, 5000, false);
           return `  Added remote: ${name} → ${url}`;
         }
 
         if (arg.startsWith("remove ")) {
           const name = arg.slice(7).trim();
           if (!/^[a-zA-Z0-9_-]+$/.test(name)) return "  Invalid remote name.";
-          execSync(`git remote remove '${name}' 2>&1`, { cwd, timeout: 5000 });
+          await git(["remote", "remove", name], cwd, 5000, false);
           return `  Removed remote: ${name}`;
         }
 
@@ -520,9 +501,7 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
       }
     }
     case "stashes": {
-      const { execSync } = await import("node:child_process");
       const arg = args?.trim() ?? "list";
-      const cwd = appConfig.workingDirectory;
 
       // Validate stash index to prevent command injection
       const validateIndex = (s: string): string | null => {
@@ -533,9 +512,7 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
 
       try {
         if (arg === "list" || !arg) {
-          const output = execSync("git stash list 2>/dev/null", { cwd, timeout: 5000 })
-            .toString()
-            .trim();
+          const output = await gitTry(["stash", "list"], cwd, 5000);
           if (!output) return "  No stashes found.";
 
           const lines = ["  Git Stashes:\n"];
@@ -546,12 +523,11 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
               lines.push(`  [${match[2]}] ${match[3]}`);
               // Get stat for this stash
               try {
-                const stat = execSync(`git stash show stash@{${match[2]}} --stat 2>/dev/null`, {
+                const stat = await gitTry(
+                  ["stash", "show", `stash@{${match[2]}}`, "--stat"],
                   cwd,
-                  timeout: 3000,
-                })
-                  .toString()
-                  .trim();
+                  3000,
+                );
                 const lastLine = stat.split("\n").pop() ?? "";
                 lines.push(`      ${lastLine}`);
               } catch {
@@ -567,9 +543,7 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
         if (arg.startsWith("show ")) {
           const n = validateIndex(arg.slice(5));
           if (n === null) return "  Usage: /stashes show <number>";
-          const diff = execSync(`git stash show -p stash@{${n}} 2>&1`, { cwd, timeout: 5000 })
-            .toString()
-            .trim();
+          const diff = await git(["stash", "show", "-p", `stash@{${n}}`], cwd, 5000, false);
           if (!diff) return `  Stash @{${n}} is empty or not found.`;
           // Truncate long diffs
           const lines = diff.split("\n");
@@ -578,25 +552,21 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
         }
 
         if (arg === "pop") {
-          const output = execSync("git stash pop 2>&1", { cwd, timeout: 10000 }).toString().trim();
+          const output = await git(["stash", "pop"], cwd, 10000, false);
           return `  ${output}`;
         }
 
         if (arg.startsWith("apply ")) {
           const n = validateIndex(arg.slice(6));
           if (n === null) return "  Usage: /stashes apply <number>";
-          const output = execSync(`git stash apply stash@{${n}} 2>&1`, { cwd, timeout: 10000 })
-            .toString()
-            .trim();
+          const output = await git(["stash", "apply", `stash@{${n}}`], cwd, 10000, false);
           return `  ${output}`;
         }
 
         if (arg.startsWith("drop ")) {
           const n = validateIndex(arg.slice(5));
           if (n === null) return "  Usage: /stashes drop <number>";
-          const output = execSync(`git stash drop stash@{${n}} 2>&1`, { cwd, timeout: 5000 })
-            .toString()
-            .trim();
+          const output = await git(["stash", "drop", `stash@{${n}}`], cwd, 5000, false);
           return `  ${output}`;
         }
 
@@ -606,14 +576,8 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
       }
     }
     case "contributors": {
-      const { execSync } = await import("node:child_process");
-      const cwd = appConfig.workingDirectory;
-
       try {
-        // Get contributor stats using git shortlog
-        const shortlog = execSync(`git shortlog -sne HEAD 2>/dev/null`, { cwd, timeout: 10000 })
-          .toString()
-          .trim();
+        const shortlog = await gitTry(["shortlog", "-sne", "HEAD"], cwd, 10000);
         if (!shortlog) return "  No git history found.";
 
         const contributors = shortlog
@@ -635,7 +599,7 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
 
         for (const c of contributors.slice(0, 20)) {
           const filled = Math.max(1, Math.round((c.commits / maxCommits) * barWidth));
-          const bar = "\u2588".repeat(filled) + "\u2591".repeat(barWidth - filled);
+          const bar = "█".repeat(filled) + "░".repeat(barWidth - filled);
           lines.push(
             `  ${c.name.padEnd(maxNameLen)}  ${bar} ${c.commits.toString().padStart(5)} commits`,
           );
@@ -661,8 +625,7 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
         statSync: statSyncFn,
         appendFileSync,
       } = await import("node:fs");
-      const { resolve: resolvePath, relative } = await import("node:path");
-      const cwd = appConfig.workingDirectory;
+      const { resolve: resolvePath } = await import("node:path");
       const gitignorePath = resolvePath(cwd, ".gitignore");
       const input = args?.trim() || "";
 
