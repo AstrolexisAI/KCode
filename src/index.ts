@@ -77,10 +77,12 @@ import {
   registerAuditCommand,
   registerAuthCommand,
   registerBenchmarkCommands,
+  registerBundleCommand,
   registerCloudCommand,
   registerCompletionsCommand,
   registerDaemonCommand,
   registerDashboardCommand,
+  registerDiscloseCommand,
   registerDistillCommand,
   registerDoctorCommand,
   registerGrammarsCommand,
@@ -96,6 +98,7 @@ import {
   registerProCommands,
   registerRagCommand,
   registerRemoteCommand,
+  registerReproduceCommand,
   registerResumeCommand,
   registerSbomCommand,
   registerSearchCommand,
@@ -108,6 +111,7 @@ import {
   registerTemplateCommand,
   registerTriggersCommand,
   registerUpdateCommand,
+  registerValidateCommand,
   registerWatchCommand,
   registerWebCommand,
 } from "./cli/commands";
@@ -508,6 +512,14 @@ registerSessionsCommand(program);
 registerDashboardCommand(program);
 registerTemplateCommand(program);
 registerWebCommand(program);
+
+// Inquisitor bridge — CVE-grade evidence (reproducer, validation,
+// signed bundle, intake submission). KCode handles discovery + fix;
+// these final-mile steps live behind the Inquisitor service.
+registerReproduceCommand(program);
+registerValidateCommand(program);
+registerBundleCommand(program);
+registerDiscloseCommand(program);
 
 // Note: model auto-discovery now lives in src/ui/App.tsx (fires at
 // TUI mount with a throttle) instead of here, so non-TUI CLI
