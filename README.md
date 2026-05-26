@@ -469,6 +469,48 @@ Use `/plugins` to list installed plugins.
 
 ---
 
+## From candidates to CVE-grade evidence (Inquisitor)
+
+KCode ships the full audit-and-fix pipeline as open source — discovery,
+LLM verification, agentic re-verification, and agentic fix generation.
+For most users that's enough: open a PR with a verified patch, done.
+
+A small number of users need to go further: standalone reproducers,
+binary scans that actually validate the finding, signed disclosure
+bundles ready for a GitHub Security Advisory or a Bugcrowd submission.
+That last mile is handled by [Inquisitor][inq], our paid sister
+service. Inquisitor's daemon does the work behind a service boundary;
+KCode talks to it over HTTP.
+
+[inq]: https://astrolexis.space/inquisitor
+
+| Command            | Open / Paid | Action                                          |
+| ------------------ | :---------: | ----------------------------------------------- |
+| `kcode audit`      |    Open     | Discovery + LLM verifier → confirmed findings   |
+| `kcode --print …`  |    Open     | Agentic re-verify and fix generation            |
+| `kcode reproduce`  |   **Inq.**  | Standalone compilable reproducer (Mender)       |
+| `kcode validate`   |   **Inq.**  | Adversarial-input binary scan (VulnHunter)      |
+| `kcode bundle`     |   **Inq.**  | Signed disclosure bundle (GHSA / Bugcrowd / …)  |
+| `kcode disclose`   |   **Inq.**  | Submit bundle to intake channel                 |
+
+Free tier covers small-volume use (5 sessions / month). Paid tiers
+(Starter / Pro / Team / Enterprise) unlock concurrency, external
+intake submission, and signed bundles without watermark. Pricing,
+signup, and self-service tokens: <https://astrolexis.space/inquisitor>.
+
+Configuration:
+
+| Env var                    | Default                                              |
+| -------------------------- | ---------------------------------------------------- |
+| `INQUISITOR_URL`           | `https://api.astrolexis.space/inquisitor/v1`         |
+| `INQUISITOR_TOKEN_FILE`    | `~/.inquisitor/token`                                |
+| `INQUISITOR_TOKEN`         | (overrides the token file if set)                    |
+
+Self-hosted Inquisitor (Enterprise tier): point `INQUISITOR_URL` at
+your own deployment. KCode is endpoint-agnostic.
+
+---
+
 ## Keyboard Shortcuts (TUI)
 
 | Key | Action |
