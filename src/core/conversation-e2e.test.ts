@@ -346,3 +346,56 @@ describe("Conversation E2E: multi-turn history", () => {
     expect(cm.getSessionId()).toBe(sessionId);
   });
 });
+
+// ─── Self-Critique Provider Injection ───────────────────────────
+// Regression: since v2.10.260 the post-turn self-critique falls back to the
+// primary model, but the forked agent did not receive config.customFetch, so
+// in-process test envs (and any embedder injecting fetch) hung on a dead
+// socket every turn. These tests pin the wiring.
+
+describe("Conversation E2E: self-critique provider injection", () => {
+  let env: TestEnv;
+
+  afterEach(async () => {
+    await env.cleanup();
+  });
+
+  test("self-critique request reaches the injected provider and the loop completes", async () => {
+    env = await createTestEnv({ inProcess: true, selfCritique: true });
+
+    // Response 1: the main turn. Response 2: consumed by the critique pass.
+    env.provider.addResponse(
+      "The refactor is done and every one of the tests passes without any failures.",
+    );
+    env.provider.addResponse('{"contradictions":[],"verdict":"ok"}');
+
+    const cm = new ConversationManager(env.config, env.registry);
+    const start = Date.now();
+    const { events } = await sendAndCollect(cm, "Refactor the module");
+    const elapsed = Date.now() - start;
+
+    // The loop must complete promptly — a hang here means the critique call
+    // went out over real fetch instead of the injected provider.
+    expect(elapsed).toBeLessThan(3000);
+    expect(eventsOfType(events, "turn_end").length).toBeGreaterThanOrEqual(1);
+
+    // The critique request must have hit the fake provider.
+    const reqs = env.provider.requests.filter((r) => r.url === "/v1/chat/completions");
+    expect(reqs.length).toBe(2);
+    const critiqueBody = reqs[1]!.body as { messages: Array<{ role: string; content: string }> };
+    expect(critiqueBody.messages[0]!.content).toContain("grounding auditor");
+  });
+
+  test("default test env keeps self-critique disabled (single provider request)", async () => {
+    env = await createTestEnv({ inProcess: true });
+    env.provider.addResponse(
+      "A default-env response long enough to trigger critique if it were enabled.",
+    );
+
+    const cm = new ConversationManager(env.config, env.registry);
+    await sendAndCollect(cm, "Hello there");
+
+    const reqs = env.provider.requests.filter((r) => r.url === "/v1/chat/completions");
+    expect(reqs.length).toBe(1);
+  });
+});

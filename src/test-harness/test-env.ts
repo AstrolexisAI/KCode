@@ -47,6 +47,13 @@ export interface TestEnvOptions {
   initGit?: boolean;
   /** Force in-process transport (no HTTP server). Default: false (use HTTP). */
   inProcess?: boolean;
+  /**
+   * Let the post-turn self-critique pass call the provider (default: false).
+   * Disabled by default because the critique issues an extra LLM request per
+   * turn, which consumes queued FakeProvider responses and pollutes request
+   * assertions. Opt in only in tests that exercise self-critique itself.
+   */
+  selfCritique?: boolean;
   /** Additional config overrides. */
   configOverrides?: Partial<KCodeConfig>;
 }
@@ -73,6 +80,13 @@ export interface TestEnvOptions {
  * Call `cleanup()` when done to release resources.
  */
 export async function createTestEnv(opts: TestEnvOptions = {}): Promise<TestEnv> {
+  // 0. Keep the self-critique pass from firing an extra LLM request per turn
+  // (it would consume queued FakeProvider responses). Opt-in via selfCritique.
+  const prevSelfCritique = process.env.KCODE_DISABLE_SELF_CRITIQUE;
+  if (!opts.selfCritique) {
+    process.env.KCODE_DISABLE_SELF_CRITIQUE = "1";
+  }
+
   // 1. Create temp directory
   const workDir = mkdtempSync(join(tmpdir(), "kcode-e2e-"));
 
@@ -141,6 +155,13 @@ export async function createTestEnv(opts: TestEnvOptions = {}): Promise<TestEnv>
 
   // 7. Cleanup function
   const cleanup = async () => {
+    if (!opts.selfCritique) {
+      if (prevSelfCritique === undefined) {
+        delete process.env.KCODE_DISABLE_SELF_CRITIQUE;
+      } else {
+        process.env.KCODE_DISABLE_SELF_CRITIQUE = prevSelfCritique;
+      }
+    }
     await provider.stop();
     try {
       db.close();

@@ -48,6 +48,9 @@ export interface SelfCritiqueInput {
   /** Override API base and key (for tests / alternate providers). */
   apiBase?: string;
   apiKey?: string;
+  /** Injected fetch — must be threaded through so in-process providers
+   * (config.customFetch) reach the forked agent too. */
+  customFetch?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 }
 
 export interface Contradiction {
@@ -349,6 +352,7 @@ export async function runSelfCritique(input: SelfCritiqueInput): Promise<SelfCri
       maxTokens: DEFAULT_MAX_TOKENS,
       apiBase: input.apiBase,
       apiKey: input.apiKey,
+      customFetch: input.customFetch,
       onComplete: async (result: ForkedAgentResult) => {
         const parsed = parseCritiqueResponse(result.content);
         if (!parsed) {

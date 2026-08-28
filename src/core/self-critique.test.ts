@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formatCritiqueBanner, parseCritiqueResponse } from "./self-critique";
+import { formatCritiqueBanner, parseCritiqueResponse, runSelfCritique } from "./self-critique";
 
 describe("parseCritiqueResponse", () => {
   test("parses a clean ok response", () => {
@@ -142,5 +142,50 @@ describe("formatCritiqueBanner", () => {
     });
     expect(banner).toContain("…");
     expect(banner.length).toBeLessThan(500);
+  });
+});
+
+describe("runSelfCritique provider injection", () => {
+  test("threads customFetch to the forked agent (no real network)", async () => {
+    let capturedUrl = "";
+    let capturedModel = "";
+    const customFetch = async (
+      input: string | URL | Request,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      capturedUrl = String(input);
+      capturedModel = (JSON.parse(String(init?.body)) as { model: string }).model;
+      const content = JSON.stringify({
+        contradictions: [
+          { claim: "everything works", evidence: "tests failed with exit 1", severity: "high" },
+        ],
+        verdict: "downgrade",
+      });
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content } }],
+          usage: { prompt_tokens: 10, completion_tokens: 10 },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+
+    const result = await runSelfCritique({
+      draftText: "Everything works perfectly and the feature is fully implemented in production.",
+      recentMessages: [],
+      errorsEncountered: 1,
+      filesWritten: [],
+      repairBlocked: false,
+      model: "fake-critique-model",
+      apiBase: "http://fake.invalid/v1",
+      apiKey: "fake-key",
+      customFetch,
+    });
+
+    expect(capturedUrl).toContain("fake.invalid");
+    expect(capturedModel).toBe("fake-critique-model");
+    expect(result.skipped).toBe(false);
+    expect(result.verdict).toBe("downgrade");
+    expect(result.contradictions).toHaveLength(1);
   });
 });

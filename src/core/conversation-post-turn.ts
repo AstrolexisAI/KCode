@@ -1770,6 +1770,7 @@ export async function handlePostTurn(ctx: PostTurnContext): Promise<PostTurnResu
           model: critiqueModel,
           apiBase: ctx.config.apiBase,
           apiKey: ctx.config.apiKey,
+          customFetch: ctx.config.customFetch,
         });
 
         if (!critique.skipped && critique.contradictions.length > 0) {
