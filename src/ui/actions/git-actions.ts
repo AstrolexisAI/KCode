@@ -264,7 +264,9 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
           }
           // Was `git diff --name-only '<target>' | wc -l`
           const totalChangedRaw = await gitTry(["diff", "--name-only", target], cwd, 5000);
-          const totalChanged = totalChangedRaw.split("\n").filter((l) => l.trim().length > 0).length;
+          const totalChanged = totalChangedRaw
+            .split("\n")
+            .filter((l) => l.trim().length > 0).length;
           if (totalChanged > 20) lines.push(`\n    ... ${totalChanged - 20} more files`);
         }
 
@@ -321,11 +323,7 @@ export async function handleGitAction(action: string, ctx: ActionContext): Promi
         lines.push(``);
 
         // Most changed files (top 10) — was `... | sort | uniq -c | sort -rn | head -10`
-        const hotFilesRaw = await gitTry(
-          ["log", "--pretty=format:", "--name-only"],
-          cwd,
-          10000,
-        );
+        const hotFilesRaw = await gitTry(["log", "--pretty=format:", "--name-only"], cwd, 10000);
         if (hotFilesRaw) {
           const counts = new Map<string, number>();
           for (const file of hotFilesRaw.split("\n")) {

@@ -27,12 +27,14 @@ jobs:
         run: bun run lint
       - name: Typecheck
         run: bun run typecheck
-      # Tests run advisory — Build/Release proceed regardless. Pre-
-      # existing flakes (MeshNode races, VAPID-key length, etc.) were
-      # blocking 5+ release attempts. Lint + Typecheck are still
-      # blocking; only the runtime test step is advisory.
-      - name: Run tests (advisory)
-        continue-on-error: true
+      # Tests BLOCK the build. They ran advisory from ~v2.10.2xx after
+      # flakes stalled releases, but that let a real regression (self-
+      # critique ignoring customFetch, 25 E2E tests red) ship unnoticed
+      # for 4 months across ~200 versions. The suite was stabilized on
+      # 2026-08-28 (hermetic mcp-oauth, calibrated perf threshold); if a
+      # test flakes here, fix or quarantine that test — do not flip this
+      # step back to advisory.
+      - name: Run tests
         run: bun run test:ci
 
   build:

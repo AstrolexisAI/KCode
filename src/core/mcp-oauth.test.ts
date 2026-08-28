@@ -118,9 +118,19 @@ describe("discoverOAuthConfig", () => {
   });
 
   test("returns null for server without well-known endpoint", async () => {
-    // Use a URL that definitely won't have the well-known endpoint
-    const config = await discoverOAuthConfig("https://httpbin.org");
-    expect(config).toBeNull();
+    // Local server that answers everything with 404 — hermetic replacement
+    // for the old httpbin.org probe, which needed live network and could
+    // hang past the test timeout.
+    const server = Bun.serve({
+      port: 0,
+      fetch: () => new Response("not found", { status: 404 }),
+    });
+    try {
+      const config = await discoverOAuthConfig(`http://127.0.0.1:${server.port}`);
+      expect(config).toBeNull();
+    } finally {
+      server.stop(true);
+    }
   });
 });
 

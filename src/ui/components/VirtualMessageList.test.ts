@@ -253,8 +253,10 @@ describe("VirtualMessageList — performance", () => {
       calculateVisibleRange(10000, new Map(), 15000, 24, BUFFER_SIZE, makeGetId());
     }
     const elapsed = performance.now() - start;
-    // 100 iterations should complete well under 500ms (relaxed for CI/loaded systems)
-    expect(elapsed).toBeLessThan(500);
+    // Regression guard against accidental O(n) work per call (a real blowup
+    // is seconds, not ms). Generous bound: 500ms tripped at 680-760ms on a
+    // loaded box running the full suite, turning it into noise.
+    expect(elapsed).toBeLessThan(2500);
   });
 
   test("height cache lookup is efficient", () => {

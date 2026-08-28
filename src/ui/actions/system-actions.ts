@@ -25,9 +25,7 @@ async function run(cmd: string, args: string[], opts: ExecOpts = {}): Promise<st
     cwd: opts.cwd,
     timeout: opts.timeout ?? 5000,
     input: opts.input,
-    stdio: opts.swallowStderr === false
-      ? ["pipe", "pipe", "pipe"]
-      : ["pipe", "pipe", "ignore"],
+    stdio: opts.swallowStderr === false ? ["pipe", "pipe", "pipe"] : ["pipe", "pipe", "ignore"],
   })
     .toString()
     .trim();
@@ -44,9 +42,7 @@ async function runTry(cmd: string, args: string[], opts: ExecOpts = {}): Promise
 
 /** Substring filter for ps output (replaces `| grep -E "pattern" | grep -v grep`). */
 function psGrep(psOutput: string, regex: RegExp): string[] {
-  return psOutput
-    .split("\n")
-    .filter((line) => regex.test(line) && !/\bgrep\b/.test(line));
+  return psOutput.split("\n").filter((line) => regex.test(line) && !/\bgrep\b/.test(line));
 }
 
 export async function handleSystemAction(
@@ -194,11 +190,9 @@ export async function handleSystemAction(
 
       // Systemd user timers
       try {
-        const timers = await runTry(
-          "systemctl",
-          ["--user", "list-timers", "--no-pager"],
-          { timeout: 5000 },
-        );
+        const timers = await runTry("systemctl", ["--user", "list-timers", "--no-pager"], {
+          timeout: 5000,
+        });
         if (timers && timers.includes("NEXT")) {
           found = true;
           const timerLines = timers.split("\n");
@@ -214,11 +208,7 @@ export async function handleSystemAction(
 
       // System timers — was `systemctl list-timers --no-pager | head -10`
       try {
-        const sysFull = await runTry(
-          "systemctl",
-          ["list-timers", "--no-pager"],
-          { timeout: 5000 },
-        );
+        const sysFull = await runTry("systemctl", ["list-timers", "--no-pager"], { timeout: 5000 });
         const sysTimers = sysFull.split("\n").slice(0, 10).join("\n");
         if (sysTimers && sysTimers.includes("NEXT")) {
           found = true;
@@ -280,11 +270,10 @@ export async function handleSystemAction(
 
       // AMD GPUs
       try {
-        const amd = await run(
-          "rocm-smi",
-          ["--showmeminfo", "vram", "--csv"],
-          { timeout: 5000, swallowStderr: false },
-        );
+        const amd = await run("rocm-smi", ["--showmeminfo", "vram", "--csv"], {
+          timeout: 5000,
+          swallowStderr: false,
+        });
         if (amd && amd.includes("vram")) {
           lines.push("  AMD GPU detected (rocm-smi available)");
           for (const line of amd.split("\n").slice(1, 5)) {
@@ -299,10 +288,7 @@ export async function handleSystemAction(
       try {
         const procs = await run(
           "nvidia-smi",
-          [
-            "--query-compute-apps=pid,name,used_gpu_memory",
-            "--format=csv,noheader,nounits",
-          ],
+          ["--query-compute-apps=pid,name,used_gpu_memory", "--format=csv,noheader,nounits"],
           { timeout: 3000, swallowStderr: false },
         );
         if (procs) {
