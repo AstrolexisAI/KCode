@@ -558,6 +558,7 @@ export async function runAudit(opts: AuditEngineOptions): Promise<AuditResult> {
       verification: {
         verdict: "confirmed" as const,
         reasoning: "Verification skipped — static-only mode",
+        static_only: true,
       },
     }));
   } else {

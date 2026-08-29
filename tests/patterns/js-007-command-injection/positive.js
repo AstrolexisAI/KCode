@@ -10,3 +10,10 @@ function listUserDir(req) {
     console.log(stdout);
   });
 }
+
+const cp = require("child_process");
+
+function tagRelease(version) {
+  // CONFIRMED: explicit module receiver still reaches the shell.
+  cp.execSync(`git tag ${version}`);
+}

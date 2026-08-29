@@ -323,6 +323,13 @@ export interface VerifierEvidence {
 export interface Verification {
   verdict: VerifyVerdict;
   reasoning: string;
+  /**
+   * True when the audit ran with --skip-verify: the verdict is a
+   * pass-through of the static candidate, NOT an LLM confirmation.
+   * Consumers that gate on findings (CI severity gates) should treat
+   * these as unvetted candidates, not confirmed vulnerabilities.
+   */
+  static_only?: boolean;
   /** Legacy single-string path. New code reads `evidence.execution_path_steps` first. */
   execution_path?: string;
   /** Legacy fix string. New code reads `evidence.suggested_fix` first. */

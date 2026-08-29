@@ -11,7 +11,7 @@
 // the right shape for a 117 MB binary anyway. This module is the
 // replacement distribution channel.
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -500,11 +500,12 @@ async function tryApplyDelta(
 
   const outPath = join(tmpDir, `kcode-update-${token}`);
   try {
-    // bspatch <oldfile> <newfile> <patchfile>
-    execSync(
-      `bspatch ${JSON.stringify(currentBinary)} ${JSON.stringify(outPath)} ${JSON.stringify(patchPath)}`,
-      { stdio: "pipe", timeout: 120_000 },
-    );
+    // bspatch <oldfile> <newfile> <patchfile>. Array args — the old
+    // JSON.stringify "quoting" left $(…) live inside double quotes.
+    execFileSync("bspatch", [currentBinary, outPath, patchPath], {
+      stdio: "pipe",
+      timeout: 120_000,
+    });
   } catch (err) {
     log.warn("auto-update", `bspatch failed: ${err}. Falling back to full.`);
     try {

@@ -1,7 +1,7 @@
 // KCode - Change Review System
 // Classifies changes, detects risks, and suggests post-change actions
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { basename, extname } from "node:path";
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -452,17 +452,17 @@ function parseDiffStat(output: string, files: FileChange[]): void {
 
 export async function reviewChanges(workingDir?: string, staged = false): Promise<ChangeReview> {
   const cwd = workingDir ?? process.cwd();
-  const diffFlag = staged ? "--cached" : "";
 
   let nameStatusOutput: string;
   let numstatOutput: string;
   try {
-    nameStatusOutput = execSync(`git diff ${diffFlag} --name-status`, {
+    const diffArgs = staged ? ["diff", "--cached"] : ["diff"];
+    nameStatusOutput = execFileSync("git", [...diffArgs, "--name-status"], {
       cwd,
       encoding: "utf-8",
       timeout: 10000,
     });
-    numstatOutput = execSync(`git diff ${diffFlag} --numstat`, {
+    numstatOutput = execFileSync("git", [...diffArgs, "--numstat"], {
       cwd,
       encoding: "utf-8",
       timeout: 10000,

@@ -107,7 +107,7 @@ export async function detectGpuAvailability(
 }
 
 async function runNvidiaSmi(): Promise<string | null> {
-  const { execSync } = require("node:child_process") as typeof import("node:child_process");
+  const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
   const candidatePaths = [
     "/usr/bin/nvidia-smi",
     "nvidia-smi",
@@ -115,11 +115,14 @@ async function runNvidiaSmi(): Promise<string | null> {
     "/usr/local/cuda/bin/nvidia-smi",
     "/opt/cuda/bin/nvidia-smi",
   ];
-  const query = "--query-gpu=memory.free,memory.used,memory.total --format=csv,noheader,nounits";
+  const query = [
+    "--query-gpu=memory.free,memory.used,memory.total",
+    "--format=csv,noheader,nounits",
+  ];
 
   for (const smiPath of candidatePaths) {
     try {
-      const out = execSync(`${smiPath} ${query}`, {
+      const out = execFileSync(smiPath, query, {
         encoding: "utf-8",
         timeout: 5_000,
         stdio: ["pipe", "pipe", "pipe"],

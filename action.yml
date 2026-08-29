@@ -133,9 +133,16 @@ runs:
         declare -A rank=([critical]=4 [high]=3 [medium]=2 [low]=1)
         MIN_RANK=${rank[$THRESHOLD]:-3}
 
+        # With skip-verify the report carries UNVETTED static candidates
+        # (verification.static_only=true) — mostly noise the LLM verifier
+        # would reject. Those block only at high static confidence;
+        # genuinely verified findings block at any confidence.
         OFFENDERS=$(jq -r --argjson min "$MIN_RANK" '
           ({"critical":4,"high":3,"medium":2,"low":1}) as $r
-          | [.findings // [] | .[] | select(($r[.severity] // 0) >= $min)] | length
+          | [.findings // [] | .[]
+             | select(($r[.severity] // 0) >= $min)
+             | select((.verification.static_only != true) or (.confidence.band == "high"))
+            ] | length
         ' AUDIT_REPORT.json)
 
         if [ "$OFFENDERS" -gt 0 ]; then

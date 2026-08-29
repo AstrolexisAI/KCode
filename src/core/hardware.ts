@@ -66,7 +66,7 @@ async function detectNvidiaGpus(): Promise<{
   cudaVersion?: string;
 }> {
   try {
-    const { execSync } = require("node:child_process");
+    const { execFileSync, execSync } = require("node:child_process");
 
     // Try common nvidia-smi paths per platform (not always in PATH, especially via SSH)
     const nvidiaSmiPaths: string[] =
@@ -84,14 +84,16 @@ async function detectNvidiaGpus(): Promise<{
             "/opt/cuda/bin/nvidia-smi",
           ];
 
-    const queryArgs =
-      "--query-gpu=index,name,memory.total,compute_cap --format=csv,noheader,nounits";
+    const queryArgs = [
+      "--query-gpu=index,name,memory.total,compute_cap",
+      "--format=csv,noheader,nounits",
+    ];
     let output = "";
 
-    // Try execSync first (more reliable in standalone binaries)
+    // Try execFileSync first (more reliable in standalone binaries)
     for (const smiPath of nvidiaSmiPaths) {
       try {
-        output = execSync(`${smiPath} ${queryArgs}`, {
+        output = execFileSync(smiPath, queryArgs, {
           encoding: "utf-8",
           timeout: 10000,
           stdio: ["pipe", "pipe", "pipe"],

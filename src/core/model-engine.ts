@@ -2,7 +2,7 @@
 // Downloads and installs the llama.cpp inference engine binary.
 // Extracted from model-manager.ts for modularity.
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -365,7 +365,7 @@ async function buildEngineFromSource(
   const prerequisites = ["git", "cmake", "make"];
   for (const cmd of prerequisites) {
     try {
-      execSync(`which ${cmd}`, { stdio: "pipe", timeout: 5000 });
+      execFileSync("which", [cmd], { stdio: "pipe", timeout: 5000 });
     } catch {
       log.error("setup", `Build prerequisite missing: ${cmd}`);
       progress(`Cannot build from source: '${cmd}' not found. Install it and retry.\n`);
@@ -377,7 +377,7 @@ async function buildEngineFromSource(
   let hasCompiler = false;
   for (const cc of ["g++", "c++", "clang++"]) {
     try {
-      execSync(`which ${cc}`, { stdio: "pipe", timeout: 5000 });
+      execFileSync("which", [cc], { stdio: "pipe", timeout: 5000 });
       hasCompiler = true;
       break;
     } catch {
@@ -448,7 +448,7 @@ async function buildEngineFromSource(
     })();
 
     progress(`Compiling llama.cpp (${nproc} cores, ${archDisplay})... this may take a few minutes`);
-    execSync(`cmake --build build --config Release -j${nproc}`, {
+    execFileSync("cmake", ["--build", "build", "--config", "Release", `-j${nproc}`], {
       cwd: repoDir,
       stdio: "pipe",
       timeout: 600000, // 10 minutes max
@@ -463,7 +463,7 @@ async function buildEngineFromSource(
 
     // Copy to engine directory
     const destBin = join(ENGINE_DIR, "llama-server");
-    execSync(`cp "${builtBin}" "${destBin}"`, { stdio: "pipe" });
+    execFileSync("cp", [builtBin, destBin], { stdio: "pipe" });
     chmodSync(destBin, 0o755);
 
     // Copy shared libraries from build
@@ -476,7 +476,7 @@ async function buildEngineFromSource(
         const dest = join(ENGINE_DIR, libName);
         if (!existsSync(dest)) {
           try {
-            execSync(`cp "${libPath}" "${dest}"`, { stdio: "pipe" });
+            execFileSync("cp", [libPath, dest], { stdio: "pipe" });
           } catch {
             /* non-fatal */
           }

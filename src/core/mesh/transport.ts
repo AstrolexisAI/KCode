@@ -46,6 +46,9 @@ export class MeshTransport {
       port: this.config.port,
       fetch: async (req) => this.handleRequest(req),
     });
+    // port 0 = OS-assigned ephemeral port: adopt the real bound port so
+    // get port() (peer advertising) reports something connectable.
+    this.config.port = this.server.port ?? this.config.port;
 
     this._running = true;
     log.debug("mesh-transport", `Transport server started on port ${this.config.port}`);

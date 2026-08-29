@@ -46,14 +46,15 @@ export function registerWebCommand(program: Command): void {
         if (opts.open !== false) {
           const fullUrl = opts.auth !== false ? `${url}?token=${token}` : url;
           try {
-            const { exec } = await import("node:child_process");
-            const cmd =
-              process.platform === "darwin"
-                ? "open"
-                : process.platform === "win32"
-                  ? "start"
-                  : "xdg-open";
-            exec(`${cmd} "${fullUrl}"`);
+            const { execFile } = await import("node:child_process");
+            // `start` is a cmd.exe builtin, not an executable — it needs
+            // cmd /c, with an empty "" title arg so the URL isn't taken
+            // as the window title.
+            if (process.platform === "win32") {
+              execFile("cmd", ["/c", "start", "", fullUrl]);
+            } else {
+              execFile(process.platform === "darwin" ? "open" : "xdg-open", [fullUrl]);
+            }
           } catch {
             console.log(`  Open in browser: ${fullUrl}`);
           }

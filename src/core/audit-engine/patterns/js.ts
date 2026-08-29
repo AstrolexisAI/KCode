@@ -133,7 +133,12 @@ export const JS_PATTERNS: BugPattern[] = [
     title: "Shell command with template literal (injection)",
     severity: "critical",
     languages: ["javascript", "typescript"],
-    regex: /\b(?:exec|execSync|spawn|spawnSync)\s*\(\s*`/g,
+    // Bare calls (destructured child_process import) or explicit
+    // child_process/cp receivers only. The old \b-anchored version
+    // matched ANY dotted receiver — db.exec(`CREATE TABLE…`) alone
+    // produced 35 false candidates in the 2026-08-29 self-audit.
+    regex:
+      /(?<![\w$.])(?:exec|execSync|spawn|spawnSync)\s*\(\s*`|\b(?:child_process|childProcess|cp)\s*\.\s*(?:exec|execSync|spawn|spawnSync)\s*\(\s*`/g,
     explanation:
       "Running shell commands with template literals allows injection if any interpolated value is user-controlled.",
     verify_prompt:

@@ -12,7 +12,9 @@ const TEST_TOKEN = generateTeamToken();
 function makeTransport(
   overrides: Partial<{ port: number; handlers: TransportEventHandlers }> = {},
 ): MeshTransport {
-  const port = overrides.port ?? 19300 + Math.floor(Math.random() * 1000);
+  // Port 0 = OS-assigned ephemeral port. A fixed or randomized range
+  // collided across parallel test files (EADDRINUSE flake on 19876).
+  const port = overrides.port ?? 0;
   return new MeshTransport({ port, teamToken: TEST_TOKEN }, overrides.handlers ?? {});
 }
 
