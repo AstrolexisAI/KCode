@@ -409,6 +409,50 @@ export function detectLowEntropyLoop(text: string): string | null {
   return null;
 }
 
+// ─── Recurring-sentence loop detection ──────────────────────────
+//
+// The four detectors above need either byte-identical block repetition
+// or a low-entropy vocabulary. The 2026-05-09 "stuck explaining"
+// sessions dodged both: a marker sentence ("No se pudo… Déjame
+// intentar…", "Let me use a completely different approach…") recurred
+// dozens of times with DIFFERENT filler text between occurrences, so
+// no consecutive/fingerprint match ever fired and the varied filler
+// kept lexical entropy high. That's what the old unconditional 6K
+// no-tool abort papered over — at the cost of truncating every
+// legitimate long answer.
+//
+// This detector targets that exact signature: split into sentences,
+// normalize, and flag when any single sentence with real lexical
+// content recurs. The letter minimum keeps markdown table rows,
+// separators, and code punctuation from counting; the occurrence
+// threshold (4) tolerates legitimate repeats like a heading quoted a
+// couple of times.
+
+/** Minimum letters a normalized sentence needs to be considered. */
+const RECURRING_SENTENCE_MIN_LETTERS = 20;
+/** Occurrences of one normalized sentence that declare a loop. */
+const RECURRING_SENTENCE_MIN_OCCURRENCES = 4;
+
+/**
+ * Detect a marker sentence recurring through otherwise-varied text.
+ * Returns the sentence (truncated) if one repeats enough, else null.
+ */
+export function detectRecurringSentenceLoop(text: string): string | null {
+  const counts = new Map<string, number>();
+  for (const raw of text.split(/(?<=[.!?…:])\s+|\n+/)) {
+    const normalized = raw.trim().toLowerCase().replace(/\s+/g, " ");
+    const letters = normalized.match(/[a-záéíóúñü]/g)?.length ?? 0;
+    if (letters < RECURRING_SENTENCE_MIN_LETTERS) continue;
+    const count = (counts.get(normalized) ?? 0) + 1;
+    if (count >= RECURRING_SENTENCE_MIN_OCCURRENCES) {
+      const sentence = raw.trim();
+      return sentence.length > 60 ? sentence.slice(0, 60) + "..." : sentence;
+    }
+    counts.set(normalized, count);
+  }
+  return null;
+}
+
 // ─── Types ──────────────────────────────────────────────────────
 
 export interface StreamAccumulator {
@@ -470,9 +514,13 @@ export async function* processSSEStream(
   // call delta — if the model emits NO_TOOL_TEXT_LIMIT chars between
   // tools (or after the last one), abort.
   //
-  // 6K chars (~1.5K tokens) catches all three within 2-3 reps. A
-  // legitimate text-only answer rarely exceeds 6K; the few that do
-  // (long explanations) usually call at least one tool first.
+  // Past NO_TOOL_TEXT_LIMIT chars the failsafe ARMS, but it only
+  // aborts when detectRecurringSentenceLoop confirms a marker
+  // sentence recurring through the no-tool window — the signature of
+  // every captured stuck-explaining session. The pre-2026-08 version
+  // aborted unconditionally at 6K, which also truncated legitimate
+  // long answers (~1200 words); non-repetitive runaway output is
+  // still bounded by MAX_OUTPUT_CHARS.
   const NO_TOOL_TEXT_LIMIT = 6_000;
   let charsSinceLastToolCall = 0;
   // Phase 33: independent counter for the thinking channel so phase 15
@@ -594,26 +642,37 @@ export async function* processSSEStream(
             }
 
             // Failsafe: large text emission since the last tool call
-            // = stuck-explaining loop. Was a buggy "zero tool calls
-            // ever" check before — broke on streams where the model
-            // called tools first then locked into a text loop (Curly
-            // 2026-05-09: tools=17 then "Let me use a completely
-            // different approach…" × 25 → 392K tokens). Now resets
-            // on every new tool_call_delta so post-tool loops also
-            // get caught.
+            // MAY be a stuck-explaining loop (Curly 2026-05-09:
+            // tools=17 then "Let me use a completely different
+            // approach…" × 25 → 392K tokens; the counter resets on
+            // every tool_call_delta so post-tool loops are covered).
+            // Those loops repeat a marker sentence with varied filler
+            // between occurrences — invisible to the four block/
+            // entropy detectors below, which is why this used to
+            // abort unconditionally at 6K. Now it aborts only when
+            // the recurring-sentence detector confirms the loop over
+            // the no-tool window, so legitimate long answers stream
+            // through (bounded by MAX_OUTPUT_CHARS). Re-checked every
+            // REPETITION_CHECK_INTERVAL: a loop whose 4th marker
+            // lands past 6K is still caught a few chunks later.
             if (charsSinceLastToolCall >= NO_TOOL_TEXT_LIMIT && textChunks.length > 1) {
-              log.warn(
-                "llm",
-                `No-tool text limit (${NO_TOOL_TEXT_LIMIT} chars since last tool) hit — aborting`,
-              );
-              repetitionAborted = true;
-              stopReason = "repetition_aborted";
-              yield {
-                type: "turn_end",
-                stopReason: "repetition_aborted",
-                emptyType: undefined,
-              } as import("./types").StreamEvent;
-              break;
+              const fullText = textChunks.join("");
+              const sinceLastTool = fullText.slice(-charsSinceLastToolCall);
+              const marker = detectRecurringSentenceLoop(sinceLastTool);
+              if (marker) {
+                log.warn(
+                  "llm",
+                  `No-tool loop: "${marker}" recurring over ${charsSinceLastToolCall} chars since last tool — aborting`,
+                );
+                repetitionAborted = true;
+                stopReason = "repetition_aborted";
+                yield {
+                  type: "turn_end",
+                  stopReason: "repetition_aborted",
+                  emptyType: undefined,
+                } as import("./types").StreamEvent;
+                break;
+              }
             }
 
             // Repetition loop detection. Four complementary detectors:

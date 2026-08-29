@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   detectCompletionMarkerLoop,
   detectLargeBlockRepetition,
+  detectRecurringSentenceLoop,
   detectRepetitionLoop,
 } from "./conversation-streaming";
 
@@ -288,5 +289,69 @@ describe("detectCompletionMarkerLoop", () => {
     const block = "✅ Task complete! " + "x".repeat(500);
     const text = block + block + block;
     expect(detectCompletionMarkerLoop(text)).not.toBeNull();
+  });
+});
+
+describe("detectRecurringSentenceLoop", () => {
+  // Varied filler between marker occurrences — the signature that
+  // dodges the block/entropy detectors (2026-05-09 sessions).
+  const filler = (i: number) =>
+    `Attempt number ${i} produced a distinct diagnostic about module resolution in path segment ${i * 7}, ` +
+    `so the strategy shifted toward inspecting configuration entry ${i * 13} instead. `;
+
+  test("flags a marker sentence recurring through varied filler", () => {
+    let text = "";
+    for (let i = 0; i < 5; i++) {
+      text += filler(i) + "Let me use a completely different approach. ";
+    }
+    const marker = detectRecurringSentenceLoop(text);
+    expect(marker).not.toBeNull();
+    expect(marker).toContain("completely different approach");
+  });
+
+  test("flags the Spanish stuck-explaining marker", () => {
+    let text = "";
+    for (let i = 0; i < 6; i++) {
+      text += `El intento ${i} falló con un error distinto en la línea ${i * 3}.\n`;
+      text += "No se pudo completar. Déjame intentar un enfoque más simple.\n";
+    }
+    expect(detectRecurringSentenceLoop(text)).not.toBeNull();
+  });
+
+  test("three occurrences are below the threshold", () => {
+    let text = "";
+    for (let i = 0; i < 3; i++) {
+      text += filler(i) + "Let me use a completely different approach. ";
+    }
+    expect(detectRecurringSentenceLoop(text)).toBeNull();
+  });
+
+  test("does not flag long unique prose", () => {
+    let text = "";
+    for (let i = 0; i < 200; i++) {
+      text += `Paragraph ${i} explores an entirely separate subsystem, covering component ${i * 3} with fresh terminology. `;
+    }
+    expect(text.length).toBeGreaterThan(10_000);
+    expect(detectRecurringSentenceLoop(text)).toBeNull();
+  });
+
+  test("ignores markdown table separators and low-letter lines", () => {
+    let text = "";
+    for (let i = 0; i < 30; i++) {
+      text += `| row ${i} | value ${i} |\n| --- | --- |\n`;
+    }
+    expect(detectRecurringSentenceLoop(text)).toBeNull();
+  });
+
+  test("normalizes case and whitespace when matching", () => {
+    let text = "";
+    for (let i = 0; i < 4; i++) {
+      text +=
+        filler(i) +
+        (i % 2 === 0
+          ? "Let me use a   completely different approach. "
+          : "let me use a completely different approach. ");
+    }
+    expect(detectRecurringSentenceLoop(text)).not.toBeNull();
   });
 });
