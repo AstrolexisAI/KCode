@@ -204,7 +204,10 @@ export function buildSarif(audit: AuditResult, opts: BuildSarifOptions): unknown
         invocations: [
           {
             executionSuccessful: true,
-            endTimeUtc: audit.timestamp,
+            // audit.timestamp is date-only (used for report naming);
+            // SARIF requires a full RFC3339 date-time here — GitHub's
+            // codeql-action rejects the whole upload otherwise.
+            endTimeUtc: new Date().toISOString(),
           },
         ],
         results: actionable.map((f) => buildResult(f, opts.projectRoot)),

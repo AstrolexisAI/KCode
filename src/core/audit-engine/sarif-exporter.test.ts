@@ -286,3 +286,22 @@ describe("buildSarif — review_state filtering (v2.10.351 P0)", () => {
     expect(run.results[0]!.ruleId).toBe("p1");
   });
 });
+
+describe("buildSarif — invocation timestamps", () => {
+  test("endTimeUtc is a full RFC3339 date-time, not a bare date", () => {
+    // GitHub's codeql-action validates against the SARIF schema and
+    // rejects the entire upload when endTimeUtc is date-only (the
+    // Self Audit workflow failed on every push because audit.timestamp
+    // is date-only by design).
+    const doc = buildSarif(makeAudit([makeFinding()]), {
+      toolVersion: "2.10.119",
+      projectRoot: "/home/user/proj",
+    }) as {
+      runs: Array<{ invocations: Array<{ endTimeUtc: string; executionSuccessful: boolean }> }>;
+    };
+    const invocation = doc.runs[0]!.invocations[0]!;
+    expect(invocation.executionSuccessful).toBe(true);
+    expect(invocation.endTimeUtc).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/);
+    expect(Number.isNaN(Date.parse(invocation.endTimeUtc))).toBe(false);
+  });
+});

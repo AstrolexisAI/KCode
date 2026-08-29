@@ -438,8 +438,16 @@ const RECURRING_SENTENCE_MIN_OCCURRENCES = 4;
  * Returns the sentence (truncated) if one repeats enough, else null.
  */
 export function detectRecurringSentenceLoop(text: string): string | null {
+  // Fenced code repeats identical lines legitimately (imports, JSX
+  // boilerplate across several example files in one answer), so only
+  // prose is analyzed. After pairing fences, an unterminated trailing
+  // fence means the tail is still mid-code — drop it too.
+  let prose = text.replace(/```[\s\S]*?```/g, " ");
+  const openFence = prose.indexOf("```");
+  if (openFence !== -1) prose = prose.slice(0, openFence);
+
   const counts = new Map<string, number>();
-  for (const raw of text.split(/(?<=[.!?…:])\s+|\n+/)) {
+  for (const raw of prose.split(/(?<=[.!?…:])\s+|\n+/)) {
     const normalized = raw.trim().toLowerCase().replace(/\s+/g, " ");
     const letters = normalized.match(/[a-záéíóúñü]/g)?.length ?? 0;
     if (letters < RECURRING_SENTENCE_MIN_LETTERS) continue;

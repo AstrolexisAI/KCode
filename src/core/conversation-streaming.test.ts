@@ -355,3 +355,42 @@ describe("detectRecurringSentenceLoop", () => {
     expect(detectRecurringSentenceLoop(text)).not.toBeNull();
   });
 });
+
+describe("detectRecurringSentenceLoop — code exclusion", () => {
+  test("does not flag identical lines inside fenced code blocks", () => {
+    let text = "";
+    for (let i = 0; i < 6; i++) {
+      text +=
+        `Here is example component number ${i} showing the pattern in file Widget${i}.tsx:\n` +
+        "```tsx\n" +
+        'import { logger } from "./logging-service";\n' +
+        `export function Widget${i}() { return logger.wrap(${i}); }\n` +
+        "```\n";
+    }
+    expect(detectRecurringSentenceLoop(text)).toBeNull();
+  });
+
+  test("still flags a prose marker recurring between code blocks", () => {
+    let text = "";
+    for (let i = 0; i < 5; i++) {
+      text +=
+        `The build failed again with a distinct error in module ${i * 11}. ` +
+        "Let me use a completely different approach to fix this problem.\n" +
+        "```js\n" +
+        `const attempt${i} = ${i};\n` +
+        "```\n";
+    }
+    const marker = detectRecurringSentenceLoop(text);
+    expect(marker).not.toBeNull();
+    expect(marker).toContain("completely different approach");
+  });
+
+  test("ignores an unterminated trailing code fence", () => {
+    let prose = "";
+    for (let i = 0; i < 3; i++) {
+      prose += `Section ${i} covers a different aspect of the migration plan in detail. `;
+    }
+    const openCode = "```python\n" + 'print("identical generated line of code")\n'.repeat(10);
+    expect(detectRecurringSentenceLoop(prose + openCode)).toBeNull();
+  });
+});
