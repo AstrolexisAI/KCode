@@ -50,6 +50,11 @@ export default function Spinner({ message, tokens, startTime, phase = "thinking"
   const prevTokensRef = useRef(0);
   const prevTimeRef = useRef(Date.now());
   const speedRef = useRef(0);
+  // Read tokens through a ref so the interval below survives token
+  // updates — with `tokens` in the deps the 100ms timer was destroyed
+  // and recreated on every usage_update, visibly stuttering the frames.
+  const tokensRef = useRef(tokens ?? 0);
+  tokensRef.current = tokens ?? 0;
 
   const frames = SPINNERS[phase] ?? SPINNERS.thinking;
 
@@ -60,7 +65,7 @@ export default function Spinner({ message, tokens, startTime, phase = "thinking"
 
       // Calculate tokens/s using a rolling window
       const now = Date.now();
-      const currentTokens = tokens ?? 0;
+      const currentTokens = tokensRef.current;
       const dt = (now - prevTimeRef.current) / 1000;
       if (dt >= 0.5 && currentTokens > prevTokensRef.current) {
         const newSpeed = (currentTokens - prevTokensRef.current) / dt;
@@ -72,7 +77,7 @@ export default function Spinner({ message, tokens, startTime, phase = "thinking"
       }
     }, INTERVAL);
     return () => clearInterval(timer);
-  }, [startTime, frames.length, tokens]);
+  }, [startTime, frames.length]);
 
   // Reset speed tracking when tokens reset (new turn)
   useEffect(() => {
@@ -81,7 +86,7 @@ export default function Spinner({ message, tokens, startTime, phase = "thinking"
       prevTimeRef.current = Date.now();
       speedRef.current = 0;
     }
-  }, [tokens === 0]);
+  }, [tokens]);
 
   // Build display parts
   const meta: string[] = [];

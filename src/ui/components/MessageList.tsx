@@ -117,7 +117,7 @@ interface MessageListProps {
   bashStreamOutput?: string;
 }
 
-export default function MessageList({
+function MessageList({
   completed,
   streamingText,
   streamingThinking = "",
@@ -126,10 +126,12 @@ export default function MessageList({
 }: MessageListProps) {
   return (
     <Box flexDirection="column">
-      {/* Completed messages - rendered once and never re-rendered */}
-      <Static items={completed.map((entry, i) => ({ ...entry, _key: `msg-${i}` }))}>
-        {(entry) => (
-          <Box key={entry._key} flexDirection="column">
+      {/* Completed messages - rendered once and never re-rendered.
+          Static hands us the index, so no per-frame array copy is needed
+          (the old .map spread ran at 15fps over the whole history). */}
+      <Static items={completed}>
+        {(entry, index) => (
+          <Box key={`msg-${index}`} flexDirection="column">
             <EntryRenderer entry={entry} />
           </Box>
         )}
@@ -152,6 +154,10 @@ export default function MessageList({
     </Box>
   );
 }
+
+// Memoized: App re-renders ~5x/s from the Kodi animation tick alone; when
+// no streaming props changed there is no reason to reconcile the history.
+export default React.memo(MessageList);
 
 function EntryRenderer({ entry }: { entry: MessageEntry }) {
   switch (entry.kind) {
@@ -377,7 +383,13 @@ function ThinkingMessage({ text, blockCount = 1, totalChars }: Omit<ThinkingEntr
       </Box>
     );
   }
-  return <ThinkingBlockComponent text={text} isStreaming={false} defaultExpanded={false} />;
+  return (
+    <ThinkingBlockComponent
+      text={text}
+      isStreaming={false}
+      defaultExpanded={process.env.KCODE_SHOW_REASONING === "1"}
+    />
+  );
 }
 
 function LearnMessage({ text }: { text: string }) {

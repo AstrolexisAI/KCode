@@ -7,6 +7,7 @@ import type { ConversationManager } from "../core/conversation.js";
 import type { ToolRegistry } from "../core/tool-registry.js";
 import type { KCodeConfig } from "../core/types.js";
 import App from "./App.js";
+import { KeybindingProvider } from "./components/KeybindingContext.js";
 import { invokePasteHandler } from "./paste-handler.js";
 import { installPasteInterceptor } from "./paste-stream.js";
 import { ThemeProvider } from "./ThemeContext.js";
@@ -26,12 +27,16 @@ export function startUI({ config, conversationManager, tools }: StartUIOptions) 
 
   const instance = render(
     <ThemeProvider>
-      <App
-        config={config}
-        conversationManager={conversationManager}
-        tools={tools}
-        initialSessionName={config.sessionName}
-      />
+      {/* Provider must sit ABOVE App: App's own useKeyBindings reads this
+          context, and a provider rendered inside App is invisible to it. */}
+      <KeybindingProvider>
+        <App
+          config={config}
+          conversationManager={conversationManager}
+          tools={tools}
+          initialSessionName={config.sessionName}
+        />
+      </KeybindingProvider>
     </ThemeProvider>,
     {
       exitOnCtrlC: true,

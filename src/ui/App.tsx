@@ -21,7 +21,6 @@ import EscalationPrompt from "./components/EscalationPrompt.js";
 import Header from "./components/Header.js";
 import InputPrompt from "./components/InputPrompt.js";
 import InteractiveQuestion from "./components/InteractiveQuestion.js";
-import { KeybindingProvider } from "./components/KeybindingContext.js";
 import KodiCompanion, { type KodiEvent } from "./components/Kodi.js";
 import KodiAdvisorMenu, { type KodiAdvisorMenuResult } from "./components/KodiAdvisorMenu.js";
 import MessageList, { type MessageEntry } from "./components/MessageList.js";
@@ -282,6 +281,7 @@ export default function App({ config, conversationManager, tools, initialSession
     verified: number;
     total: number;
     confirmed: number;
+    escalated: number;
     elapsed: number;
     cancelled: boolean;
   } | null>(null);
@@ -432,6 +432,7 @@ export default function App({ config, conversationManager, tools, initialSession
             verified: scanState.verified,
             total: scanState.total,
             confirmed: scanState.confirmed,
+            escalated: scanState.escalated,
             elapsed: (Date.now() - scanState.startTime) / 1000,
             cancelled: scanState.cancelled === true,
           });
@@ -486,6 +487,7 @@ export default function App({ config, conversationManager, tools, initialSession
             verified: 0,
             total: 0,
             confirmed: 0,
+            escalated: 0,
             elapsed: (Date.now() - prState.startTime) / 1000,
             cancelled: false,
           });
@@ -537,8 +539,11 @@ export default function App({ config, conversationManager, tools, initialSession
     return () => clearInterval(timer);
   }, [engineProgress]);
 
-  // Terminal tab title — professional block-progress indicator
+  // Terminal tab title — block-progress indicator. Kept slow (1s) and
+  // TTY-gated: these OSC writes go to the same stream Ink is repainting,
+  // and at 4fps they caused visible cursor flicker in tmux/Windows Terminal.
   useEffect(() => {
+    if (!process.stdout.isTTY) return;
     const isWorking =
       mode === "responding" || (scanProgress?.active ?? false) || mode === "escalation";
 
@@ -557,7 +562,7 @@ export default function App({ config, conversationManager, tools, initialSession
       const timer = setInterval(() => {
         process.stdout.write(`\x1b]0;${frames[frame % frames.length]}\x07`);
         frame++;
-      }, 250);
+      }, 1000);
       return () => {
         clearInterval(timer);
         process.stdout.write(`\x1b]0;▪ KCode\x07`);
@@ -1017,303 +1022,301 @@ export default function App({ config, conversationManager, tools, initialSession
       />
     ) : null;
 
+  const rateLimitUsage = getRateLimitUsage();
+
   return (
-    <KeybindingProvider>
-      <Box flexDirection="column">
-        {useVirtualScrollEnabled ? (
-          <VirtualMessageList
-            completed={completed}
-            streamingText={streamingText}
-            streamingThinking={streamingThinking}
-            isThinking={isThinking}
-            bashStreamOutput={bashStreamOutput}
-            scrollActive={mode === "input"}
-          />
-        ) : (
-          <MessageList
-            completed={completed}
-            streamingText={streamingText}
-            streamingThinking={streamingThinking}
-            isThinking={isThinking}
-            bashStreamOutput={bashStreamOutput}
-          />
-        )}
+    <Box flexDirection="column">
+      {useVirtualScrollEnabled ? (
+        <VirtualMessageList
+          completed={completed}
+          streamingText={streamingText}
+          streamingThinking={streamingThinking}
+          isThinking={isThinking}
+          bashStreamOutput={bashStreamOutput}
+          scrollActive={mode === "input"}
+        />
+      ) : (
+        <MessageList
+          completed={completed}
+          streamingText={streamingText}
+          streamingThinking={streamingThinking}
+          isThinking={isThinking}
+          bashStreamOutput={bashStreamOutput}
+        />
+      )}
 
-        {watcherSuggestions.length > 0 && mode === "input" && (
-          <Box marginLeft={2} marginBottom={1} flexDirection="column">
-            {watcherSuggestions.map((s, i) => (
-              <Text key={i} dimColor>
-                {"  ✱ "}
-                {s}
-              </Text>
-            ))}
-          </Box>
-        )}
-
-        {mode === "permission" && permissionRequest && (
-          <PermissionDialog
-            request={permissionRequest}
-            onChoice={handlePermissionChoice}
-            isActive={mode === "permission"}
-          />
-        )}
-
-        {mode === "sudo-password" && (
-          <SudoPasswordPrompt onSubmit={handleSudoPassword} isActive={mode === "sudo-password"} />
-        )}
-
-        {mode === "cloud" && <CloudMenu isActive={mode === "cloud"} onDone={handleCloudDone} />}
-
-        {mode === "toggle" && (
-          <ModelToggle
-            isActive={mode === "toggle"}
-            currentModel={config.model}
-            onDone={handleToggleDone}
-          />
-        )}
-
-        {mode === "kodi-advisor" && (
-          <KodiAdvisorMenu firstRun={firstRunKodiAdvisor} onClose={handleKodiAdvisorMenuDone} />
-        )}
-
-        {/* Background scan/pr progress bar */}
-        {scanProgress && scanProgress.active && (
-          <Box marginLeft={2} marginBottom={0} flexDirection="column">
-            <Text color="cyan">
-              {"  ◆ "}
-              {scanProgress.phase}
-              {` — ${scanProgress.elapsed.toFixed(1)}s`}
+      {watcherSuggestions.length > 0 && mode === "input" && (
+        <Box marginLeft={2} marginBottom={1} flexDirection="column">
+          {watcherSuggestions.map((s, i) => (
+            <Text key={i} dimColor>
+              {"  ✱ "}
+              {s}
             </Text>
-            {scanProgress.total > 0
-              ? (() => {
-                  const pct = Math.round((scanProgress.verified / scanProgress.total) * 100);
-                  const filled = Math.round((scanProgress.verified / scanProgress.total) * 20);
-                  return (
-                    <Text color="cyan">
-                      {"    ["}
-                      {"█".repeat(filled)}
-                      {"░".repeat(20 - filled)}
-                      {"] "}
-                      {scanProgress.verified}/{scanProgress.total}
-                      {` (${pct}%) — `}
-                      {scanProgress.confirmed} confirmed
-                      {(scanProgress as any).escalated > 0 && (
-                        <Text color="yellow">{` — ${(scanProgress as any).escalated} ☁ escalated`}</Text>
-                      )}
-                    </Text>
-                  );
-                })()
-              : (() => {
-                  // v2.10.387 — indeterminate bar for the discovery + scanning
-                  // phases (which run before total is known). Without this, the
-                  // user saw a static phase line for 5-10s and thought /scan
-                  // was hung. The bar now animates a moving "■" inside the
-                  // 20-cell width tied to elapsed seconds, so the polling
-                  // re-render every 200ms shows visible motion.
-                  const width = 20;
-                  const pos = Math.floor(scanProgress.elapsed * 4) % (width * 2 - 2);
-                  const head = pos < width ? pos : width * 2 - 2 - pos;
-                  const cells: string[] = Array(width).fill("░");
-                  cells[head] = "█";
-                  if (head > 0) cells[head - 1] = "▓";
-                  if (head < width - 1) cells[head + 1] = "▓";
-                  return (
-                    <Text color="cyan">
-                      {"    ["}
-                      {cells.join("")}
-                      {"]"}
-                    </Text>
-                  );
-                })()}
-            {/* v2.10.385 — cancellation hint. Without this, the only
-                way out of a long scan was Ctrl+C, which exits KCode.
-                Esc is wired in InputPrompt.tsx + file-actions-audit.ts. */}
-            <Text color="gray" dimColor>
-              {scanProgress.cancelled ? "    ⏸ cancelling..." : "    Press Esc to cancel"}
-            </Text>
-          </Box>
-        )}
+          ))}
+        </Box>
+      )}
 
-        {/* Engine progress bar (project creation) */}
-        {engineProgress && engineProgress.active && (
-          <Box marginLeft={2} marginBottom={0} flexDirection="column">
-            <Text color="magenta">
-              {"  ◆ "}
-              {engineProgress.phase}
-            </Text>
-            {engineProgress.totalSteps > 0 &&
-              (() => {
-                const pct = Math.round((engineProgress.step / engineProgress.totalSteps) * 100);
-                const filled = Math.round((engineProgress.step / engineProgress.totalSteps) * 20);
-                const elapsed = ((Date.now() - engineProgress.startTime) / 1000).toFixed(1);
+      {mode === "permission" && permissionRequest && (
+        <PermissionDialog
+          request={permissionRequest}
+          onChoice={handlePermissionChoice}
+          isActive={mode === "permission"}
+        />
+      )}
+
+      {mode === "sudo-password" && (
+        <SudoPasswordPrompt onSubmit={handleSudoPassword} isActive={mode === "sudo-password"} />
+      )}
+
+      {mode === "cloud" && <CloudMenu isActive={mode === "cloud"} onDone={handleCloudDone} />}
+
+      {mode === "toggle" && (
+        <ModelToggle
+          isActive={mode === "toggle"}
+          currentModel={config.model}
+          onDone={handleToggleDone}
+        />
+      )}
+
+      {mode === "kodi-advisor" && (
+        <KodiAdvisorMenu firstRun={firstRunKodiAdvisor} onClose={handleKodiAdvisorMenuDone} />
+      )}
+
+      {/* Background scan/pr progress bar */}
+      {scanProgress && scanProgress.active && (
+        <Box marginLeft={2} marginBottom={0} flexDirection="column">
+          <Text color="cyan">
+            {"  ◆ "}
+            {scanProgress.phase}
+            {` — ${scanProgress.elapsed.toFixed(1)}s`}
+          </Text>
+          {scanProgress.total > 0
+            ? (() => {
+                const pct = Math.round((scanProgress.verified / scanProgress.total) * 100);
+                const filled = Math.round((scanProgress.verified / scanProgress.total) * 20);
                 return (
-                  <Text color="magenta">
+                  <Text color="cyan">
                     {"    ["}
                     {"█".repeat(filled)}
                     {"░".repeat(20 - filled)}
                     {"] "}
-                    {`${pct}% — ${engineProgress.siteType} — ${elapsed}s`}
+                    {scanProgress.verified}/{scanProgress.total}
+                    {` (${pct}%) — `}
+                    {scanProgress.confirmed} confirmed
+                    {scanProgress.escalated > 0 && (
+                      <Text color="yellow">{` — ${scanProgress.escalated} ☁ escalated`}</Text>
+                    )}
+                  </Text>
+                );
+              })()
+            : (() => {
+                // v2.10.387 — indeterminate bar for the discovery + scanning
+                // phases (which run before total is known). Without this, the
+                // user saw a static phase line for 5-10s and thought /scan
+                // was hung. The bar now animates a moving "■" inside the
+                // 20-cell width tied to elapsed seconds, so the polling
+                // re-render every 200ms shows visible motion.
+                const width = 20;
+                const pos = Math.floor(scanProgress.elapsed * 4) % (width * 2 - 2);
+                const head = pos < width ? pos : width * 2 - 2 - pos;
+                const cells: string[] = Array(width).fill("░");
+                cells[head] = "█";
+                if (head > 0) cells[head - 1] = "▓";
+                if (head < width - 1) cells[head + 1] = "▓";
+                return (
+                  <Text color="cyan">
+                    {"    ["}
+                    {cells.join("")}
+                    {"]"}
                   </Text>
                 );
               })()}
-          </Box>
-        )}
+          {/* v2.10.385 — cancellation hint. Without this, the only
+                way out of a long scan was Ctrl+C, which exits KCode.
+                Esc is wired in InputPrompt.tsx + file-actions-audit.ts. */}
+          <Text color="gray" dimColor>
+            {scanProgress.cancelled ? "    ⏸ cancelling..." : "    Press Esc to cancel"}
+          </Text>
+        </Box>
+      )}
 
-        {/* Escalation model picker — shown after /scan when uncertain findings need cloud review */}
-        {mode === "escalation" && escalationData && (
-          <EscalationPrompt
-            count={escalationData.count}
-            reason={escalationData.reason}
-            availableModels={escalationData.availableModels}
-            isActive={mode === "escalation"}
-            onChoice={handleEscalationChoice}
-          />
-        )}
+      {/* Engine progress bar (project creation) */}
+      {engineProgress && engineProgress.active && (
+        <Box marginLeft={2} marginBottom={0} flexDirection="column">
+          <Text color="magenta">
+            {"  ◆ "}
+            {engineProgress.phase}
+          </Text>
+          {engineProgress.totalSteps > 0 &&
+            (() => {
+              const pct = Math.round((engineProgress.step / engineProgress.totalSteps) * 100);
+              const filled = Math.round((engineProgress.step / engineProgress.totalSteps) * 20);
+              const elapsed = ((Date.now() - engineProgress.startTime) / 1000).toFixed(1);
+              return (
+                <Text color="magenta">
+                  {"    ["}
+                  {"█".repeat(filled)}
+                  {"░".repeat(20 - filled)}
+                  {"] "}
+                  {`${pct}% — ${engineProgress.siteType} — ${elapsed}s`}
+                </Text>
+              );
+            })()}
+        </Box>
+      )}
 
-        {activeTabs.length > 0 && <ToolTabs tabs={activeTabs} selectedIndex={selectedTabIndex} />}
+      {/* Escalation model picker — shown after /scan when uncertain findings need cloud review */}
+      {mode === "escalation" && escalationData && (
+        <EscalationPrompt
+          count={escalationData.count}
+          reason={escalationData.reason}
+          availableModels={escalationData.availableModels}
+          isActive={mode === "escalation"}
+          onChoice={handleEscalationChoice}
+        />
+      )}
 
-        {showContextGrid &&
-          config.contextWindowSize &&
-          config.contextWindowSize > 0 &&
-          (() => {
-            const state = conversationManager.getState();
-            let systemTokens = 0;
-            let messageTokens = 0;
-            let toolTokens = 0;
-            for (const msg of state.messages) {
-              if (typeof msg.content === "string") {
-                const est = Math.round(msg.content.length / CHARS_PER_TOKEN);
-                if (msg.role === "user") messageTokens += est;
-                else messageTokens += est;
-              } else if (Array.isArray(msg.content)) {
-                for (const block of msg.content) {
-                  if (block.type === "text") {
-                    messageTokens += Math.round(block.text.length / CHARS_PER_TOKEN);
-                  } else if (block.type === "tool_result") {
-                    const c =
-                      typeof block.content === "string"
-                        ? block.content
-                        : JSON.stringify(block.content);
-                    toolTokens += Math.round(c.length / CHARS_PER_TOKEN);
-                  } else if (block.type === "tool_use") {
-                    toolTokens += Math.round(JSON.stringify(block.input).length / CHARS_PER_TOKEN);
-                  }
+      {activeTabs.length > 0 && <ToolTabs tabs={activeTabs} selectedIndex={selectedTabIndex} />}
+
+      {showContextGrid &&
+        config.contextWindowSize &&
+        config.contextWindowSize > 0 &&
+        (() => {
+          const state = conversationManager.getState();
+          let systemTokens = 0;
+          let messageTokens = 0;
+          let toolTokens = 0;
+          for (const msg of state.messages) {
+            if (typeof msg.content === "string") {
+              const est = Math.round(msg.content.length / CHARS_PER_TOKEN);
+              if (msg.role === "user") messageTokens += est;
+              else messageTokens += est;
+            } else if (Array.isArray(msg.content)) {
+              for (const block of msg.content) {
+                if (block.type === "text") {
+                  messageTokens += Math.round(block.text.length / CHARS_PER_TOKEN);
+                } else if (block.type === "tool_result") {
+                  const c =
+                    typeof block.content === "string"
+                      ? block.content
+                      : JSON.stringify(block.content);
+                  toolTokens += Math.round(c.length / CHARS_PER_TOKEN);
+                } else if (block.type === "tool_use") {
+                  toolTokens += Math.round(JSON.stringify(block.input).length / CHARS_PER_TOKEN);
                 }
               }
             }
-            // Estimate system prompt tokens from the difference
-            systemTokens = Math.max(0, tokenCount - messageTokens - toolTokens);
-            return (
-              <ContextGrid
-                breakdown={{
-                  totalTokens: tokenCount,
-                  contextWindowSize: config.contextWindowSize,
-                  systemTokens,
-                  messageTokens,
-                  toolTokens,
-                }}
-              />
-            );
-          })()}
+          }
+          // Estimate system prompt tokens from the difference
+          systemTokens = Math.max(0, tokenCount - messageTokens - toolTokens);
+          return (
+            <ContextGrid
+              breakdown={{
+                totalTokens: tokenCount,
+                contextWindowSize: config.contextWindowSize,
+                systemTokens,
+                messageTokens,
+                toolTokens,
+              }}
+            />
+          );
+        })()}
 
-        {/* Agent pool panel — auto-hides when empty */}
-        <AgentPanel />
+      {/* Agent pool panel — auto-hides when empty */}
+      <AgentPanel />
 
-        {/* Status row.
+      {/* Status row.
             In offline / disciplined mode → render the compact Header.
             Otherwise → render the playful KodiCompanion (the default).
             Hidden during /model (toggle) so it doesn't compete with the
             picker's re-renders and cause visual flicker on arrow keys. */}
-        {mode !== "toggle" &&
-          (getOfflineMode().isActive() ? (
-            <Header
-              model={config.model}
-              workingDirectory={config.workingDirectory}
-              tokenCount={tokenCount}
-              toolUseCount={toolUseCount}
-              sessionStartTime={sessionStart}
-              contextWindowSize={config.contextWindowSize}
-              runningAgents={runningAgentCount}
-              sessionName={sessionName}
-              permissionMode={conversationManager.getPermissions().getMode()}
-              offlineMode={true}
-              scanMode={isAuditSession()}
-            />
-          ) : (
-            <KodiCompanion
-              mode={mode}
-              toolUseCount={toolUseCount}
-              tokenCount={tokenCount}
-              sessionCostUsd={sessionCostUsd}
-              activeToolName={
-                activeTabs.length > 0 ? activeTabs[activeTabs.length - 1]!.name : null
-              }
-              isThinking={isThinking}
-              runningAgents={runningAgentCount}
-              sessionElapsedMs={Date.now() - sessionStart}
-              lastEvent={lastKodiEvent}
-              model={config.model}
-              version={config.version ?? "?"}
-              workingDirectory={config.workingDirectory}
-              permissionMode={conversationManager.getPermissions().getMode()}
-              activeProfile={config.activeProfile}
-              contextWindowSize={config.contextWindowSize}
-              sessionName={sessionName}
-              sessionStartTime={sessionStart}
-              subscriptionUsage5h={getRateLimitUsage()?.fiveHour}
-              subscriptionUsage7d={getRateLimitUsage()?.sevenDay}
-              tier={subscriptionTier}
-              tierFeatures={subscriptionFeatures}
-              sessionModelBreakdown={sessionModelBreakdown}
-            />
-          ))}
-        <ActivePlanPanel plan={activePlan} />
-        {pendingLastModel && (
-          <QuestionDialog
-            title="Resume Previous Model"
-            message={`Last session used ${pendingLastModel}. Switch to it?`}
-            detail={`Current model: ${config.model}`}
-            options={[
-              { key: "y", label: `Yes, use ${pendingLastModel}` },
-              { key: "n", label: `No, keep ${config.model}` },
-            ]}
-            onChoice={handleModelResumeChoice}
-            isActive={!!pendingLastModel}
+      {mode !== "toggle" &&
+        (getOfflineMode().isActive() ? (
+          <Header
+            model={config.model}
+            workingDirectory={config.workingDirectory}
+            tokenCount={tokenCount}
+            toolUseCount={toolUseCount}
+            sessionStartTime={sessionStart}
+            contextWindowSize={config.contextWindowSize}
+            runningAgents={runningAgentCount}
+            sessionName={sessionName}
+            permissionMode={conversationManager.getPermissions().getMode()}
+            offlineMode={true}
+            scanMode={isAuditSession()}
           />
-        )}
-        {interactiveQuestion}
-
-        {mode === "responding" && (
-          <Box paddingLeft={2}>
-            <Spinner
-              message={loadingMessage || (isThinking ? "Reasoning..." : "Thinking...")}
-              tokens={turnTokens}
-              startTime={turnStartTime}
-              phase={isThinking ? "thinking" : spinnerPhase}
-            />
-          </Box>
-        )}
-
-        <InputPrompt
-          onSubmit={handleSubmit}
-          isActive={
-            !pendingLastModel &&
-            !interactiveQuestion &&
-            mode !== "permission" &&
-            mode !== "sudo-password" &&
-            mode !== "cloud" &&
-            mode !== "toggle" &&
-            mode !== "kodi-advisor" &&
-            mode !== "escalation"
-          }
-          isQueuing={mode === "responding"}
-          queueSize={messageQueue.length}
-          model={config.model}
-          cwd={config.workingDirectory}
-          completions={slashCompletions}
-          commandDescriptions={commandDescriptions}
+        ) : (
+          <KodiCompanion
+            mode={mode}
+            toolUseCount={toolUseCount}
+            tokenCount={tokenCount}
+            sessionCostUsd={sessionCostUsd}
+            activeToolName={activeTabs.length > 0 ? activeTabs[activeTabs.length - 1]!.name : null}
+            isThinking={isThinking}
+            runningAgents={runningAgentCount}
+            sessionElapsedMs={Date.now() - sessionStart}
+            lastEvent={lastKodiEvent}
+            model={config.model}
+            version={config.version ?? "?"}
+            workingDirectory={config.workingDirectory}
+            permissionMode={conversationManager.getPermissions().getMode()}
+            activeProfile={config.activeProfile}
+            contextWindowSize={config.contextWindowSize}
+            sessionName={sessionName}
+            sessionStartTime={sessionStart}
+            subscriptionUsage5h={rateLimitUsage?.fiveHour}
+            subscriptionUsage7d={rateLimitUsage?.sevenDay}
+            tier={subscriptionTier}
+            tierFeatures={subscriptionFeatures}
+            sessionModelBreakdown={sessionModelBreakdown}
+          />
+        ))}
+      <ActivePlanPanel plan={activePlan} />
+      {pendingLastModel && (
+        <QuestionDialog
+          title="Resume Previous Model"
+          message={`Last session used ${pendingLastModel}. Switch to it?`}
+          detail={`Current model: ${config.model}`}
+          options={[
+            { key: "y", label: `Yes, use ${pendingLastModel}` },
+            { key: "n", label: `No, keep ${config.model}` },
+          ]}
+          onChoice={handleModelResumeChoice}
+          isActive={!!pendingLastModel}
         />
-      </Box>
-    </KeybindingProvider>
+      )}
+      {interactiveQuestion}
+
+      {mode === "responding" && (
+        <Box paddingLeft={2}>
+          <Spinner
+            message={loadingMessage || (isThinking ? "Reasoning..." : "Thinking...")}
+            tokens={turnTokens}
+            startTime={turnStartTime}
+            phase={isThinking ? "thinking" : spinnerPhase}
+          />
+        </Box>
+      )}
+
+      <InputPrompt
+        onSubmit={handleSubmit}
+        isActive={
+          !pendingLastModel &&
+          !interactiveQuestion &&
+          mode !== "permission" &&
+          mode !== "sudo-password" &&
+          mode !== "cloud" &&
+          mode !== "toggle" &&
+          mode !== "kodi-advisor" &&
+          mode !== "escalation"
+        }
+        isQueuing={mode === "responding"}
+        queueSize={messageQueue.length}
+        model={config.model}
+        cwd={config.workingDirectory}
+        completions={slashCompletions}
+        commandDescriptions={commandDescriptions}
+      />
+    </Box>
   );
 }

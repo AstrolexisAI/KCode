@@ -28,7 +28,10 @@ export default function ThinkingBlock({
   defaultExpanded = false,
 }: ThinkingBlockProps) {
   const { theme } = useTheme();
-  const [expanded, setExpanded] = useState(defaultExpanded);
+  // Rendered inside <Static> once completed — Ink never repaints those
+  // lines, so expansion is decided at render time (KCODE_SHOW_REASONING),
+  // not interactively.
+  const expanded = defaultExpanded;
   const [frame, setFrame] = useState(0);
   const startTimeRef = useRef(Date.now());
 
@@ -110,7 +113,7 @@ export default function ThinkingBlock({
         <Text color={violet}>{BRAIN} </Text>
         <Text color={violet} dimColor>
           Reasoned ({tokEstimate > 1000 ? `${(tokEstimate / 1000).toFixed(1)}K` : tokEstimate} tok,{" "}
-          {lineCount} {lineCount === 1 ? "line" : "lines"}) ▸
+          {lineCount} {lineCount === 1 ? "line" : "lines"})
         </Text>
       </Box>
     );
@@ -124,7 +127,7 @@ export default function ThinkingBlock({
       <Text color={violet}>
         {BRAIN}{" "}
         <Text color={violet} dimColor>
-          Reasoned ({charCount} chars) ▾
+          Reasoned ({charCount} chars)
         </Text>
       </Text>
       <Box

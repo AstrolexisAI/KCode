@@ -1,8 +1,10 @@
 // KCode - Stream event handler
 // Extracted from App.tsx — processes LLM streaming events and updates UI state
 
+import { isTruncatedQuestion } from "../core/continuation-merge.js";
 import type { ConversationManager } from "../core/conversation.js";
 import { getFileChangeSuggester } from "../core/file-watcher.js";
+import { getLastSession } from "../core/response-session.js";
 import type { StreamEvent } from "../core/types.js";
 import { renderVisibleText } from "../core/visible-text-renderer.js";
 import { summarizeInput } from "./builtin-actions.js";
@@ -73,6 +75,7 @@ export async function processStreamEvents(
   let bashStreamBuffer = "";
   let bashStreamThrottleTimer: ReturnType<typeof setTimeout> | null = null;
   let textStreamThrottleTimer: ReturnType<typeof setTimeout> | null = null;
+  let thinkingThrottleTimer: ReturnType<typeof setTimeout> | null = null;
   // Set by text_replace_last with seal=true when a failed-phase closeout
   // has become the authoritative closeout. Blocks further text_delta and
   // turn_end text commits until the next turn_start event (new user
@@ -149,6 +152,10 @@ export async function processStreamEvents(
         // Finalize any accumulated thinking when text starts
         if (currentThinking.length > 0) {
           const thinking = currentThinking;
+          if (thinkingThrottleTimer) {
+            clearTimeout(thinkingThrottleTimer);
+            thinkingThrottleTimer = null;
+          }
           setIsThinking(false);
           setStreamingThinking("");
           setCompleted((prev) => {
@@ -175,7 +182,7 @@ export async function processStreamEvents(
             const streamLines = currentText.split("\n");
             if (streamLines.length > 30) {
               setStreamingText(
-                streamLines.slice(0, 6).join("\n") + `\n... writing (${streamLines.length} lines)`,
+                `... writing (${streamLines.length} lines)\n` + streamLines.slice(-6).join("\n"),
               );
             } else {
               setStreamingText(currentText);
@@ -237,17 +244,28 @@ export async function processStreamEvents(
         if (currentThinking.length === 0) {
           setLastKodiEvent({ type: "thinking" });
           setSpinnerPhase("thinking");
+          setIsThinking(true);
+          setLoadingMessage("");
         }
         currentThinking += event.thinking;
-        setIsThinking(true);
-        setStreamingThinking(currentThinking);
-        setLoadingMessage("");
+        // Throttle to ~15fps — reasoning models emit one delta per token,
+        // and an unthrottled setState per token floods the Ink renderer.
+        if (!thinkingThrottleTimer) {
+          thinkingThrottleTimer = setTimeout(() => {
+            thinkingThrottleTimer = null;
+            setStreamingThinking(currentThinking);
+          }, 66);
+        }
         break;
 
       case "tool_use_start":
         // Finalize any accumulated thinking
         if (currentThinking.length > 0) {
           const thinking = currentThinking;
+          if (thinkingThrottleTimer) {
+            clearTimeout(thinkingThrottleTimer);
+            thinkingThrottleTimer = null;
+          }
           setIsThinking(false);
           setStreamingThinking("");
           setCompleted((prev) => {
@@ -581,6 +599,10 @@ export async function processStreamEvents(
         // Finalize any remaining thinking
         if (currentThinking.length > 0) {
           const thinking = currentThinking;
+          if (thinkingThrottleTimer) {
+            clearTimeout(thinkingThrottleTimer);
+            thinkingThrottleTimer = null;
+          }
           setIsThinking(false);
           setStreamingThinking("");
           setCompleted((prev) => {
@@ -618,7 +640,6 @@ export async function processStreamEvents(
           let text = renderVisibleText(currentText, { source: "assistant_prose" });
           // Clean up truncated questions/confirmations at the end
           try {
-            const { isTruncatedQuestion } = require("../core/continuation-merge.js");
             if (isTruncatedQuestion(text)) {
               // Strip the truncated question from the end
               const lastNewline = text.lastIndexOf("\n");
@@ -742,7 +763,6 @@ export async function processStreamEvents(
         }
         // Show incomplete response banner if the session ended incomplete
         try {
-          const { getLastSession } = require("../core/response-session.js");
           const lastSession = getLastSession();
           // Only show the incomplete banner once: on the final turn_end, for
           // sessions that closed recently (within 5s) and with terminal stop reasons.

@@ -35,9 +35,10 @@ let _trustPromptCallback:
   | ((workspacePath: string, hookCommand: string) => Promise<boolean>)
   | null = null;
 
-/** Register a callback that asks the user whether to trust a workspace. */
+/** Register a callback that asks the user whether to trust a workspace.
+ *  Pass null to unregister (e.g. on UI unmount). */
 export function setTrustPromptCallback(
-  cb: (workspacePath: string, hookCommand: string) => Promise<boolean>,
+  cb: ((workspacePath: string, hookCommand: string) => Promise<boolean>) | null,
 ): void {
   _trustPromptCallback = cb;
 }

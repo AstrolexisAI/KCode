@@ -48,6 +48,8 @@ export default function ToolTabs({ tabs, selectedIndex }: ToolTabsProps) {
   const [now, setNow] = useState(Date.now());
 
   // Animate spinner for running tabs
+  const anyRunning = tabs.some((t) => t.status === "running");
+
   useEffect(() => {
     const hasRunning = tabs.some((t) => t.status === "running");
     if (!hasRunning) return;
@@ -56,14 +58,31 @@ export default function ToolTabs({ tabs, selectedIndex }: ToolTabsProps) {
       setNow(Date.now());
     }, 150);
     return () => clearInterval(timer);
-  }, [tabs.length, tabs.some((t) => t.status === "running")]);
+  }, [tabs.length, anyRunning]);
 
   if (tabs.length === 0) return null;
+
+  // Fit within the terminal so the row never wraps: split the width
+  // evenly across tabs; each tab spends ~16 chars on borders, icon,
+  // separators and elapsed, and the rest on name+summary. When even a
+  // name-only tab (~20 chars) can't fit, collapse the tail to "+N more".
+  const columns = process.stdout.columns || 80;
+  const PER_TAB_OVERHEAD = 16;
+  const MIN_TAB_WIDTH = 20;
+  let visibleTabs = tabs;
+  let hiddenCount = 0;
+  let tabBudget = Math.floor(columns / Math.max(tabs.length, 1));
+  if (tabBudget < MIN_TAB_WIDTH && tabs.length > 1) {
+    const maxTabs = Math.max(1, Math.floor((columns - 8) / MIN_TAB_WIDTH));
+    visibleTabs = tabs.slice(0, maxTabs);
+    hiddenCount = tabs.length - visibleTabs.length;
+    tabBudget = Math.floor(columns / Math.max(visibleTabs.length, 1));
+  }
 
   return (
     <Box flexDirection="column">
       <Box flexDirection="row" gap={0}>
-        {tabs.map((tab, i) => {
+        {visibleTabs.map((tab, i) => {
           const isSelected = i === selectedIndex;
           const isRunning = tab.status === "running";
           const isDone = tab.status === "done";
@@ -88,8 +107,10 @@ export default function ToolTabs({ tabs, selectedIndex }: ToolTabsProps) {
               ? formatElapsed(tab.durationMs)
               : "";
 
-          // Tab label: truncate summary
-          const label = tab.summary ? tab.summary.slice(0, 40) : tab.name;
+          // Tab label: truncate summary to the per-tab budget
+          const summaryBudget = Math.max(tabBudget - PER_TAB_OVERHEAD - tab.name.length, 0);
+          const label =
+            tab.summary && summaryBudget >= 4 ? tab.summary.slice(0, summaryBudget) : "";
 
           // Border style for selected tab
           const borderColor = isSelected ? tabColor : theme.dimmed;
@@ -101,9 +122,9 @@ export default function ToolTabs({ tabs, selectedIndex }: ToolTabsProps) {
               <Text color={isSelected ? tabColor : theme.dimmed} bold={isSelected}>
                 {" "}
                 {icon} {tab.name}
-                {tab.summary ? ": " : ""}
+                {label ? ": " : ""}
               </Text>
-              {tab.summary && (
+              {label && (
                 <Text color={isSelected ? theme.assistantText : theme.dimmed}>{label}</Text>
               )}
               {elapsed && <Text color={theme.dimmed}> ({elapsed})</Text>}
@@ -111,6 +132,7 @@ export default function ToolTabs({ tabs, selectedIndex }: ToolTabsProps) {
             </Box>
           );
         })}
+        {hiddenCount > 0 && <Text color={theme.dimmed}> +{hiddenCount} more</Text>}
       </Box>
     </Box>
   );

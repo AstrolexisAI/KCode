@@ -3,7 +3,7 @@
 // Handles partial/streaming text gracefully — incomplete markdown renders as plain text.
 
 import { Box, Text } from "ink";
-import type React from "react";
+import React from "react";
 import { useTheme } from "../ThemeContext.js";
 
 // ─── Keyword-based Syntax Highlighting ─────────────────────────
@@ -1582,7 +1582,7 @@ interface MarkdownRendererProps {
   text: string;
 }
 
-export default function MarkdownRenderer({ text }: MarkdownRendererProps): React.ReactElement {
+function MarkdownRenderer({ text }: MarkdownRendererProps): React.ReactElement {
   const { theme } = useTheme();
   const lines = text.split("\n");
   const elements: React.ReactElement[] = [];
@@ -1747,3 +1747,7 @@ export default function MarkdownRenderer({ text }: MarkdownRendererProps): React
 
   return <Box flexDirection="column">{elements}</Box>;
 }
+
+// Memoized: parsing + syntax highlighting re-runs only when `text` changes,
+// not on every unrelated re-render of the tree (Kodi ticks, spinner frames).
+export default React.memo(MarkdownRenderer);

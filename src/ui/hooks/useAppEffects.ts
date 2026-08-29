@@ -80,6 +80,7 @@ export function useAppEffects({
       ]);
       return true;
     });
+    return () => setTrustPromptCallback(null);
   }, []);
 
   // Cleanup tab removal timers on unmount
